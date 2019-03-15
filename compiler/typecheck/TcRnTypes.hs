@@ -1115,12 +1115,12 @@ data PromotionErr
 instance Outputable TcTyThing where     -- Debugging only
    ppr (AGlobal g)      = ppr g
    ppr elt@(ATcId {})   = text "Identifier" <>
-                          brackets (ppr (tct_id elt) <> dcolon
+                          brackets (ppr (tct_id elt) <> of_type
                                  <> ppr (varType (tct_id elt)) <> comma
                                  <+> ppr (tct_info elt))
    ppr (ATyVar n tv)    = text "Type variable" <+> quotes (ppr n) <+> equals <+> ppr tv
-                            <+> dcolon <+> ppr (varType tv)
-   ppr (ATcTyCon tc)    = text "ATcTyCon" <+> ppr tc <+> dcolon <+> ppr (tyConKind tc)
+                            <+> of_type <+> ppr (varType tv)
+   ppr (ATcTyCon tc)    = text "ATcTyCon" <+> ppr tc <+> of_type <+> ppr (tyConKind tc)
    ppr (APromotionErr err) = text "APromotionErr" <+> ppr err
 
 -- | IdBindingInfo describes how an Id is bound.
@@ -1612,9 +1612,9 @@ instance Outputable TcSigInfo where
 
 instance Outputable TcIdSigInfo where
     ppr (CompleteSig { sig_bndr = bndr })
-        = ppr bndr <+> dcolon <+> ppr (idType bndr)
+        = ppr bndr <+> of_type <+> ppr (idType bndr)
     ppr (PartialSig { psig_name = name, psig_hs_ty = hs_ty })
-        = text "psig" <+> ppr name <+> dcolon <+> ppr hs_ty
+        = text "psig" <+> ppr name <+> of_type <+> ppr hs_ty
 
 instance Outputable TcIdSigInst where
     ppr (TISI { sig_inst_sig = sig, sig_inst_skols = skols
@@ -2751,7 +2751,7 @@ pprEvVarTheta :: [EvVar] -> SDoc
 pprEvVarTheta ev_vars = pprTheta (map evVarPred ev_vars)
 
 pprEvVarWithType :: EvVar -> SDoc
-pprEvVarWithType v = ppr v <+> dcolon <+> pprType (evVarPred v)
+pprEvVarWithType v = ppr v <+> of_type <+> pprType (evVarPred v)
 
 
 
@@ -2891,7 +2891,7 @@ instance Outputable TcEvDest where
 instance Outputable CtEvidence where
   ppr ev = ppr (ctEvFlavour ev)
            <+> pp_ev
-           <+> braces (ppr (ctl_depth (ctEvLoc ev))) <> dcolon
+           <+> braces (ppr (ctl_depth (ctEvLoc ev))) <> of_type
                   -- Show the sub-goal depth too
            <+> ppr (ctEvPred ev)
     where
@@ -3392,7 +3392,7 @@ pprSkolInfo ArrowSkol         = text "an arrow form"
 pprSkolInfo (PatSkol cl mc)   = sep [ pprPatSkolInfo cl
                                     , text "in" <+> pprMatchContext mc ]
 pprSkolInfo (InferSkol ids)   = hang (text "the inferred type" <> plural ids <+> text "of")
-                                   2 (vcat [ ppr name <+> dcolon <+> ppr ty
+                                   2 (vcat [ ppr name <+> of_type <+> ppr ty
                                                    | (name,ty) <- ids ])
 pprSkolInfo (UnifyForAllSkol ty) = text "the type" <+> ppr ty
 pprSkolInfo (TyConSkol flav name) = text "the" <+> ppr flav <+> text "declaration for" <+> quotes (ppr name)
@@ -3411,7 +3411,7 @@ pprSigSkolInfo :: UserTypeCtxt -> TcType -> SDoc
 pprSigSkolInfo ctxt ty
   = case ctxt of
        FunSigCtxt f _ -> vcat [ text "the type signature for:"
-                              , nest 2 (pprPrefixOcc f <+> dcolon <+> ppr ty) ]
+                              , nest 2 (pprPrefixOcc f <+> of_type <+> ppr ty) ]
        PatSynCtxt {}  -> pprUserTypeCtxt ctxt  -- See Note [Skolem info for pattern synonyms]
        _              -> vcat [ pprUserTypeCtxt ctxt <> colon
                               , nest 2 (ppr ty) ]
@@ -3419,7 +3419,7 @@ pprSigSkolInfo ctxt ty
 pprPatSkolInfo :: ConLike -> SDoc
 pprPatSkolInfo (RealDataCon dc)
   = sep [ text "a pattern with constructor:"
-        , nest 2 $ ppr dc <+> dcolon
+        , nest 2 $ ppr dc <+> of_type
           <+> pprType (dataConUserType dc) <> comma ]
           -- pprType prints forall's regardless of -fprint-explicit-foralls
           -- which is what we want here, since we might be saying
@@ -3427,7 +3427,7 @@ pprPatSkolInfo (RealDataCon dc)
 
 pprPatSkolInfo (PatSynCon ps)
   = sep [ text "a pattern with pattern synonym:"
-        , nest 2 $ ppr ps <+> dcolon
+        , nest 2 $ ppr ps <+> of_type
                    <+> pprPatSynType ps <> comma ]
 
 {- Note [Skolem info for pattern synonyms]

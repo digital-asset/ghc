@@ -1736,7 +1736,7 @@ bcIdPrimRep id
   | [rep] <- typePrimRepArgs (idType id)
   = rep
   | otherwise
-  = pprPanic "bcIdPrimRep" (ppr id <+> dcolon <+> ppr (idType id))
+  = pprPanic "bcIdPrimRep" (ppr id <+> of_type <+> ppr (idType id))
 
 repSizeWords :: DynFlags -> PrimRep -> WordOff
 repSizeWords dflags rep = WordOff $ argRepSizeW dflags (toArgRep rep)
