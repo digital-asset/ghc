@@ -1,8 +1,8 @@
 module TcExpr where
 import Name
 import HsSyn    ( HsExpr, LHsExpr, SyntaxExpr )
-import TcType   ( TcRhoType, TcSigmaType, SyntaxOpType, ExpType, ExpRhoType )
-import TcRnTypes( TcM, CtOrigin )
+import TcType   ( TcType, TcRhoType, TcSigmaType, SyntaxOpType, ExpType, ExpRhoType )
+import TcRnTypes( TcM, CtOrigin, TcIdSigInfo )
 import HsExtension ( GhcRn, GhcTcId )
 
 tcPolyExpr ::
@@ -39,3 +39,5 @@ tcSyntaxOpGen :: CtOrigin
 
 
 tcCheckId :: Name -> ExpRhoType -> TcM (HsExpr GhcTcId)
+
+tcExprSig :: LHsExpr GhcRn -> TcIdSigInfo -> TcM (LHsExpr GhcTcId, TcType)

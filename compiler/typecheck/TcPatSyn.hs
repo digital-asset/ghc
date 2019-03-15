@@ -222,7 +222,7 @@ dependentArgErr (arg, bad_cos)
   = addErrTc $
     vcat [ text "Iceland Jack!  Iceland Jack! Stop torturing me!"
          , hang (text "Pattern-bound variable")
-              2 (ppr arg <+> dcolon <+> ppr (idType arg))
+              2 (ppr arg <+> of_type <+> ppr (idType arg))
          , nest 2 $
            hang (text "has a type that mentions pattern-bound coercion"
                  <> plural bad_co_list <> colon)
@@ -390,8 +390,8 @@ tcCheckPatSynDecl psb@PSB{ psb_id = lname@(dL->L _ name), psb_args = details
               ; (subst, ex_tvs') <- mapAccumLM newMetaTyVarX empty_subst ex_tvs
                     -- newMetaTyVarX: see the "Existential type variables"
                     -- part of Note [Checking against a pattern signature]
-              ; traceTc "tcpatsyn1" (vcat [ ppr v <+> dcolon <+> ppr (tyVarKind v) | v <- ex_tvs])
-              ; traceTc "tcpatsyn2" (vcat [ ppr v <+> dcolon <+> ppr (tyVarKind v) | v <- ex_tvs'])
+              ; traceTc "tcpatsyn1" (vcat [ ppr v <+> of_type <+> ppr (tyVarKind v) | v <- ex_tvs])
+              ; traceTc "tcpatsyn2" (vcat [ ppr v <+> of_type <+> ppr (tyVarKind v) | v <- ex_tvs'])
               ; let prov_theta' = substTheta subst prov_theta
                   -- Add univ_tvs to the in_scope set to
                   -- satisfy the substitution invariant. There's no need to
@@ -847,7 +847,7 @@ tcPatSynBuilderBind (PSB { psb_id = (dL->L loc name)
              sig = completeSigFromId (PatSynCtxt name) builder_id
 
        ; traceTc "tcPatSynBuilderBind {" $
-         ppr patsyn $$ ppr builder_id <+> dcolon <+> ppr (idType builder_id)
+         ppr patsyn $$ ppr builder_id <+> of_type <+> ppr (idType builder_id)
        ; (builder_binds, _) <- tcPolyCheck emptyPragEnv sig (noLoc bind)
        ; traceTc "tcPatSynBuilderBind }" $ ppr builder_binds
        ; return builder_binds } } }

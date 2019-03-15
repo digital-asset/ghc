@@ -312,7 +312,7 @@ fitsIn ty1 ty2
 -- no runtime representation (void) or multiple (unboxed tuple/sum)
 typePrimRep :: HasDebugCallStack => Type -> [PrimRep]
 typePrimRep ty = kindPrimRep (text "typePrimRep" <+>
-                              parens (ppr ty <+> dcolon <+> ppr (typeKind ty)))
+                              parens (ppr ty <+> of_type <+> ppr (typeKind ty)))
                              (typeKind ty)
 
 -- | Like 'typePrimRep', but assumes that there is precisely one 'PrimRep' output;

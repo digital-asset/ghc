@@ -249,7 +249,7 @@ data Pat p
   -- ^ n+k pattern
 
         ------------ Pattern type signatures ---------------
-  -- | - 'ApiAnnotation.AnnKeywordId' : 'ApiAnnotation.AnnDcolon'
+  -- | - 'ApiAnnotation.AnnKeywordId' : 'ApiAnnotation.AnnOf_Type'
 
   -- For details on above see note [Api annotations] in ApiAnnotation
   | SigPat          (XSigPat p)             -- After typechecker: Type
@@ -553,7 +553,7 @@ pprPat (CoPat _ co pat _)       = pprHsWrapper co $ \parens
                                             -> if parens
                                                  then pprParendPat appPrec pat
                                                  else pprPat pat
-pprPat (SigPat _ pat ty)        = ppr pat <+> dcolon <+> ppr ty
+pprPat (SigPat _ pat ty)        = ppr pat <+> of_type <+> ppr ty
 pprPat (ListPat _ pats)         = brackets (interpp'SP pats)
 pprPat (TuplePat _ pats bx)     = tupleParens (boxityTupleSort bx)
                                               (pprWithCommas ppr pats)

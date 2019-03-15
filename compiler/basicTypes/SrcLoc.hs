@@ -193,9 +193,9 @@ instance Outputable RealSrcLoc where
 
 -- I don't know why there is this style-based difference
 --        if userStyle sty || debugStyle sty then
---            hcat [ pprFastFilePath src_path, char ':',
+--            hcat [ pprFastFilePath src_path, colon,
 --                   int src_line,
---                   char ':', int src_col
+--                   colon, int src_col
 --                 ]
 --        else
 --            hcat [text "{-# LINE ", int src_line, space,
