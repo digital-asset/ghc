@@ -1772,7 +1772,7 @@ misplacedInstSig :: Name -> LHsSigType GhcRn -> SDoc
 misplacedInstSig name hs_ty
   = vcat [ hang (text "Illegal type signature in instance declaration:")
               2 (hang (pprPrefixName name)
-                    2 (dcolon <+> ppr hs_ty))
+                    2 (of_type <+> ppr hs_ty))
          , text "(Use InstanceSigs to allow this)" ]
 
 {- Note [Instance method signatures]

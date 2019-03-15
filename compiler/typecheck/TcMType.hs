@@ -850,7 +850,7 @@ writeMetaTyVarRef :: TcTyVar -> TcRef MetaDetails -> TcType -> TcM ()
 -- the ref cell must be for the same tyvar
 writeMetaTyVarRef tyvar ref ty
   | not debugIsOn
-  = do { traceTc "writeMetaTyVar" (ppr tyvar <+> dcolon <+> ppr (tyVarKind tyvar)
+  = do { traceTc "writeMetaTyVar" (ppr tyvar <+> of_type <+> ppr (tyVarKind tyvar)
                                    <+> text ":=" <+> ppr ty)
        ; writeTcRef ref (Indirect ty) }
 

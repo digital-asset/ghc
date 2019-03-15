@@ -477,6 +477,7 @@ data HsDocContext
   | SpliceTypeCtx (LHsType GhcPs)
   | ClassInstanceCtx
   | GenericCtx SDoc   -- Maybe we want to use this more!
+  | MatchRhsSigCtx (Located RdrName)
 
 withHsDocContext :: HsDocContext -> SDoc -> SDoc
 withHsDocContext ctxt doc = doc $$ inHsDocContext ctxt
@@ -503,6 +504,7 @@ pprHsDocContext HsTypeCtx             = text "a type argument"
 pprHsDocContext GHCiCtx               = text "GHCi input"
 pprHsDocContext (SpliceTypeCtx hs_ty) = text "the spliced type" <+> quotes (ppr hs_ty)
 pprHsDocContext ClassInstanceCtx      = text "TcSplice.reifyInstances"
+pprHsDocContext (MatchRhsSigCtx name) = text "a return type for" <+> quotes (ppr name)
 
 pprHsDocContext (ForeignDeclCtx name)
    = text "the foreign declaration for" <+> quotes (ppr name)

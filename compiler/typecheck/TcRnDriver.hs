@@ -2001,7 +2001,7 @@ tcRnStmt hsc_env rdr_stmt
     }
   where
     bad_unboxed id = addErr (sep [text "GHCi can't bind a variable of unlifted type:",
-                                  nest 2 (ppr id <+> dcolon <+> ppr (idType id))])
+                                  nest 2 (ppr id <+> of_type <+> ppr (idType id))])
 
 {-
 --------------------------------------------------------------------------

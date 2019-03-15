@@ -50,14 +50,17 @@
 module Lexer (
    Token(..), lexer, pragState, mkPState, mkPStatePure, PState(..),
    P(..), ParseResult(..), mkParserFlags, mkParserFlags', ParserFlags,
-   getRealSrcLoc, getPState, withThisPackage,
+   getRealSrcLoc, getPState, extopt, withThisPackage,
    failLocMsgP, srcParseFail,
-   getErrorMessages, getMessages,
+   getErrorMessages, getMessages, extension,
    popContext, pushModuleContext, setLastToken, setSrcLoc,
    activeContext, nextIsEOF,
    getLexState, popLexState, pushLexState,
    ExtBits(..), getBit,
-   addWarning, addError, addFatalError,
+   newColonConventionEnabled,
+   damlVersionRequiredEnabled,
+   damlTemplateIsEnabled,
+   addWarning,addError, addFatalError,
    lexTokenStream,
    addAnnotation,AddAnn,addAnnsAt,mkParensApiAnn,
    commentToAnnotation
@@ -606,6 +609,7 @@ data Token
   | ITthen
   | ITtype
   | ITwhere
+  | ITwith
 
   | ITforall            IsUnicodeSyntax -- GHC extension keywords
   | ITexport
@@ -637,6 +641,21 @@ data Token
   | ITdependency
   | ITrequires
 
+  -- DamlVersionRequired tokens
+    -- conditionally lexed as proper keyword for DamlVersionRequired extension
+    -- we must do that as `daml = ()` is a proper Haskell program.
+  | ITdaml
+  -- DamlTemplate tokens
+    -- conditionally lexed as proper keywords for DamlTemplate ext
+  | ITtemplate
+  | ITcan
+  | ITensure
+  | ITsignatory
+  | ITagreement
+  | ITcontroller
+  | ITobserver
+  | ITnonconsuming
+
   -- Pragmas, see  note [Pragma source text] in BasicTypes
   | ITinline_prag       SourceText InlineSpec RuleMatchInfo
   | ITspec_prag         SourceText                -- SPECIALISE
@@ -667,6 +686,13 @@ data Token
   | ITcomment_line_prag         -- See Note [Nested comment line pragmas]
 
   | ITdotdot                    -- reserved symbols
+
+  -- Note: ITcons and ITof_type should be used in place of ITcolon and ITdcolon.
+  -- They add a layer of indirection to make the swapped colon convention possible.
+  -- However, ITcolon and ITdcolon are left here to keep any submodules (e.g. Haddock) that use them
+  -- compiling without modification.
+  | ITcons              IsUnicodeSyntax
+  | ITof_type           IsUnicodeSyntax
   | ITcolon
   | ITdcolon            IsUnicodeSyntax
   | ITequal
@@ -818,8 +844,11 @@ reservedWordsFM = listToUFM $
          ( "type",           ITtype,          0 ),
          ( "where",          ITwhere,         0 ),
 
-         ( "forall",         ITforall NormalSyntax, 0),
+         ( "forall",         ITforall NormalSyntax,
+                                              xbit ExplicitForallBit .|.
+                                              xbit InRulePragBit),
          ( "mdo",            ITmdo,           xbit RecursiveDoBit),
+         ( "with",           ITwith,          xbit WithRecordSyntaxBit),
              -- See Note [Lexing type pseudo-keywords]
          ( "family",         ITfamily,        0 ),
          ( "role",           ITrole,          0 ),
@@ -850,6 +879,16 @@ reservedWordsFM = listToUFM $
          ( "dependency",     ITdependency,       0 ),
          ( "signature",      ITsignature,     0 ),
 
+         ( "daml",           ITdaml,          xbit DamlVersionRequiredBit),
+         ( "template",       ITtemplate,      xbit DamlTemplateBit),
+         ( "can",            ITcan,           xbit DamlTemplateBit),
+           -- See Note [Lexing type pseudo-keywords]
+         ( "ensure",         ITensure,        0 ),
+         ( "signatory",      ITsignatory,     0 ),
+         ( "agreement",      ITagreement,     0 ),
+         ( "controller",     ITcontroller,    0 ),
+         ( "observer",       ITobserver,      0 ),
+         ( "nonconsuming",   ITnonconsuming,  0 ),
          ( "rec",            ITrec,           xbit ArrowsBit .|.
                                               xbit RecursiveDoBit),
          ( "proc",           ITproc,          xbit ArrowsBit)
@@ -868,6 +907,11 @@ type families and role annotations are never declared without their extensions
 on. In fact, by unconditionally lexing these pseudo-keywords as special, we
 can get better error messages.
 
+We use the same technique for the DamlTemplate keywords 'ensure',
+'signatory', 'agreement', 'controller', 'observer' and nonconsuming
+which all serve as markers for special kinds of declarations inside a
+template declaration context.
+
 Also, note that these are included in the `varid` production in the parser --
 a key detail to make all this work.
 -------------------------------------}
@@ -877,8 +921,8 @@ reservedSymsFM = listToUFM $
     map (\ (x,w,y,z) -> (mkFastString x,(w,y,z)))
       [ ("..",  ITdotdot,                   NormalSyntax,  0 )
         -- (:) is a reserved op, meaning only list cons
-       ,(":",   ITcolon,                    NormalSyntax,  0 )
-       ,("::",  ITdcolon NormalSyntax,      NormalSyntax,  0 )
+       ,(":",   ITcons NormalSyntax,        NormalSyntax,  0 )
+       ,("::",  ITof_type NormalSyntax,     NormalSyntax,  0 )
        ,("=",   ITequal,                    NormalSyntax,  0 )
        ,("\\",  ITlam,                      NormalSyntax,  0 )
        ,("|",   ITvbar,                     NormalSyntax,  0 )
@@ -900,11 +944,11 @@ reservedSymsFM = listToUFM $
        ,("-<<", ITLarrowtail NormalSyntax,  NormalSyntax,  xbit ArrowsBit)
        ,(">>-", ITRarrowtail NormalSyntax,  NormalSyntax,  xbit ArrowsBit)
 
-       ,("∷",   ITdcolon UnicodeSyntax,     UnicodeSyntax, 0 )
-       ,("⇒",   ITdarrow UnicodeSyntax,     UnicodeSyntax, 0 )
-       ,("∀",   ITforall UnicodeSyntax,     UnicodeSyntax, 0 )
-       ,("→",   ITrarrow UnicodeSyntax,     UnicodeSyntax, 0 )
-       ,("←",   ITlarrow UnicodeSyntax,     UnicodeSyntax, 0 )
+       ,("∷",   ITof_type UnicodeSyntax,     UnicodeSyntax, 0 )
+       ,("⇒",   ITdarrow  UnicodeSyntax,     UnicodeSyntax, 0 )
+       ,("∀",   ITforall  UnicodeSyntax,     UnicodeSyntax, 0 )
+       ,("→",   ITrarrow  UnicodeSyntax,     UnicodeSyntax, 0 )
+       ,("←",   ITlarrow  UnicodeSyntax,     UnicodeSyntax, 0 )
 
        ,("⤙",   ITlarrowtail UnicodeSyntax, UnicodeSyntax, xbit ArrowsBit)
        ,("⤚",   ITrarrowtail UnicodeSyntax, UnicodeSyntax, xbit ArrowsBit)
@@ -1348,29 +1392,38 @@ varsym = sym ITvarsym
 consym = sym ITconsym
 
 sym :: (FastString -> Token) -> Action
-sym con span buf len =
+sym con span buf len = do
+  nccInEffect <- extension newColonConventionEnabled
+  -- possibly swap ':' and '::'
+  let tweakToken = if nccInEffect then newColonConvention else id
   case lookupUFM reservedSymsFM fs of
     Just (keyword, NormalSyntax, 0) ->
-      return $ L span keyword
+      return $ L span $ tweakToken keyword
     Just (keyword, NormalSyntax, i) -> do
       exts <- getExts
       if exts .&. i /= 0
-        then return $ L span keyword
-        else return $ L span (con fs)
+        then return $ L span $ tweakToken keyword
+        else return $ L span $ tweakToken (con fs)
     Just (keyword, UnicodeSyntax, 0) -> do
       exts <- getExts
       if xtest UnicodeSyntaxBit exts
-        then return $ L span keyword
-        else return $ L span (con fs)
+        then return $ L span $ tweakToken keyword
+        else return $ L span $ tweakToken (con fs)
     Just (keyword, UnicodeSyntax, i) -> do
       exts <- getExts
       if exts .&. i /= 0 && xtest UnicodeSyntaxBit exts
-        then return $ L span keyword
-        else return $ L span (con fs)
+        then return $ L span $ tweakToken keyword
+        else return $ L span $ tweakToken (con fs)
     Nothing ->
       return $ L span $! con fs
   where
     !fs = lexemeToFastString buf len
+
+-- Swap cons and of_type
+newColonConvention :: Token -> Token
+newColonConvention (ITcons _) = ITof_type UnicodeSyntax  -- need to maintain char count?
+newColonConvention (ITof_type _) = ITcons NormalSyntax
+newColonConvention tok = tok
 
 -- Variations on the integral numeric literal.
 tok_integral :: (SourceText -> Integer -> Token)
@@ -1490,6 +1543,8 @@ maybe_layout t = do -- If the alternative layout rule is enabled then
           f ITlcase = pushLexState layout
           f ITlet   = pushLexState layout
           f ITwhere = pushLexState layout
+          f ITwith  = pushLexState layout
+          f ITcan   = pushLexState layout
           f ITrec   = pushLexState layout
           f ITif    = pushLexState layout_if
           f _       = return ()
@@ -1946,10 +2001,15 @@ data ParseResult a
 warnopt :: WarningFlag -> ParserFlags -> Bool
 warnopt f options = f `EnumSet.member` pWarningFlags options
 
+-- | Test whether a 'LangExt.Extension' is set
+extopt :: LangExt.Extension -> ParserFlags -> Bool
+extopt f options = f `EnumSet.member` pExtensionFlags options
+
 -- | The subset of the 'DynFlags' used by the parser.
 -- See 'mkParserFlags' or 'mkParserFlags'' for ways to construct this.
 data ParserFlags = ParserFlags {
     pWarningFlags   :: EnumSet WarningFlag
+  , pExtensionFlags :: EnumSet LangExt.Extension
   , pThisPackage    :: UnitId      -- ^ key of package currently being compiled
   , pExtsBitmap     :: !ExtsBitmap -- ^ bitmap of permitted extensions
   }
@@ -2334,6 +2394,10 @@ data ExtBits
   | DoAndIfThenElseBit
   | MultiWayIfBit
   | GadtSyntaxBit
+  | NewColonConventionBit
+  | WithRecordSyntaxBit
+  | DamlVersionRequiredBit
+  | DamlTemplateBit
 
   -- Flags that are updated once parsing starts
   | InRulePragBit
@@ -2344,8 +2408,16 @@ data ExtBits
     -- tokens of their own.
   deriving Enum
 
-
-
+withRecordSyntaxEnabled :: ExtsBitmap -> Bool
+withRecordSyntaxEnabled = xtest WithRecordSyntaxBit
+newColonConventionEnabled :: ExtsBitmap -> Bool
+newColonConventionEnabled = xtest NewColonConventionBit
+damlVersionRequiredEnabled :: ExtsBitmap -> Bool
+damlVersionRequiredEnabled = xtest DamlVersionRequiredBit
+damlTemplateIsEnabled :: ExtsBitmap -> Bool
+damlTemplateIsEnabled = xtest DamlTemplateBit
+extension :: (ExtsBitmap -> Bool) -> P Bool
+extension p = P $ \s -> POk s (p $! (pExtsBitmap . options) s)
 
 
 -- PState for parsing options pragmas
@@ -2375,6 +2447,7 @@ mkParserFlags' warningFlags extensionFlags thisPackage
   safeImports isHaddock rawTokStream usePosPrags =
     ParserFlags {
       pWarningFlags = warningFlags
+    , pExtensionFlags = extensionFlags
     , pThisPackage = thisPackage
     , pExtsBitmap = safeHaskellBit .|. langExtBits .|. optBits
     }
@@ -2391,6 +2464,7 @@ mkParserFlags' warningFlags extensionFlags thisPackage
       .|. IpBit                       `xoptBit` LangExt.ImplicitParams
       .|. OverloadedLabelsBit         `xoptBit` LangExt.OverloadedLabels
       .|. ExplicitForallBit           `xoptBit` LangExt.ExplicitForAll
+      .|. WithRecordSyntaxBit         `xoptBit` LangExt.WithRecordSyntax
       .|. BangPatBit                  `xoptBit` LangExt.BangPatterns
       .|. MagicHashBit                `xoptBit` LangExt.MagicHash
       .|. RecursiveDoBit              `xoptBit` LangExt.RecursiveDo
@@ -2420,6 +2494,9 @@ mkParserFlags' warningFlags extensionFlags thisPackage
       .|. DoAndIfThenElseBit          `xoptBit` LangExt.DoAndIfThenElse
       .|. MultiWayIfBit               `xoptBit` LangExt.MultiWayIf
       .|. GadtSyntaxBit               `xoptBit` LangExt.GADTSyntax
+      .|. NewColonConventionBit       `xoptBit` LangExt.NewColonConvention
+      .|. DamlVersionRequiredBit      `xoptBit` LangExt.DamlVersionRequired
+      .|. DamlTemplateBit             `xoptBit` LangExt.DamlTemplate
     optBits =
           HaddockBit        `setBitIf` isHaddock
       .|. RawTokenStreamBit `setBitIf` rawTokStream
