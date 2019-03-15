@@ -1431,7 +1431,7 @@ flatten_exact_fam_app_fully tc tys
                Just (norm_co, norm_ty)
                  -> do { traceFlat "Eager T.F. reduction success" $
                          vcat [ ppr tc, ppr tys, ppr norm_ty
-                              , ppr norm_co <+> dcolon
+                              , ppr norm_co <+> of_type
                                             <+> ppr (coercionKind norm_co)
                               ]
                        ; (xi, final_co) <- bumpDepth $ flatten_one norm_ty

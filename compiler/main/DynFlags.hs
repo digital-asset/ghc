@@ -29,6 +29,7 @@ module DynFlags (
         glasgowExtsFlags,
         warningGroups, warningHierarchies,
         hasPprDebug, hasNoDebugOutput, hasNoStateHack, hasNoOptCoercion,
+        performNewColonConvention,
         dopt, dopt_set, dopt_unset,
         gopt, gopt_set, gopt_unset, setGeneralFlag', unSetGeneralFlag',
         wopt, wopt_set, wopt_unset,
@@ -651,6 +652,9 @@ data GeneralFlag
 
    | Opt_G_NoStateHack
    | Opt_G_NoOptCoercion
+
+   -- use "new colon convention" in error messages
+   | Opt_PrintNewColonConvention
    deriving (Eq, Show, Enum)
 
 -- Check whether a flag should be considered an "optimisation flag"
@@ -839,6 +843,7 @@ data WarningFlag =
    | Opt_WarnImplicitKindVars             -- Since 8.6
    | Opt_WarnSpaceAfterBang
    | Opt_WarnMissingDerivingStrategies    -- Since 8.8
+   | Opt_WarnPrepositiveQualifiedModule   -- DA
    deriving (Eq, Show, Enum)
 
 data Language = Haskell98 | Haskell2010
@@ -1646,6 +1651,10 @@ shouldUseHexWordLiterals dflags =
 -- | Are we building with @-fPIE@ or @-fPIC@ enabled?
 positionIndependent :: DynFlags -> Bool
 positionIndependent dflags = gopt Opt_PIC dflags || gopt Opt_PIE dflags
+
+-- | Display error messages using the "new colon convention"?
+performNewColonConvention :: DynFlags -> Bool
+performNewColonConvention = gopt Opt_PrintNewColonConvention
 
 -----------------------------------------------------------------------------
 -- Ways
@@ -4053,6 +4062,8 @@ wWarningFlagsDeps = [
   flagSpec "star-binder"                 Opt_WarnStarBinder,
   flagSpec "star-is-type"                Opt_WarnStarIsType,
   flagSpec "missing-space-after-bang"    Opt_WarnSpaceAfterBang,
+  flagSpec "prepositive-qualified-module"
+                                         Opt_WarnPrepositiveQualifiedModule,
   flagSpec "partial-fields"              Opt_WarnPartialFields ]
 
 -- | These @-\<blah\>@ flags can all be reversed with @-no-\<blah\>@
@@ -4172,6 +4183,7 @@ fFlagsDeps = [
   flagSpec "print-expanded-synonyms"          Opt_PrintExpandedSynonyms,
   flagSpec "print-potential-instances"        Opt_PrintPotentialInstances,
   flagSpec "print-typechecker-elaboration"    Opt_PrintTypecheckerElaboration,
+  flagSpec "print-new-colon-convention"       Opt_PrintNewColonConvention,
   flagSpec "prof-cafs"                        Opt_AutoSccsOnIndividualCafs,
   flagSpec "prof-count-entries"               Opt_ProfCountEntries,
   flagSpec "regs-graph"                       Opt_RegsGraph,
@@ -4335,9 +4347,11 @@ xFlagsDeps = [
   flagSpec "BangPatterns"                     LangExt.BangPatterns,
   flagSpec "BinaryLiterals"                   LangExt.BinaryLiterals,
   flagSpec "CApiFFI"                          LangExt.CApiFFI,
+  flagSpec "NewColonConvention"               LangExt.NewColonConvention,
   flagSpec "CPP"                              LangExt.Cpp,
   flagSpec "ConstrainedClassMethods"          LangExt.ConstrainedClassMethods,
   flagSpec "ConstraintKinds"                  LangExt.ConstraintKinds,
+  flagSpec "DamlVersionRequired"              LangExt.DamlVersionRequired,
   flagSpec "DataKinds"                        LangExt.DataKinds,
   depFlagSpecCond "DatatypeContexts"          LangExt.DatatypeContexts
     id
@@ -4464,7 +4478,9 @@ xFlagsDeps = [
   flagSpec "UndecidableSuperClasses"          LangExt.UndecidableSuperClasses,
   flagSpec "UnicodeSyntax"                    LangExt.UnicodeSyntax,
   flagSpec "UnliftedFFITypes"                 LangExt.UnliftedFFITypes,
-  flagSpec "ViewPatterns"                     LangExt.ViewPatterns
+  flagSpec "ViewPatterns"                     LangExt.ViewPatterns,
+  flagSpec "WithRecordSyntax"                 LangExt.WithRecordSyntax,
+  flagSpec "DamlTemplate"                     LangExt.DamlTemplate
   ]
 
 defaultFlags :: Settings -> [GeneralFlag]

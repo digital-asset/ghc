@@ -301,7 +301,7 @@ instance Outputable Var where
             getPprStyle $ \ppr_style ->
             if |  debugStyle ppr_style && (not (gopt Opt_SuppressVarKinds dflags))
                  -> parens (ppr (varName var) <+> ppr_debug var ppr_style <+>
-                          dcolon <+> pprKind (tyVarKind var))
+                          of_type <+> pprKind (tyVarKind var))
                |  otherwise
                  -> ppr (varName var) <> ppr_debug var ppr_style
 
@@ -620,7 +620,7 @@ tcTyVarDetails :: TyVar -> TcTyVarDetails
 -- See Note [TcTyVars in the typechecker] in TcType
 tcTyVarDetails (TcTyVar { tc_tv_details = details }) = details
 tcTyVarDetails (TyVar {})                            = vanillaSkolemTv
-tcTyVarDetails var = pprPanic "tcTyVarDetails" (ppr var <+> dcolon <+> pprKind (tyVarKind var))
+tcTyVarDetails var = pprPanic "tcTyVarDetails" (ppr var <+> of_type <+> pprKind (tyVarKind var))
 
 setTcTyVarDetails :: TyVar -> TcTyVarDetails -> TyVar
 setTcTyVarDetails tv details = tv { tc_tv_details = details }

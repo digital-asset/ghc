@@ -139,4 +139,8 @@ data Extension
    | NumericUnderscores
    | QuantifiedConstraints
    | StarIsType
+   | NewColonConvention
+   | DamlVersionRequired
+   | WithRecordSyntax
+   | DamlTemplate
    deriving (Eq, Enum, Show, Generic)

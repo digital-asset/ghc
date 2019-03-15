@@ -994,8 +994,8 @@ which in turn is imported by Type
 -}
 
 mkTyVarTy  :: TyVar   -> Type
-mkTyVarTy v = ASSERT2( isTyVar v, ppr v <+> dcolon <+> ppr (tyVarKind v) )
-              TyVarTy v
+mkTyVarTy v = ASSERT2( isTyVar v, ppr v <+> of_type <+> ppr (tyVarKind v) )
+                  TyVarTy v
 
 mkTyVarTys :: [TyVar] -> [Type]
 mkTyVarTys = map mkTyVarTy -- a common use of mkTyVarTy
@@ -3739,7 +3739,7 @@ pprTyVar :: TyVar -> SDoc
 -- debug printing is disastrous
 pprTyVar tv
   | isLiftedTypeKind kind = ppr tv
-  | otherwise             = parens (ppr tv <+> dcolon <+> ppr kind)
+  | otherwise             = parens (ppr tv <+> of_type <+> ppr kind)
   where
     kind = tyVarKind tv
 

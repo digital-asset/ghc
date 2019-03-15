@@ -175,7 +175,7 @@ pprSigCtxt :: UserTypeCtxt -> LHsType GhcRn -> SDoc
 pprSigCtxt ctxt hs_ty
   | Just n <- isSigMaybe ctxt
   = hang (text "In the type signature:")
-       2 (pprPrefixOcc n <+> dcolon <+> ppr hs_ty)
+       2 (pprPrefixOcc n <+> of_type <+> ppr hs_ty)
 
   | otherwise
   = hang (text "In" <+> pprUserTypeCtxt ctxt <> colon)
@@ -1002,7 +1002,7 @@ tcInferApps mode hs_ty fun hs_args
 tcInferApps_nosat mode orig_hs_ty fun orig_hs_args
   = do { traceTc "tcInferApps {" (ppr orig_hs_ty $$ ppr orig_hs_args)
        ; (f_args, res_k) <- go_init 1 fun orig_hs_args
-       ; traceTc "tcInferApps }" (ppr f_args <+> dcolon <+> ppr res_k)
+       ; traceTc "tcInferApps }" (ppr f_args <+> of_type <+> ppr res_k)
        ; return (f_args, res_k) }
   where
 
@@ -1114,10 +1114,10 @@ tcInferApps_nosat mode orig_hs_ty fun orig_hs_args
                      -- of matchExpectedFunKind to the 'go' loop
 
               ; traceTc "tcInferApps (no binder)" $
-                   vcat [ ppr fun <+> dcolon <+> ppr fun_ki
+                   vcat [ ppr fun <+> of_type <+> ppr fun_ki
                         , ppr arrows_needed
                         , ppr co
-                        , ppr fun' <+> dcolon <+> ppr (tcTypeKind fun')]
+                        , ppr fun' <+> of_type <+> ppr (tcTypeKind fun')]
               ; go_init n fun' all_args }
                 -- Use go_init to establish go's INVARIANT
       where
@@ -1199,7 +1199,7 @@ mk_app_ty :: TcType -> TcType -> TcType
 -- This function just adds an ASSERT for mkAppTyM's precondition
 mk_app_ty fun arg
   = ASSERT2( isPiTy fun_kind
-           ,  ppr fun <+> dcolon <+> ppr fun_kind $$ ppr arg )
+           ,  ppr fun <+> of_type <+> ppr fun_kind $$ ppr arg )
     mkAppTy fun arg
   where
     fun_kind = tcTypeKind fun
