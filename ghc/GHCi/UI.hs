@@ -2073,7 +2073,7 @@ typeOfExpr str = handleSourceError GHC.printException $ do
           ("+v", rest) -> (GHC.TM_NoInst,  dropWhile isSpace rest)
           _            -> (GHC.TM_Inst,    str)
     ty <- GHC.exprType mode expr_str
-    printForUser $ sep [text expr_str, nest 2 (dcolon <+> pprTypeForUser ty)]
+    printForUser $ sep [text expr_str, nest 2 (of_type <+> pprTypeForUser ty)]
 
 -----------------------------------------------------------------------------
 -- | @:type-at@ command
@@ -2084,7 +2084,7 @@ typeAtCmd str = runExceptGhcMonad $ do
     infos      <- lift $ mod_infos <$> getGHCiState
     (info, ty) <- findType infos span' sample
     lift $ printForUserModInfo (modinfoInfo info)
-                               (sep [text sample,nest 2 (dcolon <+> ppr ty)])
+                               (sep [text sample,nest 2 (of_type <+> ppr ty)])
 
 -----------------------------------------------------------------------------
 -- | @:uses@ command
@@ -2200,7 +2200,7 @@ showRealSrcSpan spn = concat [ fp, ":(", show sl, ",", show sc
 kindOfType :: GHC.GhcMonad m => Bool -> String -> m ()
 kindOfType norm str = handleSourceError GHC.printException $ do
     (ty, kind) <- GHC.typeKind norm str
-    printForUser $ vcat [ text str <+> dcolon <+> pprTypeForUser kind
+    printForUser $ vcat [ text str <+> of_type <+> pprTypeForUser kind
                         , ppWhen norm $ equals <+> pprTypeForUser ty ]
 
 -----------------------------------------------------------------------------

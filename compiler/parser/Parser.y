@@ -36,7 +36,7 @@ module Parser (parseModule, parseSignature, parseImport, parseStatement, parseBa
                parseType, parseHeader) where
 
 -- base
-import Control.Monad    ( unless, liftM, when, (<=<) )
+import Control.Monad    ( unless, liftM, when, void, (<=<) )
 import GHC.Exts
 import Data.Char
 import Control.Monad    ( mplus )
@@ -92,7 +92,8 @@ import Util             ( looksLikePackageName, fstOf3, sndOf3, thdOf3 )
 import GhcPrelude
 }
 
-%expect 236 -- shift/reduce conflicts
+-- %expect 236 -- shift/reduce conflicts
+-- TODO [SF, SM] : update this section in light of DAML extensions
 
 {- Last updated: 04 June 2018
 
@@ -475,6 +476,7 @@ are the most common patterns, rewritten as regular expressions for clarity:
  'then'         { L _ ITthen }
  'type'         { L _ ITtype }
  'where'        { L _ ITwhere }
+ 'with'         { L _ ITwith }
 
  'forall'       { L _ (ITforall _) }                -- GHC extension keywords
  'foreign'      { L _ ITforeign }
@@ -507,6 +509,16 @@ are the most common patterns, rewritten as regular expressions for clarity:
  'signature'    { L _ ITsignature }
  'dependency'   { L _ ITdependency }
 
+ 'daml'         { L _ ITdaml }
+ 'template'     { L _ ITtemplate }
+ 'can'          { L _ ITcan }
+ 'ensure'       { L _ ITensure }
+ 'signatory'    { L _ ITsignatory }
+ 'agreement'    { L _ ITagreement }
+ 'controller'   { L _ ITcontroller }
+ 'observer'     { L _ ITobserver }
+ 'nonconsuming' { L _ ITnonconsuming }
+
  '{-# INLINE'             { L _ (ITinline_prag _ _ _) } -- INLINE or INLINABLE
  '{-# SPECIALISE'         { L _ (ITspec_prag _) }
  '{-# SPECIALISE_INLINE'  { L _ (ITspec_inline_prag _ _) }
@@ -530,8 +542,6 @@ are the most common patterns, rewritten as regular expressions for clarity:
  '#-}'                    { L _ ITclose_prag }
 
  '..'           { L _ ITdotdot }                        -- reserved symbols
- ':'            { L _ ITcolon }
- '::'           { L _ (ITdcolon _) }
  '='            { L _ ITequal }
  '\\'           { L _ ITlam }
  'lcase'        { L _ ITlcase }
@@ -550,6 +560,9 @@ are the most common patterns, rewritten as regular expressions for clarity:
  '>>-'          { L _ (ITRarrowtail _) }            -- for arrow notation
  '.'            { L _ ITdot }
  TYPEAPP        { L _ ITtypeApp }
+
+ CONS           {L _ (ITcons _)}
+ OF_TYPE        {L _ (ITof_type _)}
 
  '{'            { L _ ITocurly }                        -- special symbols
  '}'            { L _ ITccurly }
@@ -635,6 +648,21 @@ TH_QQUASIQUOTE  { L _ (ITqQuasiQuote _) }
 %partial parseHeader header
 %%
 
+
+-----------------------------------------------------------------------------
+-- Colons; identifying them gets a little complicated in the presence
+-- of the new colon convention.
+
+-- Depending on whether the new colon convention is enabled or not
+-- either CONS or OF_TYPE will be represented by ':'. 'unit_of_colon'
+-- tests that the given token is so represented and errors if it is
+-- not. The following rule is used in those productions where ':'
+-- means literally ':' (that is, is invariant with respect to the new
+-- colon convention).
+colon :: { Located () }
+       : CONS    {% unit_of_colon $1 }
+       | OF_TYPE {% unit_of_colon $1 }
+
 -----------------------------------------------------------------------------
 -- Identifiers; one of the entry points
 identifier :: { Located RdrName }
@@ -679,7 +707,7 @@ msubst :: { LHsModuleSubst PackageName }
 
 moduleid :: { LHsModuleId PackageName }
           : VARSYM modid VARSYM { sLL $1 $> $ HsModuleVar $2 }
-          | unitid ':' modid    { sLL $1 $> $ HsModuleId $1 $3 }
+          | unitid colon modid  { sLL $1 $> $ HsModuleId $1 $3 }
 
 pkgname :: { Located PackageName }
         : STRING     { sL1 $1 $ PackageName (getSTRING $1) }
@@ -757,17 +785,51 @@ signature :: { Located (HsModule GhcPs) }
                     ([mj AnnSignature $2, mj AnnWhere $6] ++ fst $7) }
 
 module :: { Located (HsModule GhcPs) }
-       : maybedocheader 'module' modid maybemodwarning maybeexports 'where' body
+       : daml_version maybedocheader 'module' modid maybemodwarning maybeexports 'where' body
              {% fileSrcSpan >>= \ loc ->
-                ams (cL loc (HsModule (Just $3) $5 (fst $ snd $7)
-                              (snd $ snd $7) $4 $1)
+                ams (L loc (HsModule (Just $4) $6 (fst $ snd $8)
+                              (snd $ snd $8) $5 $2)
                     )
-                    ([mj AnnModule $2, mj AnnWhere $6] ++ fst $7) }
-        | body2
+                    ([mj AnnModule $3, mj AnnWhere $7] ++ fst $8) }
+        | daml_version body2
                 {% fileSrcSpan >>= \ loc ->
-                   ams (cL loc (HsModule Nothing Nothing
-                               (fst $ snd $1) (snd $ snd $1) Nothing Nothing))
-                       (fst $1) }
+                   ams (L loc (HsModule Nothing Nothing
+                               (fst $ snd $2) (snd $ snd $2) Nothing Nothing))
+                       (fst $2) }
+
+-- daml version
+
+daml_version :: { () }
+  : daml version     { ()
+                       -- No need to check that damlVersionRequiredEnabled
+                       -- as 'daml' is only parsed as a keyword if it is.
+                     }
+
+  | {- empty  -}     {% do
+                          required <- extension damlVersionRequiredEnabled
+                          when required $ do
+                            loc <- fileSrcSpan
+                            addFatalError loc $ text "Missing daml version"
+                     }
+
+
+daml :: { () }
+  : 'daml'           {}
+
+version :: { () }
+  : RATIONAL         {% do
+                          let num = getRATIONAL $1
+                              version = fl_value num
+                              version_text = fl_text num
+                          if version == 1.2 then
+                            return ()
+                          else do
+                            loc <- fileSrcSpan
+                            addFatalError loc $ text $
+                                "Unrecognized daml version '" ++
+                                 (case version_text of SourceText txt -> txt) ++
+                                 "' (expected 1.2)"
+                      }
 
 maybedocheader :: { Maybe LHsDocString }
         : moduleheader            { $1 }
@@ -814,17 +876,17 @@ top1    :: { ([LImportDecl GhcPs], [LHsDecl GhcPs]) }
 -- Module declaration & imports only
 
 header  :: { Located (HsModule GhcPs) }
-        : maybedocheader 'module' modid maybemodwarning maybeexports 'where' header_body
+        : daml_version maybedocheader 'module' modid maybemodwarning maybeexports 'where' header_body
                 {% fileSrcSpan >>= \ loc ->
-                   ams (cL loc (HsModule (Just $3) $5 $7 [] $4 $1
-                          )) [mj AnnModule $2,mj AnnWhere $6] }
+                   ams (L loc (HsModule (Just $4) $6 $8 [] $5 $2
+                          )) [mj AnnModule $3,mj AnnWhere $7] }
         | maybedocheader 'signature' modid maybemodwarning maybeexports 'where' header_body
                 {% fileSrcSpan >>= \ loc ->
                    ams (cL loc (HsModule (Just $3) $5 $7 [] $4 $1
                           )) [mj AnnModule $2,mj AnnWhere $6] }
-        | header_body2
+        | daml_version header_body2
                 {% fileSrcSpan >>= \ loc ->
-                   return (cL loc (HsModule Nothing Nothing $1 [] Nothing
+                   return (L loc (HsModule Nothing Nothing $2 [] Nothing
                           Nothing)) }
 
 header_body :: { [LImportDecl GhcPs] }
@@ -955,17 +1017,28 @@ importdecls_semi
         | {- empty -}           { [] }
 
 importdecl :: { LImportDecl GhcPs }
-        : 'import' maybe_src maybe_safe optqualified maybe_pkg modid maybeas maybeimpspec
-                {% ams (cL (comb4 $1 $6 (snd $7) $8) $
-                  ImportDecl { ideclExt = noExt
-                             , ideclSourceSrc = snd $ fst $2
-                             , ideclName = $6, ideclPkgQual = snd $5
-                             , ideclSource = snd $2, ideclSafe = snd $3
-                             , ideclQualified = snd $4, ideclImplicit = False
-                             , ideclAs = unLoc (snd $7)
-                             , ideclHiding = unLoc $8 })
-                   ((mj AnnImport $1 : (fst $ fst $2) ++ fst $3 ++ fst $4
-                                    ++ fst $5 ++ fst $7)) }
+        : 'import' maybe_src maybe_safe optqualified maybe_pkg modid optqualified maybeas maybeimpspec
+                {% do
+                  {  let preposQualMod = snd (unLoc $4)
+                         postPosQualMod = snd (unLoc $7)
+                         qualModAddAnn =
+                           if (preposQualMod) then fst (unLoc $4)
+                           else if (postPosQualMod) then fst (unLoc $7) else []
+                  ;  if preposQualMod then warnPrepositiveQualifiedModule (getLoc $4)
+                     else return ()
+                  ;  ams (cL (comb4 $1 $6 (snd $8) $9) $
+                       ImportDecl { ideclExt = noExt
+                                  , ideclSourceSrc = snd $ fst $2
+                                  , ideclName = $6, ideclPkgQual = snd $5
+                                  , ideclSource = snd $2, ideclSafe = snd $3
+                                  , ideclQualified = preposQualMod || postPosQualMod
+                                  , ideclImplicit = False
+                                  , ideclAs = unLoc (snd $8)
+                                  , ideclHiding = unLoc $9 })
+                         ((mj AnnImport $1 : (fst $ fst $2) ++ fst $3 ++ qualModAddAnn
+                                          ++ fst $5 ++ fst $8))
+                  }
+                }
 
 maybe_src :: { (([AddAnn],SourceText),IsBootInterface) }
         : '{-# SOURCE' '#-}'        { (([mo $1,mc $2],getSOURCE_PRAGs $1)
@@ -986,9 +1059,9 @@ maybe_pkg :: { ([AddAnn],Maybe StringLiteral) }
                         ; return ([mj AnnPackageName $1], Just (StringLiteral (getSTRINGs $1) pkgFS)) } }
         | {- empty -}                           { ([],Nothing) }
 
-optqualified :: { ([AddAnn],Bool) }
-        : 'qualified'                           { ([mj AnnQualified $1],True)  }
-        | {- empty -}                           { ([],False) }
+optqualified :: { Located ([AddAnn],Bool) }
+        : 'qualified'                           { sL1 $1 ([mj AnnQualified $1],True)  }
+        | {- empty -}                           { sL0 ([],False) }
 
 maybeas :: { ([AddAnn],Located (Maybe (Located ModuleName))) }
         : 'as' modid                           { ([mj AnnAs $1]
@@ -1033,12 +1106,20 @@ ops     :: { Located (OrdList (Located RdrName)) }
 
 -- No trailing semicolons, non-empty
 topdecls :: { OrdList (LHsDecl GhcPs) }
-        : topdecls_semi topdecl        { $1 `snocOL` $2 }
+        : topdecls_semi topdeclWithTemplate        { $1 `appOL` $2 }
 
 -- May have trailing semicolons, can be empty
 topdecls_semi :: { OrdList (LHsDecl GhcPs) }
-        : topdecls_semi topdecl semis1 {% ams $2 $3 >> return ($1 `snocOL` $2) }
-        | {- empty -}                  { nilOL }
+        -- FIXME (SM, SF): properly handle the 'ams' location annotation here
+        -- : topdecls_semi topdeclWithTemplate semis1 {% ams $2 $3 >> return ($1 `appOL` $2) }
+        : topdecls_semi topdeclWithTemplate semis1 {% return ($1 `appOL` $2) }
+        | {- empty -}                              { nilOL }
+
+topdeclWithTemplate :: { OrdList (LHsDecl GhcPs) }
+topdeclWithTemplate : topdecl                               { unitOL $1 }
+                      -- Templates: we desugar to multiple decls right in the parser
+                    | template_decl                         { $1 }
+
 
 topdecl :: { LHsDecl GhcPs }
         : cl_decl                               { sL1 $1 (TyClD noExt (unLoc $1)) }
@@ -1065,6 +1146,104 @@ topdecl :: { LHsDecl GhcPs }
         -- but we treat an arbitrary expression just as if
         -- it had a $(..) wrapped around it
         | infixexp_top                          { sLL $1 $> $ mkSpliceDecl $1 }
+
+
+-- Templates
+--
+template_decl :: { OrdList (LHsDecl GhcPs) }
+  : 'template' qtycon arecord_with 'where' template_body
+                                                 {% mkTemplateDecl $2 $3 $5 }
+
+template_body :: { Located [Located TemplateBodyDecl] }
+  : '{' template_body_decls '}'                  { sLL $1 $3 (reverse (unLoc $2)) }
+  | vocurly template_body_decls close            { let tbds = reverse (unLoc $2) in
+                                                     L (comb2 $1
+                                                         (last (void $1:map void tbds))
+                                                       ) $ tbds }
+
+template_body_decls :: { Located [Located TemplateBodyDecl] }
+  : template_body_decls ';' template_body_decl   { sLL $1 $> $ $3 : (unLoc $1) }
+  | template_body_decls ';'                      { sLL $1 $> $ unLoc $1 }
+  | template_body_decl                           { sL1 $1 [$1] }
+  | {- empty -}                                  { sL0 [] }
+
+template_body_decl :: { Located TemplateBodyDecl }
+  : ensure_decl                                  { sL1 $1 $ EnsureDecl $1 }
+  | signatory_decl                               { sL1 $1 $ SignatoryDecl $1 }
+  | observer_decl                                { sL1 $1 $ ObserverDecl $1 }
+  | agreement_decl                               { sL1 $1 $ AgreementDecl $1 }
+  | choice_group_decl                            { sL1 $1 $ ChoiceGroupDecl $1 }
+  | let_bindings_decl                            { sL1 $1 $ LetBindingsDecl $1 }
+
+let_bindings_decl :: { Located ([AddAnn], Located (HsLocalBinds GhcPs)) }
+  : 'let' binds                 { sLL $1 $> (mj AnnWhere $1 : (fst $ unLoc $2)
+                                             , snd $ unLoc $2) }
+
+choice_group_decl :: { Located (LHsExpr GhcPs , Located [Located ChoiceDecl]) }
+  : 'controller' parties 'can' choice_decl_list  { sLL $1 $> (applyConcat $2, $4) }
+
+choice_decl_list :: { Located [Located ChoiceDecl] }
+  : '{' choice_decls '}'                         { sLL $1 $3 $ reverse (unLoc $2) }
+  | vocurly choice_decls close                   { let cs = reverse (unLoc $2) in
+                                                    L (comb2 $1
+                                                        (last (void $1:map void cs))
+                                                      ) $ cs }
+
+choice_decls :: { Located [Located ChoiceDecl] }
+ : choice_decls ';' choice_decl                  { sLL $1 $> $ $3 : (unLoc $1) }
+ | choice_decls ';'                              { sLL $1 $> $ unLoc $1 }
+ | choice_decl                                   { sL1 $1 [$1] }
+ | {- empty -}                                   { sL0 [] }
+
+choice_decl :: { Located ChoiceDecl }
+  : nonconsuming qtycon OF_TYPE btype_ maybe_docprev arecord_with_opt 'do' stmtlist -- note the use of 'btype_'
+    {% $8 >>= \ $8 ->
+        return $ sL (comb3 $1 $2 $>) $
+            ChoiceDecl { cdChoiceName         = $2
+                       , cdChoiceReturnTy     = $4
+                       , cdChoiceFields       = $6
+                       , cdChoiceBody         = $8
+                       , cdChoiceNonConsuming = $1
+                       , cdChoiceDoc          = $5 }
+    }
+
+nonconsuming :: { Located Bool }
+ : 'nonconsuming'                                { sL1 $1 True }
+ | {- empty -}                                   { sL0 False }
+
+-- This production is only used by choice_decl.
+arecord_with_opt :: { Maybe (LHsType GhcPs)}
+  : arecord_with                                 { Just $1 }
+  -- We want choices without arguments to desugar to records without
+  -- fields rather than a variant with one case.
+  | {- empty -}                                  { Just $ noLoc $ HsRecTy noExt [] }
+
+ensure_decl :: { LHsExpr GhcPs }
+  : 'ensure' exp                                 {% runExpCmdP $2 >>= \ $2 ->  return $ sLL $1 $> $ unLoc $2 }
+
+signatory_decl :: { LHsExpr GhcPs }
+  : 'signatory' parties                          { sLL $1 $> $ unLoc (applyConcat $2) }
+
+observer_decl :: { LHsExpr GhcPs }
+  : 'observer' parties                           { sLL $1 $> $ unLoc (applyConcat $2) }
+
+agreement_decl :: { LHsExpr GhcPs }
+  : 'agreement' exp                              {% runExpCmdP $2 >>= \ $2 -> return $ sLL $1 $> $ unLoc $2 }
+
+parties :: { Located [LHsExpr GhcPs] }
+  : parties ',' exp                              {% runExpCmdP $3 >>= \ $3 -> return $ sLL $1 $> $ applyToParties $3 : (unLoc $1) }
+  | parties ','                                  { sLL $1 $> $ unLoc $1 }
+  | exp                                          {% runExpCmdP $1 >>=  \ $1 -> return $ sL1 $1 [applyToParties $1] }
+
+btype_ :: { LHsType GhcPs } -- Like 'btype' but excludes @arecord_with@
+      : tyapps_                                  {%  mergeOps (unLoc $1) }
+
+tyapps_ :: { Located [Located TyEl] } -- NB: This list is reversed
+      : tyapp_                                   { sL1 $1 [$1] }
+      | tyapps_ tyapp_                           { sLL $1 $> $ $2 : (unLoc $1) }
+
+tyapp_ :: { Located TyEl }
+      : atype_                                   { sL1 $1 $ TyElOpd (unLoc $1) }
 
 -- Type classes
 --
@@ -1352,21 +1531,21 @@ data_or_newtype :: { Located (AddAnn, NewOrData) }
 
 opt_kind_sig :: { Located ([AddAnn], Maybe (LHsKind GhcPs)) }
         :               { noLoc     ([]               , Nothing) }
-        | '::' kind     { sLL $1 $> ([mu AnnDcolon $1], Just $2) }
+        | OF_TYPE kind  { sLL $1 $> ([mu AnnDcolon $1], Just $2) }
 
 opt_datafam_kind_sig :: { Located ([AddAnn], LFamilyResultSig GhcPs) }
         :               { noLoc     ([]               , noLoc (NoSig noExt)         )}
-        | '::' kind     { sLL $1 $> ([mu AnnDcolon $1], sLL $1 $> (KindSig noExt $2))}
+        | OF_TYPE kind  { sLL $1 $> ([mu AnnDcolon $1], sLL $1 $> (KindSig noExt $2))}
 
 opt_tyfam_kind_sig :: { Located ([AddAnn], LFamilyResultSig GhcPs) }
         :              { noLoc     ([]               , noLoc     (NoSig    noExt)   )}
-        | '::' kind    { sLL $1 $> ([mu AnnDcolon $1], sLL $1 $> (KindSig  noExt $2))}
+        | OF_TYPE kind { sLL $1 $> ([mu AnnDcolon $1], sLL $1 $> (KindSig  noExt $2))}
         | '='  tv_bndr { sLL $1 $> ([mj AnnEqual $1] , sLL $1 $> (TyVarSig noExt $2))}
 
 opt_at_kind_inj_sig :: { Located ([AddAnn], ( LFamilyResultSig GhcPs
                                             , Maybe (LInjectivityAnn GhcPs)))}
         :            { noLoc ([], (noLoc (NoSig noExt), Nothing)) }
-        | '::' kind  { sLL $1 $> ( [mu AnnDcolon $1]
+        | OF_TYPE kind  { sLL $1 $> ( [mu AnnDcolon $1]
                                  , (sLL $2 $> (KindSig noExt $2), Nothing)) }
         | '='  tv_bndr '|' injectivity_cond
                 { sLL $1 $> ([mj AnnEqual $1, mj AnnVbar $3]
@@ -1494,7 +1673,7 @@ where_decls :: { Located ([AddAnn]
                                           ,sL1 $3 (snd $ unLoc $3)) }
 
 pattern_synonym_sig :: { LSig GhcPs }
-        : 'pattern' con_list '::' sigtypedoc
+        : 'pattern' con_list OF_TYPE sigtypedoc
                    {% ams (sLL $1 $> $ PatSynSig noExt (unLoc $2) (mkLHsSigType $4))
                           [mj AnnPattern $1, mu AnnDcolon $3] }
 
@@ -1508,7 +1687,7 @@ decl_cls  : at_decl_cls                 { $1 }
           | decl                        { $1 }
 
           -- A 'default' signature used with the generic-programming extension
-          | 'default' infixexp '::' sigtypedoc
+          | 'default' infixexp OF_TYPE sigtypedoc
                     {% runExpCmdP $2 >>= \ $2 ->
                        do { v <- checkValSigLhs $2
                           ; let err = text "in default signature" <> colon <+>
@@ -1689,7 +1868,7 @@ rule_vars :: { [LRuleTyTmVar] }
 
 rule_var :: { LRuleTyTmVar }
         : varid                         { sLL $1 $> (RuleTyTmVar $1 Nothing) }
-        | '(' varid '::' ctype ')'      {% ams (sLL $1 $> (RuleTyTmVar $2 (Just $4)))
+        | '(' varid OF_TYPE ctype ')'      {% ams (sLL $1 $> (RuleTyTmVar $2 (Just $4)))
                                                [mop $1,mu AnnDcolon $3,mcp $5] }
 
 {- Note [Parsing explicit foralls in Rules]
@@ -1807,10 +1986,10 @@ safety :: { Located Safety }
 
 fspec :: { Located ([AddAnn]
                     ,(Located StringLiteral, Located RdrName, LHsSigType GhcPs)) }
-       : STRING var '::' sigtypedoc     { sLL $1 $> ([mu AnnDcolon $3]
+       : STRING var OF_TYPE sigtypedoc  { sLL $1 $> ([mu AnnDcolon $3]
                                              ,(cL (getLoc $1)
                                                     (getStringLiteral $1), $2, mkLHsSigType $4)) }
-       |        var '::' sigtypedoc     { sLL $1 $> ([mu AnnDcolon $2]
+       |        var OF_TYPE sigtypedoc  { sLL $1 $> ([mu AnnDcolon $2]
                                              ,(noLoc (StringLiteral NoSourceText nilFS), $1, mkLHsSigType $3)) }
          -- if the entity string is missing, it defaults to the empty string;
          -- the meaning of an empty entity string depends on the calling
@@ -1821,11 +2000,11 @@ fspec :: { Located ([AddAnn]
 
 opt_sig :: { ([AddAnn], Maybe (LHsType GhcPs)) }
         : {- empty -}                   { ([],Nothing) }
-        | '::' sigtype                  { ([mu AnnDcolon $1],Just $2) }
+        | OF_TYPE sigtype               { ([mu AnnDcolon $1],Just $2) }
 
 opt_tyconsig :: { ([AddAnn], Maybe (Located RdrName)) }
              : {- empty -}              { ([], Nothing) }
-             | '::' gtycon              { ([mu AnnDcolon $1], Just $2) }
+             | OF_TYPE gtycon           { ([mu AnnDcolon $1], Just $2) }
 
 sigtype :: { LHsType GhcPs }
         : ctype                            { $1 }
@@ -1859,12 +2038,12 @@ forall_vis_flag :: { (AddAnn, ForallVisFlag) }
 -- A ktype/ktypedoc is a ctype/ctypedoc, possibly with a kind annotation
 ktype :: { LHsType GhcPs }
         : ctype                { $1 }
-        | ctype '::' kind      {% ams (sLL $1 $> $ HsKindSig noExt $1 $3)
+        | ctype OF_TYPE kind      {% ams (sLL $1 $> $ HsKindSig noExt $1 $3)
                                       [mu AnnDcolon $2] }
 
 ktypedoc :: { LHsType GhcPs }
          : ctypedoc            { $1 }
-         | ctypedoc '::' kind  {% ams (sLL $1 $> $ HsKindSig noExt $1 $3)
+         | ctypedoc OF_TYPE kind  {% ams (sLL $1 $> $ HsKindSig noExt $1 $3)
                                       [mu AnnDcolon $2] }
 
 -- A ctype is a for-all type
@@ -1883,7 +2062,7 @@ ctype   :: { LHsType GhcPs }
                                             HsQualTy { hst_ctxt = $1
                                                      , hst_xqual = noExt
                                                      , hst_body = $3 }) }
-        | ipvar '::' type             {% ams (sLL $1 $> (HsIParamTy noExt $1 $3))
+        | ipvar OF_TYPE type          {% ams (sLL $1 $> (HsIParamTy noExt $1 $3))
                                              [mu AnnDcolon $2] }
         | type                        { $1 }
 
@@ -1913,7 +2092,7 @@ ctypedoc :: { LHsType GhcPs }
                                             HsQualTy { hst_ctxt = $1
                                                      , hst_xqual = noExt
                                                      , hst_body = $3 }) }
-        | ipvar '::' type             {% ams (sLL $1 $> (HsIParamTy noExt $1 $3))
+        | ipvar OF_TYPE type          {% ams (sLL $1 $> (HsIParamTy noExt $1 $3))
                                              [mu AnnDcolon $2] }
         | typedoc                     { $1 }
 
@@ -2019,7 +2198,15 @@ tyapp :: { Located TyEl }
                                                [mj AnnSimpleQuote $1,mj AnnVal $2] }
         | unpackedness                  { sL1 $1 $ TyElUnpackedness (unLoc $1) }
 
-atype :: { LHsType GhcPs }
+arecord_with :: { LHsType GhcPs }
+        : 'with' '{' fielddecls '}'      {% amms (checkRecordSyntax
+                                                    (sLL $2 $> $ HsRecTy noExt $3))
+                                                        -- Constructor sigs only
+                                                 [moc $2,mcc $4] }
+        | 'with' vocurly fielddecls close {% checkRecordSyntax
+                                                (L (comb2 $2 (last (void $2 : map void $3)))
+                                                 $ HsRecTy noExt $3) }
+atype_ :: {LHsType GhcPs}
         : ntgtycon                       { sL1 $1 (HsTyVar noExt NotPromoted $1) }      -- Not including unit tuples
         | tyvar                          { sL1 $1 (HsTyVar noExt NotPromoted $1) }      -- (See Note [Unit tuples])
         | '*'                            {% do { warnStarIsType (getLoc $1)
@@ -2072,6 +2259,10 @@ atype :: { LHsType GhcPs }
                                                                      (getSTRING  $1) }
         | '_'                  { sL1 $1 $ mkAnonWildCardTy }
 
+atype :: { LHsType GhcPs }
+        : atype_                         { $1 }
+        | arecord_with                   { $1 }
+
 -- An inst_type is what occurs in the head of an instance decl
 --      e.g.  (Foo a, Gaz b) => Wibble a b
 -- It's kept as a single type for convenience.
@@ -2105,7 +2296,7 @@ tv_bndrs :: { [LHsTyVarBndr GhcPs] }
 
 tv_bndr :: { LHsTyVarBndr GhcPs }
         : tyvar                         { sL1 $1 (UserTyVar noExt $1) }
-        | '(' tyvar '::' kind ')'       {% ams (sLL $1 $>  (KindedTyVar noExt $2 $4))
+        | '(' tyvar OF_TYPE kind ')'    {% ams (sLL $1 $>  (KindedTyVar noExt $2 $4))
                                                [mop $1,mu AnnDcolon $3
                                                ,mcp $5] }
 
@@ -2197,7 +2388,7 @@ gadt_constr_with_doc
 gadt_constr :: { LConDecl GhcPs }
     -- see Note [Difference in parsing GADT and data constructors]
     -- Returns a list because of:   C,D :: ty
-        : con_list '::' sigtypedoc
+        : con_list OF_TYPE sigtypedoc
                 {% let (gadt,anns) = mkGadtDecl (unLoc $1) $3
                    in ams (sLL $1 $> gadt)
                        (mu AnnDcolon $2:anns) }
@@ -2205,10 +2396,10 @@ gadt_constr :: { LConDecl GhcPs }
 {- Note [Difference in parsing GADT and data constructors]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 GADT constructors have simpler syntax than usual data constructors:
-in GADTs, types cannot occur to the left of '::', so they cannot be mixed
+in GADTs, types cannot occur to the left of OF_TYPE, so they cannot be mixed
 with constructor names (see Note [Parsing data constructors is hard]).
 
-Due to simplified syntax, GADT constructor names (left-hand side of '::')
+Due to simplified syntax, GADT constructor names (left-hand side of OF_TYPE)
 use simpler grammar production than usual data constructor names. As a
 consequence, GADT constructor names are resticted (names like '(*)' are
 allowed in usual data constructors, but not in GADTs).
@@ -2314,7 +2505,7 @@ fielddecls1 :: { [LConDeclField GhcPs] }
 
 fielddecl :: { LConDeclField GhcPs }
                                               -- A list because of   f,g :: Int
-        : maybe_docnext sig_vars '::' ctype maybe_docprev
+        : maybe_docnext sig_vars OF_TYPE ctype maybe_docprev
             {% ams (cL (comb2 $2 $4)
                       (ConDeclField noExt (reverse (map (\ln@(dL->L l n) -> cL l $ FieldOcc noExt ln) (unLoc $2))) $4 ($1 `mplus` $5)))
                    [mu AnnDcolon $3] }
@@ -2455,13 +2646,13 @@ gdrh :: { LGRHS GhcPs (LHsExpr GhcPs) }
 sigdecl :: { LHsDecl GhcPs }
         :
         -- See Note [Declaration/signature overlap] for why we need infixexp here
-          infixexp_top '::' sigtypedoc
+          infixexp_top OF_TYPE sigtypedoc
                         {% do { v <- checkValSigLhs $1
                               ; _ <- amsL (comb2 $1 $>) [mu AnnDcolon $2]
                               ; return (sLL $1 $> $ SigD noExt $
                                   TypeSig noExt [v] (mkLHsSigWcType $3))} }
 
-        | var ',' sig_vars '::' sigtypedoc
+        | var ',' sig_vars OF_TYPE sigtypedoc
            {% do { let sig = TypeSig noExt ($1 : reverse (unLoc $3))
                                      (mkLHsSigWcType $5)
                  ; addAnnotation (gl $1) AnnComma (gl $2)
@@ -2501,14 +2692,14 @@ sigdecl :: { LHsDecl GhcPs }
                 ; ams (sLL $1 $> (SigD noExt (SCCFunSig noExt (getSCC_PRAGs $1) $2 (Just ( sL1 $3 str_lit)))))
                       [mo $1, mc $4] } }
 
-        | '{-# SPECIALISE' activation qvar '::' sigtypes1 '#-}'
+        | '{-# SPECIALISE' activation qvar OF_TYPE sigtypes1 '#-}'
              {% ams (
                  let inl_prag = mkInlinePragma (getSPEC_PRAGs $1)
                                              (NoUserInline, FunLike) (snd $2)
                   in sLL $1 $> $ SigD noExt (SpecSig noExt $3 (fromOL $5) inl_prag))
                     (mo $1:mu AnnDcolon $4:mc $6:(fst $2)) }
 
-        | '{-# SPECIALISE_INLINE' activation qvar '::' sigtypes1 '#-}'
+        | '{-# SPECIALISE_INLINE' activation qvar OF_TYPE sigtypes1 '#-}'
              {% ams (sLL $1 $> $ SigD noExt (SpecSig noExt $3 (fromOL $5)
                                (mkInlinePragma (getSPEC_INLINE_PRAGs $1)
                                                (getSPEC_INLINE $1) (snd $2))))
@@ -2549,7 +2740,7 @@ quasiquote :: { Located (HsSplice GhcPs) }
                             in sL (getLoc $1) (mkHsQuasiQuote quoterId (RealSrcSpan quoteSpan) quote) }
 
 exp   :: { ExpCmdP }
-        : infixexp '::' sigtype {% runExpCmdP $1 >>= \ $1 ->
+        : infixexp OF_TYPE sigtype {% runExpCmdP $1 >>= \ $1 ->
                                    fmap ecFromExp $
                                    ams (sLL $1 $> $ ExprWithTySig noExt $1 (mkLHsSigWcType $3))
                                        [mu AnnDcolon $2] }
@@ -2645,7 +2836,7 @@ scc_annot :: { Located (([AddAnn],SourceText),StringLiteral) }
 hpc_annot :: { Located ( (([AddAnn],SourceText),(StringLiteral,(Int,Int),(Int,Int))),
                          ((SourceText,SourceText),(SourceText,SourceText))
                        ) }
-      : '{-# GENERATED' STRING INTEGER ':' INTEGER '-' INTEGER ':' INTEGER '#-}'
+      : '{-# GENERATED' STRING INTEGER colon INTEGER '-' INTEGER colon INTEGER '#-}'
                                       { sLL $1 $> $ ((([mo $1,mj AnnVal $2
                                               ,mj AnnVal $3,mj AnnColon $4
                                               ,mj AnnVal $5,mj AnnMinus $6
@@ -2704,6 +2895,7 @@ aexp    :: { ExpCmdP }
                             [sLL $1 $> $ Match { m_ext = noExt
                                                , m_ctxt = LambdaExpr
                                                , m_pats = $2:$3
+                                               , m_rhs_sig = Nothing
                                                , m_grhss = unguardedGRHSs $5 }]))
                           [mj AnnLam $1, mu AnnRarrow $4] }
         | 'let' binds 'in' exp          {  ExpCmdP $
@@ -2767,7 +2959,21 @@ aexp1   :: { ExpCmdP }
                                                                    (snd $3)
                                      ; _ <- amsL (comb2 $1 $>) (moc $2:mcc $4:(fst $3))
                                      ; fmap ecFromExp $
-                                       checkRecordSyntax (sLL $1 $> r) }}
+                                        checkRecordSyntax (sLL $1 $> r) }}
+        | aexp1 'with' '{' fbinds '}'
+                                {% runExpCmdP $1 >>= \ $1 ->
+                                  do { r <- mkRecConstrOrUpdate $1 noSrcSpan -- (comb2 $3 $5)
+                                                                   (snd $4)
+                                     -- ; _ <- amsL (comb2 $1 $>) (moc $3:mcc $5:(fst $4))
+                                     ; fmap ecFromExp $
+                                         checkRecordSyntax (noLoc r) }}  -- (sLL $1 $> r) }}
+        | aexp1 'with' vocurly fbinds close
+                                {% runExpCmdP $1 >>= \ $1 ->
+                                  do { r <- mkRecConstrOrUpdate $1 noSrcSpan -- (comb2 $3 $5)
+                                                                   (snd $4)
+                                     -- ; _ <- amsL (comb2 $1 $>) (moc $3:mcc $5:(fst $4))
+                                     ; fmap ecFromExp $
+                                         checkRecordSyntax (noLoc r) }} -- }} (sLL $1 $> r) }}
         | aexp2                { $1 }
 
 aexp2   :: { ExpCmdP }
@@ -3118,6 +3324,7 @@ alt     :: { forall b. ExpCmdI b => PV (LMatch GhcPs (Located (b GhcPs))) }
                             ams (sLL $1 $> (Match { m_ext = noExt
                                                   , m_ctxt = CaseAlt
                                                   , m_pats = [$1]
+                                                  , m_rhs_sig = Nothing
                                                   , m_grhss = snd $ unLoc $2 }))
                                       (fst $ unLoc $2)}
 
@@ -3260,6 +3467,9 @@ fbinds  :: { ([AddAnn],([LHsRecField GhcPs (LHsExpr GhcPs)], Maybe SrcSpan)) }
 
 fbinds1 :: { ([AddAnn],([LHsRecField GhcPs (LHsExpr GhcPs)], Maybe SrcSpan)) }
         : fbind ',' fbinds1
+                {% addAnnotation (gl $1) AnnComma (gl $2) >>
+                   return (case $3 of (ma,(flds, dd)) -> (ma,($1 : flds, dd))) }
+        | fbind ';' fbinds1
                 {% addAnnotation (gl $1) AnnComma (gl $2) >>
                    return (case $3 of (ma,(flds, dd)) -> (ma,($1 : flds, dd))) }
         | fbind                         { ([],([$1], Nothing)) }
@@ -3433,7 +3643,7 @@ oqtycon_no_varcon :: { Located RdrName }  -- Type constructor which cannot be mi
         | '(' CONSYM ')'     {% let { name :: Located RdrName
                                     ; name = sL1 $2 $! mkUnqual tcClsName (getCONSYM $2) }
                                 in ams (sLL $1 $> (unLoc name)) [mop $1,mj AnnVal name,mcp $3] }
-        | '(' ':' ')'        {% let { name :: Located RdrName
+        | '(' CONS ')'        {% let { name :: Located RdrName
                                     ; name = sL1 $2 $! consDataCon_RDR }
                                 in ams (sLL $1 $> (unLoc name)) [mop $1,mj AnnVal name,mcp $3] }
         | '(' '~' ')'        {% ams (sLL $1 $> $ eqTyCon_RDR) [mop $1,mj AnnTilde $2,mcp $3] }
@@ -3483,7 +3693,7 @@ qtyconsym :: { Located RdrName }
 tyconsym :: { Located RdrName }
         : CONSYM                { sL1 $1 $! mkUnqual tcClsName (getCONSYM $1) }
         | VARSYM                { sL1 $1 $! mkUnqual tcClsName (getVARSYM $1) }
-        | ':'                   { sL1 $1 $! consDataCon_RDR }
+        | CONS                  { sL1 $1 $! consDataCon_RDR }
         | '-'                   { sL1 $1 $! mkUnqual tcClsName (fsLit "-") }
         | '!'                   { sL1 $1 $! mkUnqual tcClsName (fsLit "!") }
         | '.'                   { sL1 $1 $! mkUnqual tcClsName (fsLit ".") }
@@ -3579,9 +3789,11 @@ qvarid :: { Located RdrName }
         | QVARID              { sL1 $1 $! mkQual varName (getQVARID $1) }
 
 -- Note that 'role' and 'family' get lexed separately regardless of
--- the use of extensions. However, because they are listed here,
--- this is OK and they can be used as normal varids.
--- See Note [Lexing type pseudo-keywords] in Lexer.x
+-- the use of extensions. However, because they are listed here, this
+-- is OK and they can be used as normal varids.  The same holds for
+-- the DamlTemplate extension pseudo-keywords 'ensure', 'signatory',
+-- 'agreement', 'controller', 'observer' and 'nonconsuming'.  See Note
+-- [Lexing type pseudo-keywords] in Lexer.x
 varid :: { Located RdrName }
         : VARID            { sL1 $1 $! mkUnqual varName (getVARID $1) }
         | special_id       { sL1 $1 $! mkUnqual varName (unLoc $1) }
@@ -3591,6 +3803,12 @@ varid :: { Located RdrName }
         | 'forall'         { sL1 $1 $! mkUnqual varName (fsLit "forall") }
         | 'family'         { sL1 $1 $! mkUnqual varName (fsLit "family") }
         | 'role'           { sL1 $1 $! mkUnqual varName (fsLit "role") }
+        | 'ensure'         { sL1 $1 $! mkUnqual varName (fsLit "ensure") }
+        | 'signatory'      { sL1 $1 $! mkUnqual varName (fsLit "signatory") }
+        | 'agreement'      { sL1 $1 $! mkUnqual varName (fsLit "agreement") }
+        | 'controller'     { sL1 $1 $! mkUnqual varName (fsLit "controller") }
+        | 'observer'       { sL1 $1 $! mkUnqual varName (fsLit "observer") }
+        | 'nonconsuming'   { sL1 $1 $! mkUnqual varName (fsLit "nonconsuming") }
         -- If this changes relative to tyvarid, update 'checkRuleTyVarBndrNames' in RdrHsSyn.hs
         -- See Note [Parsing explicit foralls in Rules]
 
@@ -3614,10 +3832,12 @@ varsym_no_minus :: { Located RdrName } -- varsym not including '-'
         | special_sym          { sL1 $1 $ mkUnqual varName (unLoc $1) }
 
 
--- These special_ids are treated as keywords in various places,
--- but as ordinary ids elsewhere.   'special_id' collects all these
--- except 'unsafe', 'interruptible', 'forall', 'family', 'role', 'stock', and
--- 'anyclass', whose treatment differs depending on context
+-- These special_ids are treated as keywords in various places, but as
+-- ordinary ids elsewhere.  'special_id' collects all these except
+-- 'unsafe', 'interruptible', 'forall', 'family', 'role', 'stock', and
+-- 'anyclass', 'ensure', 'signatory', 'agreement', 'controller',
+-- 'observer', 'nonconsuming' whose treatment differs depending on
+-- context
 special_id :: { Located FastString }
 special_id
         : 'as'                  { sL1 $1 (fsLit "as") }
@@ -3660,9 +3880,8 @@ qconsym :: { Located RdrName }  -- Qualified or unqualified
 
 consym :: { Located RdrName }
         : CONSYM              { sL1 $1 $ mkUnqual dataName (getCONSYM $1) }
-
-        -- ':' means only list cons
-        | ':'                { sL1 $1 $ consDataCon_RDR }
+        -- CONS means only list cons
+        | CONS                { sL1 $1 $ consDataCon_RDR }
 
 
 -----------------------------------------------------------------------------
@@ -3814,7 +4033,8 @@ getStringLiteral l = StringLiteral (getSTRINGs l) (getSTRING l)
 isUnicode :: Located Token -> Bool
 isUnicode (dL->L _ (ITforall         iu)) = iu == UnicodeSyntax
 isUnicode (dL->L _ (ITdarrow         iu)) = iu == UnicodeSyntax
-isUnicode (dL->L _ (ITdcolon         iu)) = iu == UnicodeSyntax
+isUnicode (dL->L _ (ITcons           iu)) = iu == UnicodeSyntax
+isUnicode (dL->L _ (ITof_type        iu)) = iu == UnicodeSyntax
 isUnicode (dL->L _ (ITlarrow         iu)) = iu == UnicodeSyntax
 isUnicode (dL->L _ (ITrarrow         iu)) = iu == UnicodeSyntax
 isUnicode (dL->L _ (ITlarrowtail     iu)) = iu == UnicodeSyntax
@@ -3921,6 +4141,24 @@ fileSrcSpan = do
   l <- getRealSrcLoc;
   let loc = mkSrcLoc (srcLocFile l) 1 1;
   return (mkSrcSpan loc loc)
+
+-- Return () if the given token is represented by ':'.
+unit_of_colon :: Located Token -> P (Located ())
+unit_of_colon (L loc tok) = do
+  tokIsColon <- isColon tok
+  if tokIsColon
+    then return (L loc ())
+    else addFatalError loc (text "':' expected")
+  where
+    -- Test whether 'tok' is represented by ':'.
+    isColon :: Token -> P Bool
+    isColon (ITcons _) = do
+      nccEnabled <- extension newColonConventionEnabled
+      return (not nccEnabled) -- Ncc implies "cons" is '::'.
+    isColon (ITof_type _) =  do
+      nccEnabled <- extension newColonConventionEnabled
+      return nccEnabled -- Ncc implies "of type" is ':'.
+    isColon _ = return False
 
 -- Hint about the MultiWayIf extension
 hintMultiWayIf :: SrcSpan -> P ()
