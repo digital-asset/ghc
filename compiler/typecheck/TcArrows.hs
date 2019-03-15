@@ -155,8 +155,8 @@ tc_cmd env in_cmd@(HsCmdCase x scrut matches) (stk, res_ty)
   where
     match_ctxt = MC { mc_what = CaseAlt,
                       mc_body = mc_body }
-    mc_body body res_ty' = do { res_ty' <- expTypeToType res_ty'
-                              ; tcCmd env body (stk, res_ty') }
+    mc_body _ body res_ty' = do { res_ty' <- expTypeToType res_ty'
+                                ; tcCmd env body (stk, res_ty') }
 
 tc_cmd env (HsCmdIf x Nothing pred b1 b2) res_ty    -- Ordinary 'if'
   = do  { pred' <- tcMonoExpr pred (mkCheckExpType boolTy)
@@ -256,6 +256,7 @@ tc_cmd env
 
         ; let match' = L mtch_loc (Match { m_ext = noExt
                                          , m_ctxt = LambdaExpr, m_pats = pats'
+                                         , m_rhs_sig = Nothing
                                          , m_grhss = grhss' })
               arg_tys = map hsLPatType pats'
               cmd' = HsCmdLam x (MG { mg_alts = L l [match']

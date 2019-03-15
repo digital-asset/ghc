@@ -909,7 +909,7 @@ data Sig pass
       -- signature that brought them into scope, in this third field to be
       -- more specific.
       --
-      --  - 'ApiAnnotation.AnnKeywordId' : 'ApiAnnotation.AnnDcolon',
+      --  - 'ApiAnnotation.AnnKeywordId' : 'ApiAnnotation.AnnOf_Type',
       --          'ApiAnnotation.AnnComma'
 
       -- For details on above see note [Api annotations] in ApiAnnotation
@@ -923,7 +923,7 @@ data Sig pass
       -- > pattern Single :: () => (Show a) => a -> [a]
       --
       --  - 'ApiAnnotation.AnnKeywordId' : 'ApiAnnotation.AnnPattern',
-      --           'ApiAnnotation.AnnDcolon','ApiAnnotation.AnnForall'
+      --           'ApiAnnotation.AnnOf_Type','ApiAnnotation.AnnForall'
       --           'ApiAnnotation.AnnDot','ApiAnnotation.AnnDarrow'
 
       -- For details on above see note [Api annotations] in ApiAnnotation
@@ -939,7 +939,7 @@ data Sig pass
       -- No wildcards allowed here
       --
       --  - 'ApiAnnotation.AnnKeywordId' : 'ApiAnnotation.AnnDefault',
-      --           'ApiAnnotation.AnnDcolon'
+      --           'ApiAnnotation.AnnOf_Type'
   | ClassOpSig (XClassOpSig pass) Bool [Located (IdP pass)] (LHsSigType pass)
 
         -- | A type signature in generated code, notably the code
@@ -984,7 +984,7 @@ data Sig pass
         --      'ApiAnnotation.AnnTilde',
         --      'ApiAnnotation.AnnVal',
         --      'ApiAnnotation.AnnClose' @']'@ and @'\#-}'@,
-        --      'ApiAnnotation.AnnDcolon'
+        --      'ApiAnnotation.AnnOf_Type'
 
         -- For details on above see note [Api annotations] in ApiAnnotation
   | SpecSig     (XSpecSig pass)
@@ -1201,7 +1201,7 @@ ppr_sig (CompleteMatchSig _ src cs mty)
       ((hsep (punctuate comma (map ppr (unLoc cs))))
         <+> opt_sig)
   where
-    opt_sig = maybe empty ((\t -> dcolon <+> ppr t) . unLoc) mty
+    opt_sig = maybe empty ((\t -> of_type <+> ppr t) . unLoc) mty
 ppr_sig (XSig x) = ppr x
 
 instance (p ~ GhcPass pass, OutputableBndrId p)
@@ -1221,7 +1221,7 @@ pragSrcBrackets (SourceText src) _   doc = text src <+> doc <+> text "#-}"
 pragSrcBrackets NoSourceText     alt doc = text alt <+> doc <+> text "#-}"
 
 pprVarSig :: (OutputableBndr id) => [id] -> SDoc -> SDoc
-pprVarSig vars pp_ty = sep [pprvars <+> dcolon, nest 2 pp_ty]
+pprVarSig vars pp_ty = sep [pprvars <+> of_type, nest 2 pp_ty]
   where
     pprvars = hsep $ punctuate comma (map pprPrefixOcc vars)
 

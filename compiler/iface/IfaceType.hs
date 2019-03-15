@@ -700,12 +700,12 @@ pprIfaceLamBndr (b, IfaceNoOneShot) = ppr b
 pprIfaceLamBndr (b, IfaceOneShot)   = ppr b <> text "[OneShot]"
 
 pprIfaceIdBndr :: IfaceIdBndr -> SDoc
-pprIfaceIdBndr (name, ty) = parens (ppr name <+> dcolon <+> ppr ty)
+pprIfaceIdBndr (name, ty) = parens (ppr name <+> of_type <+> ppr ty)
 
 pprIfaceTvBndr :: Bool -> IfaceTvBndr -> SDoc
 pprIfaceTvBndr use_parens (tv, ki)
   | isIfaceLiftedTypeKind ki = ppr tv
-  | otherwise                = maybe_parens (ppr tv <+> dcolon <+> ppr ki)
+  | otherwise                = maybe_parens (ppr tv <+> of_type <+> ppr ki)
   where
     maybe_parens | use_parens = parens
                  | otherwise  = id
@@ -1054,7 +1054,7 @@ pprIfaceForAllBndr (Bndr (IfaceIdBndr idv) _) = pprIfaceIdBndr idv
 
 pprIfaceForAllCoBndr :: (IfLclName, IfaceCoercion) -> SDoc
 pprIfaceForAllCoBndr (tv, kind_co)
-  = parens (ppr tv <+> dcolon <+> pprIfaceCoercion kind_co)
+  = parens (ppr tv <+> of_type <+> pprIfaceCoercion kind_co)
 
 -- | Show forall flag
 --
@@ -1347,7 +1347,7 @@ ppr_equality ctxt_prec tc args
           where
             pp_ty_ki ty ki
               | print_kinds
-              = parens (pp topPrec ty <+> dcolon <+> pp opPrec ki)
+              = parens (pp topPrec ty <+> of_type <+> pp opPrec ki)
               | otherwise
               = pp opPrec ty
 
@@ -1484,7 +1484,7 @@ ppr_co ctxt_prec (IfaceUnivCo IfaceUnsafeCoerceProv r ty1 ty2)
 ppr_co _ (IfaceUnivCo prov role ty1 ty2)
   = text "Univ" <> (parens $
       sep [ ppr role <+> pprIfaceUnivCoProv prov
-          , dcolon <+>  ppr ty1 <> comma <+> ppr ty2 ])
+          , of_type <+>  ppr ty1 <> comma <+> ppr ty2 ])
 
 ppr_co ctxt_prec (IfaceInstCo co ty)
   = maybeParen ctxt_prec appPrec $

@@ -2307,7 +2307,7 @@ isUnliftedType :: HasDebugCallStack => Type -> Bool
         -- construct them
 isUnliftedType ty
   = not (isLiftedType_maybe ty `orElse`
-         pprPanic "isUnliftedType" (ppr ty <+> dcolon <+> ppr (typeKind ty)))
+         pprPanic "isUnliftedType" (ppr ty <+> of_type <+> ppr (typeKind ty)))
 
 -- | Is this a type of kind RuntimeRep? (e.g. LiftedRep)
 isRuntimeRepKindedTy :: Type -> Bool
@@ -2335,7 +2335,7 @@ getRuntimeRep :: HasDebugCallStack => Type -> Type
 getRuntimeRep ty
   = case getRuntimeRep_maybe ty of
       Just r  -> r
-      Nothing -> pprPanic "getRuntimeRep" (ppr ty <+> dcolon <+> ppr (typeKind ty))
+      Nothing -> pprPanic "getRuntimeRep" (ppr ty <+> of_type <+> ppr (typeKind ty))
 
 isUnboxedTupleType :: Type -> Bool
 isUnboxedTupleType ty

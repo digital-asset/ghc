@@ -579,7 +579,7 @@ matchN (in_scope, id_unf) rule_name tmpl_vars tmpl_es target_es
 
     unbound tmpl_var
        = pprPanic "Template variable unbound in rewrite rule" $
-         vcat [ text "Variable:" <+> ppr tmpl_var <+> dcolon <+> ppr (varType tmpl_var)
+         vcat [ text "Variable:" <+> ppr tmpl_var <+> of_type <+> ppr (varType tmpl_var)
               , text "Rule" <+> pprRuleName rule_name
               , text "Rule bndrs:" <+> ppr tmpl_vars
               , text "LHS args:" <+> ppr tmpl_es

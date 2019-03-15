@@ -61,6 +61,7 @@ Basic idea:
 #include "HsVersions.h"
 
 import GhcPrelude
+import qualified GHC.LanguageExtensions as LangExt
 
 import IfaceSyn
 import BinFingerprint
