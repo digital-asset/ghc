@@ -2965,18 +2965,19 @@ aexp1   :: { ExpCmdP }
                                         checkRecordSyntax (sLL $1 $> r) }}
         | aexp1 'with' '{' fbinds '}'
                                 {% runExpCmdP $1 >>= \ $1 ->
-                                  do { r <- mkRecConstrOrUpdate $1 noSrcSpan -- (comb2 $3 $5)
+                                  do { r <- mkRecConstrOrUpdate $1 (comb2 $3 $5)
                                                                    (snd $4)
-                                     -- ; _ <- amsL (comb2 $1 $>) (moc $3:mcc $5:(fst $4))
+                                     ; _ <- ams (sLL $1 $> ()) (moc $3:mcc $5:(fst $4))
                                      ; fmap ecFromExp $
-                                         checkRecordSyntax (noLoc r) }}  -- (sLL $1 $> r) }}
+                                         checkRecordSyntax (sLL $1 $> r) }}
         | aexp1 'with' vocurly fbinds close
                                 {% runExpCmdP $1 >>= \ $1 ->
-                                  do { r <- mkRecConstrOrUpdate $1 noSrcSpan -- (comb2 $3 $5)
+                                  do { let { (_, (fields, _)) = $4
+                                           ; end_tok = last (void $3 : map void fields) }
+                                     ; r <- mkRecConstrOrUpdate $1 (comb2 $3 end_tok)
                                                                    (snd $4)
-                                     -- ; _ <- amsL (comb2 $1 $>) (moc $3:mcc $5:(fst $4))
                                      ; fmap ecFromExp $
-                                         checkRecordSyntax (noLoc r) }} -- }} (sLL $1 $> r) }}
+                                         checkRecordSyntax (L (comb2 $1 end_tok) r) }}
         | aexp2                { $1 }
 
 aexp2   :: { ExpCmdP }
