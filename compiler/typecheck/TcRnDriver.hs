@@ -1711,7 +1711,13 @@ checkMain :: Bool  -- False => no 'module M(..) where' header at all
 checkMain explicit_mod_hdr
  = do   { dflags  <- getDynFlags
         ; tcg_env <- getGblEnv
-        ; check_main dflags tcg_env explicit_mod_hdr }
+        ; if False
+            then
+              check_main dflags tcg_env explicit_mod_hdr
+              -- ^ Disabled for DAML.
+            else
+              return tcg_env
+      }
 
 check_main :: DynFlags -> TcGblEnv -> Bool -> TcM TcGblEnv
 check_main dflags tcg_env explicit_mod_hdr
