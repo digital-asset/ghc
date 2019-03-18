@@ -183,6 +183,7 @@ import qualified GHC.LanguageExtensions as LangExt
 
 import Data.IORef
 import Control.Monad
+import GHC.IO (throwIO)
 import Data.Set ( Set )
 import qualified Data.Set as Set
 
@@ -1002,24 +1003,25 @@ checkNoErrs main
 
 -----------------------
 whenNoErrs :: TcM () -> TcM ()
-whenNoErrs thing = ifErrsM (return ()) thing
+whenNoErrs = ifErrsM (\_ -> return ())
 
-ifErrsM :: TcRn r -> TcRn r -> TcRn r
---      ifErrsM bale_out normal
--- does 'bale_out' if there are errors in errors collection
--- otherwise does 'normal'
-ifErrsM bale_out normal
+ifErrsM :: (Messages -> TcRn r) -> TcRn r -> TcRn r
+ifErrsM on_errors on_success
  = do { errs_var <- getErrsVar ;
         msgs <- readTcRef errs_var ;
         dflags <- getDynFlags ;
         if errorsFound dflags msgs then
-           bale_out
+           on_errors msgs
         else
-           normal }
+           on_success }
 
 failIfErrsM :: TcRn ()
 -- Useful to avoid error cascades
-failIfErrsM = ifErrsM failM (return ())
+failIfErrsM = ifErrsM throwSourceError (return ())
+
+throwSourceError :: Messages -> TcRn ()
+throwSourceError (_warnings, errors)
+  = liftIO $ throwIO $ mkSrcErr errors
 
 checkTH :: a -> String -> TcRn ()
 checkTH _ _ = return () -- OK

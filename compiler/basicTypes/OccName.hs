@@ -69,6 +69,7 @@ module OccName (
         mkInstTyCoOcc, mkEqPredCoOcc,
         mkRecFldSelOcc,
         mkTyConRepOcc,
+        tweakColons,
 
         -- ** Deconstruction
         occNameFS, occNameString, occNameSpace,
@@ -268,20 +269,31 @@ instance OutputableBndr OccName where
     pprInfixOcc n = pprInfixVar (isSymOcc n) (ppr n)
     pprPrefixOcc n = pprPrefixVar (isSymOcc n) (ppr n)
 
+tweakColons :: FastString -> DynFlags -> FastString
+tweakColons occ dynFlags
+  | performNewColonConvention dynFlags
+  , unpackFS occ == ":"
+  = fsLit "::"
+  -- ^ The list cons function is a variable named ":"
+  -- Change to "::" when printing with the new colon convention
+  | otherwise = occ
+
 pprOccName :: OccName -> SDoc
 pprOccName (OccName sp occ)
-  = getPprStyle $ \ sty ->
+  = getPprStyle $ \sty ->
+    sdocWithDynFlags $ \dflags ->
+    let occ' = tweakColons occ dflags in
     if codeStyle sty
-    then ztext (zEncodeFS occ)
-    else pp_occ <> pp_debug sty
+    then ztext (zEncodeFS occ')
+    else pp_occ occ' <> pp_debug sty
   where
     pp_debug sty | debugStyle sty = braces (pprNameSpaceBrief sp)
                  | otherwise      = empty
 
-    pp_occ = sdocWithDynFlags $ \dflags ->
+    pp_occ tweakedOcc = sdocWithDynFlags $ \dflags ->
              if gopt Opt_SuppressUniques dflags
-             then text (strip_th_unique (unpackFS occ))
-             else ftext occ
+             then text (strip_th_unique (unpackFS tweakedOcc))
+             else ftext tweakedOcc
 
         -- See Note [Suppressing uniques in OccNames]
     strip_th_unique ('[' : c : _) | isAlphaNum c = []
