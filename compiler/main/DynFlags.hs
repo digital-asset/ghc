@@ -654,9 +654,6 @@ data GeneralFlag
 
    | Opt_G_NoStateHack
    | Opt_G_NoOptCoercion
-
-   -- use "new colon convention" in error messages
-   | Opt_PrintNewColonConvention
    deriving (Eq, Show, Enum)
 
 -- Check whether a flag should be considered an "optimisation flag"
@@ -1659,7 +1656,7 @@ positionIndependent dflags = gopt Opt_PIC dflags || gopt Opt_PIE dflags
 
 -- | Display error messages using the "new colon convention"?
 performNewColonConvention :: DynFlags -> Bool
-performNewColonConvention = gopt Opt_PrintNewColonConvention
+performNewColonConvention = xopt LangExt.NewColonConvention
 
 -----------------------------------------------------------------------------
 -- Ways
@@ -4190,7 +4187,6 @@ fFlagsDeps = [
   flagSpec "print-expanded-synonyms"          Opt_PrintExpandedSynonyms,
   flagSpec "print-potential-instances"        Opt_PrintPotentialInstances,
   flagSpec "print-typechecker-elaboration"    Opt_PrintTypecheckerElaboration,
-  flagSpec "print-new-colon-convention"       Opt_PrintNewColonConvention,
   flagSpec "prof-cafs"                        Opt_AutoSccsOnIndividualCafs,
   flagSpec "prof-count-entries"               Opt_ProfCountEntries,
   flagSpec "regs-graph"                       Opt_RegsGraph,
@@ -4354,7 +4350,6 @@ xFlagsDeps = [
   flagSpec "BangPatterns"                     LangExt.BangPatterns,
   flagSpec "BinaryLiterals"                   LangExt.BinaryLiterals,
   flagSpec "CApiFFI"                          LangExt.CApiFFI,
-  flagSpec "NewColonConvention"               LangExt.NewColonConvention,
   flagSpec "CPP"                              LangExt.Cpp,
   flagSpec "ConstrainedClassMethods"          LangExt.ConstrainedClassMethods,
   flagSpec "ConstraintKinds"                  LangExt.ConstraintKinds,
@@ -4428,6 +4423,7 @@ xFlagsDeps = [
   flagSpec "NamedWildCards"                   LangExt.NamedWildCards,
   flagSpec "NegativeLiterals"                 LangExt.NegativeLiterals,
   flagSpec "HexFloatLiterals"                 LangExt.HexFloatLiterals,
+  flagSpec "NewColonConvention"               LangExt.NewColonConvention,
   flagSpec "NondecreasingIndentation"         LangExt.NondecreasingIndentation,
   depFlagSpec' "NullaryTypeClasses"           LangExt.NullaryTypeClasses
     (deprecatedForExtension "MultiParamTypeClasses"),
