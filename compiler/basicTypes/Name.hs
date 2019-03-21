@@ -531,8 +531,11 @@ instance OutputableBndr Name where
     pprPrefixOcc = pprPrefixName
 
 pprName :: Name -> SDoc
-pprName (Name {n_sort = sort, n_uniq = uniq, n_occ = occ})
-  = getPprStyle $ \ sty ->
+pprName (Name {n_sort = sort, n_uniq = uniq, n_occ = occ'})
+  = getPprStyle $ \sty ->
+    sdocWithDynFlags $ \dflags ->
+    let tweakedOccName = tweakColons (occNameFS occ') dflags
+        occ = occ' { occNameFS = tweakedOccName } in
     case sort of
       WiredIn mod _ builtin   -> pprExternal sty uniq mod occ True  builtin
       External mod            -> pprExternal sty uniq mod occ False UserSyntax
@@ -618,14 +621,18 @@ ppr_underscore_unique uniq
     char '_' <> pprUniqueAlways uniq
 
 ppr_occ_name :: OccName -> SDoc
-ppr_occ_name occ = ftext (occNameFS occ)
+ppr_occ_name occ
+  = sdocWithDynFlags $ \dflags ->
+    ftext (tweakColons (occNameFS occ) dflags)
         -- Don't use pprOccName; instead, just print the string of the OccName;
         -- we print the namespace in the debug stuff above
 
 -- In code style, we Z-encode the strings.  The results of Z-encoding each FastString are
 -- cached behind the scenes in the FastString implementation.
 ppr_z_occ_name :: OccName -> SDoc
-ppr_z_occ_name occ = ztext (zEncodeFS (occNameFS occ))
+ppr_z_occ_name occ
+  = sdocWithDynFlags $ \dflags ->
+    ztext (zEncodeFS (tweakColons (occNameFS occ) dflags))
 
 -- Prints (if mod information is available) "Defined at <loc>" or
 --  "Defined in <mod>" information for a Name.
