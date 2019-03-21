@@ -1209,9 +1209,17 @@ choice_decl :: { Located ChoiceDecl }
                        , cdChoiceDoc          = $5 }
     }
 
-flexible_choice_decl :: { Located () }
+flexible_choice_decl :: { Located FlexChoiceDecl }
   : nonconsuming 'choice' qtycon OF_TYPE btype_ maybe_docprev arecord_with_opt 'controller' parties 'can' flexible_choice_body
-    { sL0 () }
+    { sL (comb3 $1 $2 $>) $
+        FlexChoiceDecl { fcdChoiceName = $3
+                       , fcdChoiceReturnTy = $5
+                       , fcdChoiceFields = $7
+                       , fcdControllers = applyConcat $9
+                       , fcdChoiceBody = $11
+                       , fcdChoiceNonConsuming = $1
+                       , fcdChoiceDoc = $6 }
+    }
 
 flexible_choice_body :: { Located ([AddAnn],[LStmt GhcPs (LHsExpr GhcPs)]) }
   : '{' 'do' stmtlist '}'
