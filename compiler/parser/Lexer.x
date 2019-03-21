@@ -653,6 +653,7 @@ data Token
   | ITsignatory
   | ITagreement
   | ITcontroller
+  | ITchoice
   | ITobserver
   | ITnonconsuming
 
@@ -875,20 +876,21 @@ reservedWordsFM = listToUFM $
          ( "prim",           ITprimcallconv,  xbit FfiBit),
          ( "javascript",     ITjavascriptcallconv, xbit FfiBit),
 
+         ( "daml",           ITdaml,          xbit DamlVersionRequiredBit),
+         ( "template",       ITtemplate,      xbit DamlTemplateBit),
+         ( "can",            ITcan,           xbit DamlTemplateBit),
+         ( "ensure",         ITensure,        xbit DamlTemplateBit),
+         ( "signatory",      ITsignatory,     xbit DamlTemplateBit),
+         ( "agreement",      ITagreement,     xbit DamlTemplateBit),
+         ( "controller",     ITcontroller,    xbit DamlTemplateBit),
+         ( "choice",         ITchoice,        xbit DamlTemplateBit),
+         ( "observer",       ITobserver,      xbit DamlTemplateBit),
+         ( "nonconsuming",   ITnonconsuming,  xbit DamlTemplateBit),
+
          ( "unit",           ITunit,          0 ),
          ( "dependency",     ITdependency,       0 ),
          ( "signature",      ITsignature,     0 ),
 
-         ( "daml",           ITdaml,          xbit DamlVersionRequiredBit),
-         ( "template",       ITtemplate,      xbit DamlTemplateBit),
-         ( "can",            ITcan,           xbit DamlTemplateBit),
-           -- See Note [Lexing type pseudo-keywords]
-         ( "ensure",         ITensure,        0 ),
-         ( "signatory",      ITsignatory,     0 ),
-         ( "agreement",      ITagreement,     0 ),
-         ( "controller",     ITcontroller,    0 ),
-         ( "observer",       ITobserver,      0 ),
-         ( "nonconsuming",   ITnonconsuming,  0 ),
          ( "rec",            ITrec,           xbit ArrowsBit .|.
                                               xbit RecursiveDoBit),
          ( "proc",           ITproc,          xbit ArrowsBit)
@@ -908,9 +910,9 @@ on. In fact, by unconditionally lexing these pseudo-keywords as special, we
 can get better error messages.
 
 We use the same technique for the DamlTemplate keywords 'ensure',
-'signatory', 'agreement', 'controller', 'observer' and nonconsuming
-which all serve as markers for special kinds of declarations inside a
-template declaration context.
+'signatory', 'agreement', 'controller', 'choice' 'observer' and
+'nonconsuming' which all serve as markers for special kinds of
+declarations inside a template declaration context.
 
 Also, note that these are included in the `varid` production in the parser --
 a key detail to make all this work.
