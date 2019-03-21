@@ -44,6 +44,7 @@ module   RdrHsSyn (
 
         -- DAML Template Syntax
         ChoiceDecl(..),
+        FlexChoiceDecl(..),
         TemplateBodyDecl(..),
         mkTemplateDecl,
         applyToParties,
@@ -2504,12 +2505,22 @@ mkInlinePragma src (inl, match_info) mb_act
 -- DAML Template Syntax
 
 data ChoiceDecl = ChoiceDecl
-  { cdChoiceName         :: Located RdrName
-  , cdChoiceFields       :: Maybe (LHsType GhcPs)
-  , cdChoiceReturnTy     :: LHsType GhcPs
-  , cdChoiceBody         :: Located ([AddAnn],[LStmt GhcPs (LHsExpr GhcPs)])
-  , cdChoiceNonConsuming :: Located Bool
-  , cdChoiceDoc          :: Maybe LHsDocString
+  { cdChoiceName          :: Located RdrName
+  , cdChoiceFields        :: Maybe (LHsType GhcPs)
+  , cdChoiceReturnTy      :: LHsType GhcPs
+  , cdChoiceBody          :: Located ([AddAnn],[LStmt GhcPs (LHsExpr GhcPs)])
+  , cdChoiceNonConsuming  :: Located Bool
+  , cdChoiceDoc           :: Maybe LHsDocString
+  }
+
+data FlexChoiceDecl = FlexChoiceDecl
+  { fcdChoiceName         :: Located RdrName
+  , fcdChoiceReturnTy     :: LHsType GhcPs
+  , fcdChoiceFields       :: Maybe (LHsType GhcPs)
+  , fcdControllers        :: LHsExpr GhcPs
+  , fcdChoiceBody         :: Located ([AddAnn],[LStmt GhcPs (LHsExpr GhcPs)])
+  , fcdChoiceNonConsuming :: Located Bool
+  , fcdChoiceDoc          :: Maybe LHsDocString
   }
 
 data TemplateBodyDecl
@@ -2519,7 +2530,7 @@ data TemplateBodyDecl
   | AgreementDecl (LHsExpr GhcPs)
   | ChoiceGroupDecl (Located (LHsExpr GhcPs, Located [Located ChoiceDecl]))
   | LetBindingsDecl (Located ([AddAnn], LHsLocalBinds GhcPs))
-  | FlexibleChoiceDecl (Located ())
+  | FlexibleChoiceDecl (Located FlexChoiceDecl)
 
 -- | Classify a list of template body declarations.
 extractTemplateBodyDecls ::
@@ -2530,7 +2541,7 @@ extractTemplateBodyDecls ::
      , [LHsExpr GhcPs] -- agreement
      , [Located (LHsExpr GhcPs, Located [Located ChoiceDecl])] -- controlled choice groups
      , [LHsLocalBinds GhcPs] -- let bindings
-     , [Located ()] -- flexible choices
+     , [Located FlexChoiceDecl] -- flexible choices
      )
 extractTemplateBodyDecls = foldl extract ([], [], [], [], [], [], [])
   where
