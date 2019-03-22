@@ -1182,7 +1182,8 @@ let_bindings_decl :: { Located ([AddAnn], Located (HsLocalBinds GhcPs)) }
                                              , snd $ unLoc $2) }
 
 choice_group_decl :: { Located (LHsExpr GhcPs , Located [Located ChoiceDecl]) }
-  : 'controller' parties 'can' choice_decl_list  { sLL $1 $> (applyConcat $2, $4) }
+  : 'controller' '{' parties '}' 'can' choice_decl_list  { noLoc (applyConcat $3, $6) }
+  | 'controller' vocurly parties close 'can' choice_decl_list  { noLoc (applyConcat $3, $6) }
 
 choice_decl_list :: { Located [Located ChoiceDecl] }
   : '{' choice_decls '}'                         { sLL $1 $3 $ reverse (unLoc $2) }
@@ -1210,26 +1211,31 @@ choice_decl :: { Located ChoiceDecl }
     }
 
 flexible_choice_decl :: { Located FlexChoiceDecl }
-  : nonconsuming 'choice' qtycon OF_TYPE btype_ maybe_docprev arecord_with_opt 'controller' parties 'can' flexible_choice_body
+  : nonconsuming 'choice' qtycon OF_TYPE btype_ maybe_docprev arecord_with_opt 'controller' '{' parties '}' flexible_choice_body
     { sL (comb3 $1 $2 $>) $
         FlexChoiceDecl { fcdChoiceName = $3
                        , fcdChoiceReturnTy = $5
                        , fcdChoiceFields = $7
-                       , fcdControllers = applyConcat $9
-                       , fcdChoiceBody = $11
+                       , fcdControllers = applyConcat $10
+                       , fcdChoiceBody = $12
+                       , fcdChoiceNonConsuming = $1
+                       , fcdChoiceDoc = $6 }
+    }
+  | nonconsuming 'choice' qtycon OF_TYPE btype_ maybe_docprev arecord_with_opt 'controller' vocurly parties close flexible_choice_body
+    { sL (comb3 $1 $2 $>) $
+        FlexChoiceDecl { fcdChoiceName = $3
+                       , fcdChoiceReturnTy = $5
+                       , fcdChoiceFields = $7
+                       , fcdControllers = applyConcat $10
+                       , fcdChoiceBody = $12
                        , fcdChoiceNonConsuming = $1
                        , fcdChoiceDoc = $6 }
     }
 
 flexible_choice_body :: { Located ([AddAnn],[LStmt GhcPs (LHsExpr GhcPs)]) }
-  : '{' 'do' stmtlist '}'
-    {% $3 >>= \ $3 ->
-       return $ sLL $1 $4 $ unLoc $3
-    }
-  | vocurly 'do' stmtlist close
-    {% $3 >>= \ $3 ->
-       let ss = unLoc $3 in
-       return $ L (comb2 $1 $ last $ void $1 : (map void $ snd ss)) $ ss
+  : 'do' stmtlist
+    {% $2 >>= \ $2 ->
+       return $ sLL $1 $2 $ unLoc $2
     }
 
 nonconsuming :: { Located Bool }
