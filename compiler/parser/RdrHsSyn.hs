@@ -2626,7 +2626,7 @@ mkTemplateControllerFunBindDecl
   -> P (Maybe (LHsBind GhcPs))   -- function binding
 mkTemplateControllerFunBindDecl _ Nothing _ = return Nothing
 mkTemplateControllerFunBindDecl conName (Just body) binds = do
-  let tag = noLoc $ mkRdrUnqual (mkVarOcc "controller")
+  let tag = noLoc $ mkRdrUnqual (mkVarOcc "choice_controller")
       this = AsPat noExt
         (noLoc $ mkRdrUnqual (mkVarOcc "this"))
         (noLoc $ ConPatIn conName $
