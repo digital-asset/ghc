@@ -3287,7 +3287,7 @@ transformqual :: { Located ([AddAnn],[LStmt GhcPs (LHsExpr GhcPs)] -> Stmt GhcPs
             {% runExpCmdP $4 >>= \ $4 ->
                runExpCmdP $6 >>= \ $6 ->
                return $ sLL $1 $> ([mj AnnThen $1,mj AnnGroup $2,mj AnnBy $3,mj AnnUsing $5],
-     \ss -> (mkGroupByUsingStmt ss $4 $6)) }
+                                   \ss -> (mkGroupByUsingStmt ss $4 $6)) }
 
 -- Note that 'group' is a special_id, which means that you can enable
 -- TransformListComp while still using Data.List.group. However, this
