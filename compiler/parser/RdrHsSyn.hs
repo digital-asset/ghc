@@ -44,6 +44,7 @@ module   RdrHsSyn (
 
         -- DAML Template Syntax
         ChoiceDecl(..),
+        FlexChoiceDecl(..),
         TemplateBodyDecl(..),
         mkTemplateDecl,
         applyToParties,
@@ -2504,12 +2505,22 @@ mkInlinePragma src (inl, match_info) mb_act
 -- DAML Template Syntax
 
 data ChoiceDecl = ChoiceDecl
-  { cdChoiceName         :: Located RdrName
-  , cdChoiceFields       :: Maybe (LHsType GhcPs)
-  , cdChoiceReturnTy     :: LHsType GhcPs
-  , cdChoiceBody         :: Located ([AddAnn],[LStmt GhcPs (LHsExpr GhcPs)])
-  , cdChoiceNonConsuming :: Located Bool
-  , cdChoiceDoc          :: Maybe LHsDocString
+  { cdChoiceName          :: Located RdrName
+  , cdChoiceFields        :: Maybe (LHsType GhcPs)
+  , cdChoiceReturnTy      :: LHsType GhcPs
+  , cdChoiceBody          :: Located ([AddAnn],[LStmt GhcPs (LHsExpr GhcPs)])
+  , cdChoiceNonConsuming  :: Located Bool
+  , cdChoiceDoc           :: Maybe LHsDocString
+  }
+
+data FlexChoiceDecl = FlexChoiceDecl
+  { fcdChoiceName         :: Located RdrName
+  , fcdChoiceReturnTy     :: LHsType GhcPs
+  , fcdChoiceFields       :: Maybe (LHsType GhcPs)
+  , fcdControllers        :: LHsExpr GhcPs
+  , fcdChoiceBody         :: Located ([AddAnn],[LStmt GhcPs (LHsExpr GhcPs)])
+  , fcdChoiceNonConsuming :: Located Bool
+  , fcdChoiceDoc          :: Maybe LHsDocString
   }
 
 data TemplateBodyDecl
@@ -2519,6 +2530,7 @@ data TemplateBodyDecl
   | AgreementDecl (LHsExpr GhcPs)
   | ChoiceGroupDecl (Located (LHsExpr GhcPs, Located [Located ChoiceDecl]))
   | LetBindingsDecl (Located ([AddAnn], LHsLocalBinds GhcPs))
+  | FlexibleChoiceDecl (Located FlexChoiceDecl)
 
 -- | Classify a list of template body declarations.
 extractTemplateBodyDecls ::
@@ -2528,18 +2540,20 @@ extractTemplateBodyDecls ::
      , [LHsExpr GhcPs] -- observers (list of lists)
      , [LHsExpr GhcPs] -- agreement
      , [Located (LHsExpr GhcPs, Located [Located ChoiceDecl])] -- controlled choice groups
-     , [LHsLocalBinds GhcPs]
+     , [LHsLocalBinds GhcPs] -- let bindings
+     , [Located FlexChoiceDecl] -- flexible choices
      )
-extractTemplateBodyDecls = foldl extract ([], [], [], [], [], [])
+extractTemplateBodyDecls = foldl extract ([], [], [], [], [], [], [])
   where
-    extract (es, ss, os, as, gs, bs) (L _ decl) =
+    extract (es, ss, os, as, gs, bs, fs) (L _ decl) =
       case decl of
-        EnsureDecl e                 -> (e : es, ss, os, as, gs, bs)
-        SignatoryDecl s              -> (es, s : ss, os, as, gs, bs)
-        ObserverDecl o               -> (es, ss, o : os, as, gs, bs)
-        AgreementDecl a              -> (es, ss, os, a : as, gs, bs)
-        ChoiceGroupDecl g            -> (es, ss, os, as, g : gs, bs)
-        LetBindingsDecl (L _ (_, b)) -> (es, ss, os, as, gs, b : bs)
+        EnsureDecl e                 -> (e : es, ss, os, as, gs, bs, fs)
+        SignatoryDecl s              -> (es, s : ss, os, as, gs, bs, fs)
+        ObserverDecl o               -> (es, ss, o : os, as, gs, bs, fs)
+        AgreementDecl a              -> (es, ss, os, a : as, gs, bs, fs)
+        ChoiceGroupDecl g            -> (es, ss, os, as, g : gs, bs, fs)
+        LetBindingsDecl (L _ (_, b)) -> (es, ss, os, as, gs, b : bs, fs)
+        FlexibleChoiceDecl f         -> (es, ss, os, as, gs, bs, f : fs)
 
 -- | Calculates the application of a 'toParties' function to an
 -- expression (invoked from Parser.y).
@@ -2612,7 +2626,7 @@ mkTemplateControllerFunBindDecl
   -> P (Maybe (LHsBind GhcPs))   -- function binding
 mkTemplateControllerFunBindDecl _ Nothing _ = return Nothing
 mkTemplateControllerFunBindDecl conName (Just body) binds = do
-  let tag = noLoc $ mkRdrUnqual (mkVarOcc "controller")
+  let tag = noLoc $ mkRdrUnqual (mkVarOcc "choiceController")
       this = AsPat noExt
         (noLoc $ mkRdrUnqual (mkVarOcc "this"))
         (noLoc $ ConPatIn conName $
@@ -2985,11 +2999,11 @@ checkTemplateDeclConstraints nloc ens agr bns
 mkTemplateDecl
   :: Located RdrName -- The template name
   -> LHsType GhcPs -- The template's record type
-  -> Located [Located TemplateBodyDecl]  -- Functions and choice groups
+  -> Located [Located TemplateBodyDecl]  -- Functions, controlled choice groups, flexible choices
   -> P (OrdList (LHsDecl GhcPs)) -- Desugared declarations
 mkTemplateDecl lname@(L nloc _name) fields (L _ decls) = do
   let dataName = L nloc (HsTyVar noExt NotPromoted lname)
-      (ens, sig, obs, agr, cgs, binds) = extractTemplateBodyDecls decls
+      (ens, sig, obs, agr, cgs, binds, _flxs) = extractTemplateBodyDecls decls
       sig' =
         if null sig
           then Nothing

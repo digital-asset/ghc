@@ -516,6 +516,7 @@ are the most common patterns, rewritten as regular expressions for clarity:
  'signatory'    { L _ ITsignatory }
  'agreement'    { L _ ITagreement }
  'controller'   { L _ ITcontroller }
+ 'choice'       { L _ ITchoice }
  'observer'     { L _ ITobserver }
  'nonconsuming' { L _ ITnonconsuming }
 
@@ -1174,13 +1175,14 @@ template_body_decl :: { Located TemplateBodyDecl }
   | agreement_decl                               { sL1 $1 $ AgreementDecl $1 }
   | choice_group_decl                            { sL1 $1 $ ChoiceGroupDecl $1 }
   | let_bindings_decl                            { sL1 $1 $ LetBindingsDecl $1 }
+  | flexible_choice_decl                         { sL1 $1 $ FlexibleChoiceDecl $1 }
 
 let_bindings_decl :: { Located ([AddAnn], Located (HsLocalBinds GhcPs)) }
   : 'let' binds                 { sLL $1 $> (mj AnnWhere $1 : (fst $ unLoc $2)
                                              , snd $ unLoc $2) }
 
 choice_group_decl :: { Located (LHsExpr GhcPs , Located [Located ChoiceDecl]) }
-  : 'controller' parties 'can' choice_decl_list  { sLL $1 $> (applyConcat $2, $4) }
+  : 'controller' party_list 'can' choice_decl_list  { sLL $1 $> (applyConcat $2, $4) }
 
 choice_decl_list :: { Located [Located ChoiceDecl] }
   : '{' choice_decls '}'                         { sLL $1 $3 $ reverse (unLoc $2) }
@@ -1207,6 +1209,21 @@ choice_decl :: { Located ChoiceDecl }
                        , cdChoiceDoc          = $5 }
     }
 
+flexible_choice_decl :: { Located FlexChoiceDecl }
+  : nonconsuming 'choice' qtycon OF_TYPE btype_ maybe_docprev arecord_with_opt 'controller' party_list flexible_choice_body
+    { sL (comb3 $1 $2 $>) $
+        FlexChoiceDecl { fcdChoiceName = $3
+                       , fcdChoiceReturnTy = $5
+                       , fcdChoiceFields = $7
+                       , fcdControllers = applyConcat $9
+                       , fcdChoiceBody = $10
+                       , fcdChoiceNonConsuming = $1
+                       , fcdChoiceDoc = $6 }
+    }
+
+flexible_choice_body :: { Located ([AddAnn],[LStmt GhcPs (LHsExpr GhcPs)]) }
+  : 'do' stmtlist                                {% $2 >>= \ $2 -> return $ sLL $1 $2 $ unLoc $2 }
+
 nonconsuming :: { Located Bool }
  : 'nonconsuming'                                { sL1 $1 True }
  | {- empty -}                                   { sL0 False }
@@ -1230,6 +1247,12 @@ observer_decl :: { LHsExpr GhcPs }
 agreement_decl :: { LHsExpr GhcPs }
   : 'agreement' exp                              {% runExpCmdP $2 >>= \ $2 -> return $ sLL $1 $> $ unLoc $2 }
 
+party_list :: { Located [LHsExpr GhcPs] }
+  : '{' parties '}'                              { sLL $1 $> (unLoc $2) }
+  | vocurly parties close                        { let ps = reverse (unLoc $2) in
+                                                    L (comb2 $1
+                                                        (last (void $1:map void ps))
+                                                      ) $ ps }
 parties :: { Located [LHsExpr GhcPs] }
   : parties ',' exp                              {% runExpCmdP $3 >>= \ $3 -> return $ sLL $1 $> $ applyToParties $3 : (unLoc $1) }
   | parties ','                                  { sLL $1 $> $ unLoc $1 }
@@ -3813,6 +3836,7 @@ varid :: { Located RdrName }
         | 'controller'     { sL1 $1 $! mkUnqual varName (fsLit "controller") }
         | 'observer'       { sL1 $1 $! mkUnqual varName (fsLit "observer") }
         | 'nonconsuming'   { sL1 $1 $! mkUnqual varName (fsLit "nonconsuming") }
+        | 'choice'         { sL1 $1 $! mkUnqual varName (fsLit "choice") }
         -- If this changes relative to tyvarid, update 'checkRuleTyVarBndrNames' in RdrHsSyn.hs
         -- See Note [Parsing explicit foralls in Rules]
 
