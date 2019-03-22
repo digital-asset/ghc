@@ -1546,6 +1546,7 @@ maybe_layout t = do -- If the alternative layout rule is enabled then
           f ITlet   = pushLexState layout
           f ITwhere = pushLexState layout
           f ITwith  = pushLexState layout
+          f ITcontroller = pushLexState layout
           f ITcan   = pushLexState layout
           f ITrec   = pushLexState layout
           f ITif    = pushLexState layout_if
