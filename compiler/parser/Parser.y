@@ -3819,7 +3819,9 @@ qvarid :: { Located RdrName }
 -- the use of extensions. However, because they are listed here, this
 -- is OK and they can be used as normal varids.  The same holds for
 -- the DamlTemplate extension pseudo-keywords 'ensure', 'signatory',
--- 'agreement', 'controller', 'observer' and 'nonconsuming'.  See Note
+-- 'agreement', 'observer', 'nonconsuming' and choice. Note that
+-- 'controller' is not here - this is because it is layout inducing
+-- and therefore doesn't really make sense as an OccName.  See Note
 -- [Lexing type pseudo-keywords] in Lexer.x
 varid :: { Located RdrName }
         : VARID            { sL1 $1 $! mkUnqual varName (getVARID $1) }
@@ -3833,7 +3835,6 @@ varid :: { Located RdrName }
         | 'ensure'         { sL1 $1 $! mkUnqual varName (fsLit "ensure") }
         | 'signatory'      { sL1 $1 $! mkUnqual varName (fsLit "signatory") }
         | 'agreement'      { sL1 $1 $! mkUnqual varName (fsLit "agreement") }
-        | 'controller'     { sL1 $1 $! mkUnqual varName (fsLit "controller") }
         | 'observer'       { sL1 $1 $! mkUnqual varName (fsLit "observer") }
         | 'nonconsuming'   { sL1 $1 $! mkUnqual varName (fsLit "nonconsuming") }
         | 'choice'         { sL1 $1 $! mkUnqual varName (fsLit "choice") }
