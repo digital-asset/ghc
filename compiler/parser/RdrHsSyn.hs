@@ -2622,10 +2622,13 @@ mkTemplateFunBindDecl fname con_name (Just body) binds = do
 mkTemplateControllerFunBindDecl
   :: Located RdrName             -- data ctor 'T'
   -> Maybe (LHsExpr GhcPs)       -- function body
+  -> Located RdrName             -- data ctor 'S'
+  -> Maybe (LHsType GhcPs)       -- record fields
+  -> Bool -- `True` means `arg@X{..}`, `False` means `_`
   -> Maybe (LHsLocalBinds GhcPs) -- local binds
   -> P (Maybe (LHsBind GhcPs))   -- function binding
-mkTemplateControllerFunBindDecl _ Nothing _ = return Nothing
-mkTemplateControllerFunBindDecl conName (Just body) binds = do
+mkTemplateControllerFunBindDecl _ Nothing _  _ _ _ = return Nothing
+mkTemplateControllerFunBindDecl conName (Just body) choiceConName mbChoiceFields patArg binds = do
   let tag = noLoc $ mkRdrUnqual (mkVarOcc "choiceController")
       this = AsPat noExt
         (noLoc $ mkRdrUnqual (mkVarOcc "this"))
@@ -2635,8 +2638,32 @@ mkTemplateControllerFunBindDecl conName (Just body) binds = do
           { rec_flds = []
           ,rec_dotdot = Just (noLoc 0) })
       bodyLoc = getLoc body
-      event = WildPat noExt -- Note this : Probably requires
-                            -- improvement.
+      arg =
+        if (not patArg)
+          then
+            WildPat noExt -- Old syntax : controlled choice groups.
+        else
+          case mbChoiceFields of
+                -- The case @arg@S@ (no record fields)
+                Nothing ->
+                  AsPat noExt
+                  (noLoc $ mkRdrUnqual (mkVarOcc "arg"))
+                  (noLoc $ ConPatIn choiceConName $ PrefixCon [])
+                -- A @with@ clause was provided but the field list was empty.
+                -- Treat as @arg@S@ or face a "Illegal `..' notation" error
+                Just (L _ (HsRecTy _ [])) ->
+                  AsPat noExt
+                  (noLoc $ mkRdrUnqual (mkVarOcc "arg"))
+                  (noLoc $ ConPatIn choiceConName $ PrefixCon [])
+                -- The case @arg@S{..}@ (with record fields)
+                Just _ ->
+                  AsPat noExt
+                  (noLoc $ mkRdrUnqual (mkVarOcc "arg"))
+                  (noLoc $ ConPatIn choiceConName $
+                    RecCon $
+                    HsRecFields
+                    { rec_flds = []
+                    , rec_dotdot = Just (noLoc 0) })
       fun_rhs = FunRhs
         { mc_fun = tag
         , mc_fixity = Prefix
@@ -2645,7 +2672,7 @@ mkTemplateControllerFunBindDecl conName (Just body) binds = do
         { m_ext = noExt
         , m_ctxt = fun_rhs
         , m_rhs_sig = Nothing
-        , m_pats = fmap noLoc [this, event]
+        , m_pats = fmap noLoc [this, arg]
         , m_grhss = GRHSs
                     { grhssExt = noExt
                     , grhssGRHSs = [L bodyLoc $ GRHS noExt [] body]
@@ -2870,13 +2897,13 @@ mkTemplateChoiceInstDecl
  -> Located RdrName -- ctor 'S'
  -> LHsExpr GhcPs   -- (list of) controllers
  -> ChoiceDecl      -- choice 'S' (with result type 'R')
+ -> Bool -- `True` means `arg@X{..}`, `False` means `_`
  -> Maybe (LHsLocalBinds GhcPs) -- local binds
  -> P (LHsDecl GhcPs)  -- resulting declaration
-mkTemplateChoiceInstDecl dataName choiceName conName
-        choiceConName controllers (ChoiceDecl{..}) binds = do
+mkTemplateChoiceInstDecl dataName choiceName conName choiceConName controllers (ChoiceDecl{..}) patArg binds = do
 { -- Function bindings.
   ; mbChoiceControllerDecl <-
-      mkTemplateControllerFunBindDecl conName (Just controllers) binds
+      mkTemplateControllerFunBindDecl conName (Just controllers) choiceConName cdChoiceFields patArg binds
   ; mbChoiceChoiceDecl <-
       mkTemplateChoiceFunBindDecl
         conName choiceConName cdChoiceFields cdChoiceBody binds
@@ -2920,10 +2947,11 @@ mkTemplateChoiceDecls
   -> Located RdrName -- ctor 'T'
   -> LHsExpr GhcPs -- (list of) controllers
   -> Located ChoiceDecl -- choice 'S' (with result type 'R')
+  -> Bool -- `True` means `arg@X{..}`, `False` means `_`
   -> Maybe (LHsLocalBinds GhcPs) -- local binds
   -> P ([LHsDecl GhcPs]) -- resulting declarations
 mkTemplateChoiceDecls dataName conName controllers
-                         (L _ (choice@ChoiceDecl{..})) binds = do
+                         (L _ (choice@ChoiceDecl{..})) patArg binds = do
 {
   -- Calculate data constructor info from the choice name and (maybe)
   -- record type.
@@ -2939,7 +2967,7 @@ mkTemplateChoiceDecls dataName conName controllers
                             (map void (maybeToList cdChoiceFields)))))
                   cdChoiceName choiceConInfo
   ; templateInstDecl <- mkTemplateChoiceInstDecl dataName choiceName
-                           conName choiceConName controllers choice binds
+                           conName choiceConName controllers choice patArg binds
 
   -- prepend the choice documentation, if any, as a DocNext
   ; mbDocDecl <- pure $ case cdChoiceDoc of
@@ -2975,7 +3003,7 @@ mkTemplateChoiceGroupDecls dataName conName cgs binds = do
           -> P ([LHsDecl GhcPs])
       ; g controllers acc choice_decl = do {    -- harvest decls
           decls <- mkTemplateChoiceDecls dataName conName
-                                  controllers choice_decl binds
+                                  controllers choice_decl False binds
         ; return (acc ++ decls)
       }
    }
@@ -3004,7 +3032,7 @@ mkTemplateFlexibleChoiceDecls dataName conName flxs binds = do
           , cdChoiceDoc = fcdChoiceDoc
         }
     ; decls <- mkTemplateChoiceDecls dataName conName
-                               fcdControllers (L loc choice_decl) binds
+                               fcdControllers (L loc choice_decl) True binds
     ; return (acc ++ decls)
   }
 }
