@@ -2951,7 +2951,7 @@ mkTemplateChoiceDecls dataName conName controllers
 }
 
 -- | Contruct a @data S = S {...}@ and @instance Choice T S R@ for all
--- choices.
+-- choices of choice groups.
 mkTemplateChoiceGroupDecls ::
        LHsType GhcPs                   -- data 'T'
     -> Located RdrName                 -- ctor 'T'
@@ -2981,6 +2981,34 @@ mkTemplateChoiceGroupDecls dataName conName cgs binds = do
    }
 }
 
+-- | Contruct a @data S = S {...}@ and @instance Choice T S R@ for all
+-- choices with flexible controllers.
+mkTemplateFlexibleChoiceDecls ::
+       LHsType GhcPs                   -- data 'T'
+    -> Located RdrName                 -- ctor 'T'
+    -> [Located FlexChoiceDecl]        -- flexible choices
+    -> Maybe (LHsLocalBinds GhcPs)     -- binds
+    -> P ([LHsDecl GhcPs])             -- resulting declarations
+mkTemplateFlexibleChoiceDecls dataName conName flxs binds = do
+{
+  foldM f [] flxs
+} where {
+    f :: [LHsDecl GhcPs] -> Located FlexChoiceDecl -> P ([LHsDecl GhcPs])
+  ; f acc (L loc (FlexChoiceDecl {..})) = do {
+      let choice_decl = ChoiceDecl {
+            cdChoiceName = fcdChoiceName
+          , cdChoiceFields = fcdChoiceFields
+          , cdChoiceReturnTy = fcdChoiceReturnTy
+          , cdChoiceBody = fcdChoiceBody
+          , cdChoiceNonConsuming = fcdChoiceNonConsuming
+          , cdChoiceDoc = fcdChoiceDoc
+        }
+    ; decls <- mkTemplateChoiceDecls dataName conName
+                               fcdControllers (L loc choice_decl) binds
+    ; return (acc ++ decls)
+  }
+}
+
 -- | Validate @template@ multiplicity constraints.
 checkTemplateDeclConstraints
   :: SrcSpan               -- loc of 'T' in @template T@
@@ -3003,7 +3031,7 @@ mkTemplateDecl
   -> P (OrdList (LHsDecl GhcPs)) -- Desugared declarations
 mkTemplateDecl lname@(L nloc _name) fields (L _ decls) = do
   let dataName = L nloc (HsTyVar noExt NotPromoted lname)
-      (ens, sig, obs, agr, cgs, binds, _flxs) = extractTemplateBodyDecls decls
+      (ens, sig, obs, agr, cgs, binds, flxs) = extractTemplateBodyDecls decls
       sig' =
         if null sig
           then Nothing
@@ -3022,7 +3050,8 @@ mkTemplateDecl lname@(L nloc _name) fields (L _ decls) = do
   templateInstDecl <-
     mkTemplateTemplateInstDecl dataName conName ens' sig' obs'' agr' binds'
   choiceGroupDecls <- mkTemplateChoiceGroupDecls dataName conName cgs binds'
-  return $ toOL ([dataDecl, templateInstDecl] ++ choiceGroupDecls)
+  flexibleChoiceDecls <- mkTemplateFlexibleChoiceDecls dataName conName flxs binds'
+  return $ toOL ([dataDecl, templateInstDecl] ++ choiceGroupDecls ++ flexibleChoiceDecls)
   where
     -- | Calculate an expression for the full list of a contract's
     -- observers.
