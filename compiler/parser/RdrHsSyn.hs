@@ -2513,15 +2513,9 @@ data ChoiceDecl = ChoiceDecl
   , cdChoiceDoc           :: Maybe LHsDocString
   }
 
-data FlexChoiceDecl = FlexChoiceDecl
-  { fcdChoiceName         :: Located RdrName
-  , fcdChoiceReturnTy     :: LHsType GhcPs
-  , fcdChoiceFields       :: Maybe (LHsType GhcPs)
-  , fcdControllers        :: LHsExpr GhcPs
-  , fcdChoiceBody         :: Located ([AddAnn],[LStmt GhcPs (LHsExpr GhcPs)])
-  , fcdChoiceNonConsuming :: Located Bool
-  , fcdChoiceDoc          :: Maybe LHsDocString
-  }
+-- A `FlexChoiceDecl` is a `ChoiceDecl` augmented with its controller
+-- set.
+data FlexChoiceDecl = FlexChoiceDecl (LHsExpr GhcPs) ChoiceDecl
 
 data TemplateBodyDecl
   = EnsureDecl (LHsExpr GhcPs)
@@ -2571,6 +2565,30 @@ applyConcat (L loc ps) =
     (L loc $ HsVar noExt $ L loc $ mkRdrUnqual $ mkVarOcc "concat")
     (L loc $ ExplicitList noExt Nothing ps)
 
+-- | Utility for constructing patterns of the form 'arg@T'.
+asPatPrefixCon :: String -> Located RdrName -> Pat GhcPs
+asPatPrefixCon varName conName =
+  AsPat noExt
+    (noLoc $ mkRdrUnqual (mkVarOcc varName))
+    (noLoc $ ConPatIn conName $ PrefixCon [])
+
+-- | Utility for constructing patterns of the form 'arg@T{..}'.
+asPatRecWild :: String -> Located RdrName -> Pat GhcPs
+asPatRecWild varName conName =
+  AsPat noExt
+    (noLoc $ mkRdrUnqual (mkVarOcc varName))
+    (noLoc $ ConPatIn conName $
+      RecCon $ HsRecFields { rec_flds = [], rec_dotdot = Just $ noLoc 0 })
+
+-- | Utility function for constructing patterns of the form 'arg@X'
+-- where 'X' is either a record wildcard pattern or a prefix
+-- constructor pattern depending on whether a non-empty record field
+-- list is provided.
+argPatOfChoice :: Located RdrName -> Maybe (LHsType GhcPs) -> Pat GhcPs
+argPatOfChoice choiceConName Nothing = asPatPrefixCon "arg" choiceConName
+argPatOfChoice choiceConName (Just (L _ (HsRecTy _ []))) = asPatPrefixCon "arg" choiceConName
+argPatOfChoice choiceConName _ = asPatRecWild "arg" choiceConName
+
 -- | Construct an 'ensure', 'signatory', 'observer' or 'agreement'
 -- function binding.
 mkTemplateFunBindDecl ::
@@ -2582,13 +2600,7 @@ mkTemplateFunBindDecl ::
 mkTemplateFunBindDecl _ _ Nothing _ = return Nothing
 mkTemplateFunBindDecl fname con_name (Just body) binds = do
   let tag = noLoc $ mkRdrUnqual (mkVarOcc fname)
-      this = AsPat noExt
-        (noLoc $ mkRdrUnqual (mkVarOcc "this"))
-        (noLoc $ ConPatIn con_name $
-          RecCon $
-          HsRecFields
-          { rec_flds = []
-          , rec_dotdot = Just (noLoc 0) })
+      this = asPatRecWild "this" con_name
       bodyLoc = getLoc body
       fun_rhs = FunRhs
         { mc_fun = tag
@@ -2618,52 +2630,28 @@ mkTemplateFunBindDecl fname con_name (Just body) binds = do
     , fun_co_fn = WpHole
     , fun_tick = [] }
 
+data ArgPattern = ArgWildcardPat | ArgAsPat
+
 -- | Construct a 'controller' function binding.
 mkTemplateControllerFunBindDecl
   :: Located RdrName             -- data ctor 'T'
   -> Maybe (LHsExpr GhcPs)       -- function body
   -> Located RdrName             -- data ctor 'S'
   -> Maybe (LHsType GhcPs)       -- record fields
-  -> Bool -- `True` means `arg@X{..}`, `False` means `_`
+  -> ArgPattern                  -- 'arg@S{..}' or '_'?
   -> Maybe (LHsLocalBinds GhcPs) -- local binds
   -> P (Maybe (LHsBind GhcPs))   -- function binding
 mkTemplateControllerFunBindDecl _ Nothing _  _ _ _ = return Nothing
-mkTemplateControllerFunBindDecl conName (Just body) choiceConName mbChoiceFields patArg binds = do
+mkTemplateControllerFunBindDecl
+  conName (Just body) choiceConName mbChoiceFields argPatType binds = do
   let tag = noLoc $ mkRdrUnqual (mkVarOcc "choiceController")
-      this = AsPat noExt
-        (noLoc $ mkRdrUnqual (mkVarOcc "this"))
-        (noLoc $ ConPatIn conName $
-          RecCon $
-          HsRecFields
-          { rec_flds = []
-          ,rec_dotdot = Just (noLoc 0) })
+      this = asPatRecWild "this" conName
       bodyLoc = getLoc body
-      arg =
-        if (not patArg)
-          then
-            WildPat noExt -- Old syntax : controlled choice groups.
-        else
-          case mbChoiceFields of
-                -- The case @arg@S@ (no record fields)
-                Nothing ->
-                  AsPat noExt
-                  (noLoc $ mkRdrUnqual (mkVarOcc "arg"))
-                  (noLoc $ ConPatIn choiceConName $ PrefixCon [])
-                -- A @with@ clause was provided but the field list was empty.
-                -- Treat as @arg@S@ or face a "Illegal `..' notation" error
-                Just (L _ (HsRecTy _ [])) ->
-                  AsPat noExt
-                  (noLoc $ mkRdrUnqual (mkVarOcc "arg"))
-                  (noLoc $ ConPatIn choiceConName $ PrefixCon [])
-                -- The case @arg@S{..}@ (with record fields)
-                Just _ ->
-                  AsPat noExt
-                  (noLoc $ mkRdrUnqual (mkVarOcc "arg"))
-                  (noLoc $ ConPatIn choiceConName $
-                    RecCon $
-                    HsRecFields
-                    { rec_flds = []
-                    , rec_dotdot = Just (noLoc 0) })
+      arg = case argPatType of
+               -- Old syntax (controlled choice groups) backwards
+               -- compatibility hack.
+               ArgWildcardPat -> WildPat noExt
+               ArgAsPat -> argPatOfChoice choiceConName mbChoiceFields
       fun_rhs = FunRhs
         { mc_fun = tag
         , mc_fixity = Prefix
@@ -2692,11 +2680,10 @@ mkTemplateControllerFunBindDecl conName (Just body) choiceConName mbChoiceFields
     , fun_co_fn = WpHole
     , fun_tick = [] }
 
--- | Construct a 'consuming' function binding.
--- This will only return @Just@ a function if the provied argument is
--- 'True' indicating that the choice the function corresponds to is
--- "non-consuming". In that case, the function computed is simply
--- @consuming = nonconsuming@.
+-- | Construct a 'consuming' function binding.  This will only return
+-- @Just@ a function if the provied argument is 'True' indicating that
+-- the choice the function corresponds to is "non-consuming". In that
+-- case, the function computed is simply @consuming = nonconsuming@.
 mkTemplateConsumingFunBindDecl
   :: Located Bool
   -> P (Maybe (LHsBind GhcPs))
@@ -2741,37 +2728,9 @@ mkTemplateChoiceFunBindDecl ::
 mkTemplateChoiceFunBindDecl
   conName choiceConName mbChoiceFields body@(L loc (_ann, stmts)) binds = do
   let tag = noLoc $ mkRdrUnqual (mkVarOcc "choice")
-      this = AsPat noExt
-        (noLoc $ mkRdrUnqual (mkVarOcc "this"))
-        (noLoc $ ConPatIn conName $
-          RecCon $
-          HsRecFields
-          { rec_flds = []
-          , rec_dotdot = Just (noLoc 0) })
-      self = VarPat noExt
-        $ noLoc $ mkRdrUnqual (mkVarOcc "self")
-      arg =
-        case mbChoiceFields of
-          -- The case @arg@S@ (no record fields)
-          Nothing ->
-            AsPat noExt
-            (noLoc $ mkRdrUnqual (mkVarOcc "arg"))
-            (noLoc $ ConPatIn choiceConName $ PrefixCon [])
-          -- A @with@ clause was provided but the field list was empty.
-          -- Treat as @arg@S@ or face a "Illegal `..' notation" error
-          Just (L _ (HsRecTy _ [])) ->
-            AsPat noExt
-            (noLoc $ mkRdrUnqual (mkVarOcc "arg"))
-            (noLoc $ ConPatIn choiceConName $ PrefixCon [])
-          -- The case @arg@S{..}@ (with record fields)
-          Just _ ->
-            AsPat noExt
-            (noLoc $ mkRdrUnqual (mkVarOcc "arg"))
-            (noLoc $ ConPatIn choiceConName $
-              RecCon $
-              HsRecFields
-              { rec_flds = []
-              , rec_dotdot = Just (noLoc 0) })
+      this = asPatRecWild "this" conName
+      self = VarPat noExt $ noLoc $ mkRdrUnqual (mkVarOcc "self")
+      arg = argPatOfChoice choiceConName mbChoiceFields
       fun_rhs = FunRhs
         { mc_fun = tag
         , mc_fixity = Prefix
@@ -2891,19 +2850,22 @@ mkTemplateTemplateInstDecl dataName conName ens sig obs agr binds = do
 
 -- | Construct an @instance Choice T S R@.
 mkTemplateChoiceInstDecl
- :: LHsType GhcPs   -- data 'T'
- -> LHsType GhcPs   -- data 'S'
- -> Located RdrName -- ctor 'T'
- -> Located RdrName -- ctor 'S'
- -> LHsExpr GhcPs   -- (list of) controllers
- -> ChoiceDecl      -- choice 'S' (with result type 'R')
- -> Bool -- `True` means `arg@X{..}`, `False` means `_`
- -> Maybe (LHsLocalBinds GhcPs) -- local binds
- -> P (LHsDecl GhcPs)  -- resulting declaration
-mkTemplateChoiceInstDecl dataName choiceName conName choiceConName controllers (ChoiceDecl{..}) patArg binds = do
+  :: LHsType GhcPs   -- data 'T'
+  -> LHsType GhcPs   -- data 'S'
+  -> Located RdrName -- ctor 'T'
+  -> Located RdrName -- ctor 'S'
+  -> LHsExpr GhcPs   -- (list of) controllers
+  -> ChoiceDecl      -- choice 'S' (with result type 'R')
+  -> ArgPattern      -- 'arg@S{..}' or '_'?
+  -> Maybe (LHsLocalBinds GhcPs) -- local binds
+  -> P (LHsDecl GhcPs)  -- resulting declaration
+mkTemplateChoiceInstDecl
+  dataName choiceName conName
+    choiceConName controllers (ChoiceDecl{..}) argPatType binds = do
 { -- Function bindings.
   ; mbChoiceControllerDecl <-
-      mkTemplateControllerFunBindDecl conName (Just controllers) choiceConName cdChoiceFields patArg binds
+      mkTemplateControllerFunBindDecl
+        conName (Just controllers) choiceConName cdChoiceFields argPatType binds
   ; mbChoiceChoiceDecl <-
       mkTemplateChoiceFunBindDecl
         conName choiceConName cdChoiceFields cdChoiceBody binds
@@ -2947,11 +2909,11 @@ mkTemplateChoiceDecls
   -> Located RdrName -- ctor 'T'
   -> LHsExpr GhcPs -- (list of) controllers
   -> Located ChoiceDecl -- choice 'S' (with result type 'R')
-  -> Bool -- `True` means `arg@X{..}`, `False` means `_`
+  -> ArgPattern -- 'arg@S{..}' or '_'?
   -> Maybe (LHsLocalBinds GhcPs) -- local binds
   -> P ([LHsDecl GhcPs]) -- resulting declarations
-mkTemplateChoiceDecls dataName conName controllers
-                         (L _ (choice@ChoiceDecl{..})) patArg binds = do
+mkTemplateChoiceDecls
+  dataName conName controllers (L _ (choice@ChoiceDecl{..})) argPatType binds = do
 {
   -- Calculate data constructor info from the choice name and (maybe)
   -- record type.
@@ -2967,7 +2929,7 @@ mkTemplateChoiceDecls dataName conName controllers
                             (map void (maybeToList cdChoiceFields)))))
                   cdChoiceName choiceConInfo
   ; templateInstDecl <- mkTemplateChoiceInstDecl dataName choiceName
-                           conName choiceConName controllers choice patArg binds
+                           conName choiceConName controllers choice argPatType binds
 
   -- prepend the choice documentation, if any, as a DocNext
   ; mbDocDecl <- pure $ case cdChoiceDoc of
@@ -3003,7 +2965,7 @@ mkTemplateChoiceGroupDecls dataName conName cgs binds = do
           -> P ([LHsDecl GhcPs])
       ; g controllers acc choice_decl = do {    -- harvest decls
           decls <- mkTemplateChoiceDecls dataName conName
-                                  controllers choice_decl False binds
+                                  controllers choice_decl ArgWildcardPat binds
         ; return (acc ++ decls)
       }
    }
@@ -3022,17 +2984,9 @@ mkTemplateFlexibleChoiceDecls dataName conName flxs binds = do
   foldM f [] flxs
 } where {
     f :: [LHsDecl GhcPs] -> Located FlexChoiceDecl -> P ([LHsDecl GhcPs])
-  ; f acc (L loc (FlexChoiceDecl {..})) = do {
-      let choice_decl = ChoiceDecl {
-            cdChoiceName = fcdChoiceName
-          , cdChoiceFields = fcdChoiceFields
-          , cdChoiceReturnTy = fcdChoiceReturnTy
-          , cdChoiceBody = fcdChoiceBody
-          , cdChoiceNonConsuming = fcdChoiceNonConsuming
-          , cdChoiceDoc = fcdChoiceDoc
-        }
-    ; decls <- mkTemplateChoiceDecls dataName conName
-                               fcdControllers (L loc choice_decl) True binds
+  ; f acc (L loc (FlexChoiceDecl controllers choice_decl)) = do {
+      decls <- mkTemplateChoiceDecls dataName conName
+                               controllers (L loc choice_decl) ArgAsPat binds
     ; return (acc ++ decls)
   }
 }
