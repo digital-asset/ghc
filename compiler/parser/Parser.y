@@ -1175,7 +1175,7 @@ template_body_decl :: { Located TemplateBodyDecl }
   | agreement_decl                               { sL1 $1 $ AgreementDecl $1 }
   | choice_group_decl                            { sL1 $1 $ ChoiceGroupDecl $1 }
   | let_bindings_decl                            { sL1 $1 $ LetBindingsDecl $1 }
-  | flexible_choice_decl                         { sL1 $1 $ FlexibleChoiceDecl $1 }
+  | flex_choice_decl                             { sL1 $1 $ FlexibleChoiceDecl $1 }
 
 let_bindings_decl :: { Located ([AddAnn], Located (HsLocalBinds GhcPs)) }
   : 'let' binds                 { sLL $1 $> (mj AnnWhere $1 : (fst $ unLoc $2)
@@ -1209,16 +1209,16 @@ choice_decl :: { Located ChoiceDecl }
                        , cdChoiceDoc          = $5 }
     }
 
-flexible_choice_decl :: { Located FlexChoiceDecl }
+flex_choice_decl :: { Located FlexChoiceDecl }
   : nonconsuming 'choice' qtycon OF_TYPE btype_ maybe_docprev arecord_with_opt 'controller' party_list flexible_choice_body
     { sL (comb3 $1 $2 $>) $
-        FlexChoiceDecl { fcdChoiceName = $3
-                       , fcdChoiceReturnTy = $5
-                       , fcdChoiceFields = $7
-                       , fcdControllers = applyConcat $9
-                       , fcdChoiceBody = $10
-                       , fcdChoiceNonConsuming = $1
-                       , fcdChoiceDoc = $6 }
+        FlexChoiceDecl (applyConcat $9)
+            ChoiceDecl { cdChoiceName = $3
+                       , cdChoiceReturnTy = $5
+                       , cdChoiceFields = $7
+                       , cdChoiceBody = $10
+                       , cdChoiceNonConsuming = $1
+                       , cdChoiceDoc = $6 }
     }
 
 flexible_choice_body :: { Located ([AddAnn],[LStmt GhcPs (LHsExpr GhcPs)]) }
