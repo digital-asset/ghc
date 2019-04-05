@@ -2552,16 +2552,15 @@ extractTemplateBodyDecls = foldl extract ([], [], [], [], [], [], [])
 
 -- | Utility for calculating 'DA.Internal.Desugar' names referenced
 -- during desugaring.
-desugarRdrName :: (String -> OccName) -> String -> RdrName
-desugarRdrName occName =
-  (mkRdrQual $ mkModuleName "DA.Internal.Desugar") . occName
+qualifyDesugar :: OccName -> RdrName
+qualifyDesugar = mkRdrQual $ mkModuleName "DA.Internal.Desugar"
 
 -- | Calculates the application of a 'toParties' function to an
 -- expression (invoked from Parser.y).
 applyToParties :: LHsExpr GhcPs -> LHsExpr GhcPs
 applyToParties p@(L loc _) =
   L loc $ HsApp noExt
-    (L loc $ HsVar noExt $ L loc $ desugarRdrName mkVarOcc "toParties")
+    (L loc $ HsVar noExt $ L loc $ qualifyDesugar $  mkVarOcc "toParties")
     p
 
 -- | Calculate the application of 'concat' to a list of expressions
@@ -2569,7 +2568,7 @@ applyToParties p@(L loc _) =
 applyConcat :: Located [LHsExpr GhcPs] -> LHsExpr GhcPs
 applyConcat (L loc ps) =
   L loc $ HsApp noExt
-    (L loc $ HsVar noExt $ L loc $ desugarRdrName mkVarOcc "concat")
+    (L loc $ HsVar noExt $ L loc $ qualifyDesugar $ mkVarOcc "concat")
     (L loc $ ExplicitList noExt Nothing ps)
 
 -- | Utility for constructing patterns of the form 'arg@T'.
@@ -2703,7 +2702,7 @@ mkTemplateConsumingFunBindDecl (L loc nonconsuming) =
               { mc_fun = tag
              , mc_fixity = Prefix
              , mc_strictness = NoSrcStrict }
-          body = HsVar noExt $ L loc $ desugarRdrName mkVarOcc "nonconsuming"
+          body = HsVar noExt $ L loc $ qualifyDesugar $ mkVarOcc "nonconsuming"
           match = Match
             { m_ext = noExt
             , m_ctxt = fun_rhs
@@ -2789,9 +2788,9 @@ mkTemplateTypeDecl
         , con_args   = conDetails
         , con_doc    = conDoc
         }
-  let eqName = L nloc $ desugarRdrName mkClsOcc "Eq"
+  let eqName = L nloc $ qualifyDesugar $ mkClsOcc "Eq"
       eqTyCl = mkLHsSigType $ L nloc $ HsTyVar noExt NotPromoted eqName
-  let showName = L nloc $ desugarRdrName mkClsOcc "Show"
+  let showName = L nloc $ qualifyDesugar $ mkClsOcc "Show"
       showTyCl = mkLHsSigType $ L nloc $ HsTyVar noExt NotPromoted showName
   let derivingClause = L nloc $ HsDerivingClause
         { deriv_clause_ext = NoExt
@@ -2837,7 +2836,7 @@ mkTemplateTemplateInstDecl dataName conName ens sig obs agr binds = do
           foldl (\acc decl -> case decl of Nothing -> acc; Just d  -> d : acc)
             [] [mbEnsureDecl, mbSignatoryDecl, mbObserverDecl, mbAgreementDecl]
         className = noLoc $ HsTyVar noExt NotPromoted
-                    $ noLoc $ desugarRdrName mkClsOcc "Template"
+                    $ noLoc $ qualifyDesugar $ mkClsOcc "Template"
         classInstDecl = ClsInstDecl
           { cid_ext = noExt
           , cid_poly_ty = HsIB
@@ -2884,7 +2883,7 @@ mkTemplateChoiceInstDecl
                , mbChoiceChoiceDecl
                , mbChoiceConsumingDecl]
         choiceClassName = noLoc $
-          HsTyVar noExt NotPromoted $ noLoc $ desugarRdrName mkClsOcc "Choice"
+          HsTyVar noExt NotPromoted $ noLoc $ qualifyDesugar $ mkClsOcc "Choice"
         tyApps =
           HsAppTy noExt
           (noLoc $ HsAppTy noExt
@@ -3050,7 +3049,7 @@ mkTemplateDecl lname@(L nloc _name) fields (L _ decls) = do
     allTemplateObservers obs controllers =
       let app =
             HsApp noExt
-              (noLoc $ HsVar noExt $ noLoc $ desugarRdrName mkVarOcc "concat")
+              (noLoc $ HsVar noExt $ noLoc $ qualifyDesugar $ mkVarOcc "concat")
               (noLoc $ ExplicitList noExt Nothing observers)
       in case obs of
            Nothing -> noLoc app
