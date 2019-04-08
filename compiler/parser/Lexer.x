@@ -656,6 +656,8 @@ data Token
   | ITchoice
   | ITobserver
   | ITnonconsuming
+  | ITkey
+  | ITmaintainer
 
   -- Pragmas, see  note [Pragma source text] in BasicTypes
   | ITinline_prag       SourceText InlineSpec RuleMatchInfo
@@ -886,6 +888,8 @@ reservedWordsFM = listToUFM $
          ( "choice",         ITchoice,        xbit DamlTemplateBit),
          ( "observer",       ITobserver,      xbit DamlTemplateBit),
          ( "nonconsuming",   ITnonconsuming,  xbit DamlTemplateBit),
+         ( "key",            ITkey,           xbit DamlTemplateBit),
+         ( "maintainer",     ITmaintainer,    xbit DamlTemplateBit),
 
          ( "unit",           ITunit,          0 ),
          ( "dependency",     ITdependency,       0 ),

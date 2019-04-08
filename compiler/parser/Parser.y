@@ -519,6 +519,8 @@ are the most common patterns, rewritten as regular expressions for clarity:
  'choice'       { L _ ITchoice }
  'observer'     { L _ ITobserver }
  'nonconsuming' { L _ ITnonconsuming }
+ 'key'          { L _ ITkey }
+ 'maintainer'   { L _ ITmaintainer }
 
  '{-# INLINE'             { L _ (ITinline_prag _ _ _) } -- INLINE or INLINABLE
  '{-# SPECIALISE'         { L _ (ITspec_prag _) }
@@ -1176,6 +1178,8 @@ template_body_decl :: { Located TemplateBodyDecl }
   | choice_group_decl                            { sL1 $1 $ ChoiceGroupDecl $1 }
   | let_bindings_decl                            { sL1 $1 $ LetBindingsDecl $1 }
   | flex_choice_decl                             { sL1 $1 $ FlexChoiceDecl $1 }
+  | key_decl                                     { sL1 $1 $ KeyDecl $1 }
+  | maintainer_decl                              { sL1 $1 $ MaintainerDecl $1 }
 
 let_bindings_decl :: { Located ([AddAnn], Located (HsLocalBinds GhcPs)) }
   : 'let' binds                 { sLL $1 $> (mj AnnWhere $1 : (fst $ unLoc $2)
@@ -1246,6 +1250,14 @@ observer_decl :: { LHsExpr GhcPs }
 
 agreement_decl :: { LHsExpr GhcPs }
   : 'agreement' exp                              {% runExpCmdP $2 >>= \ $2 -> return $ sLL $1 $> $ unLoc $2 }
+
+key_decl :: { Located KeyData }
+    -- We use `infixexp` rather than `exp` here because we need to
+    -- exclude the case `infixexp OF_TYPE sigtype`
+  : 'key' infixexp OF_TYPE sigtype               {% runExpCmdP $2 >>= \ $2 -> return $ sLL $1 $> $ KeyData { kdKeyExpr = $2, kdKeyTy = $4 } }
+
+maintainer_decl :: { LHsExpr GhcPs }
+  : 'maintainer' parties                         { sLL $1 $> $ unLoc (applyConcat $2) }
 
 party_list :: { Located [LHsExpr GhcPs] }
   : '{' parties '}'                              { sLL $1 $> (unLoc $2) }
@@ -3819,10 +3831,10 @@ qvarid :: { Located RdrName }
 -- the use of extensions. However, because they are listed here, this
 -- is OK and they can be used as normal varids.  The same holds for
 -- the DamlTemplate extension pseudo-keywords 'ensure', 'signatory',
--- 'agreement', 'observer', 'nonconsuming' and choice. Note that
--- 'controller' is not here - this is because it is layout inducing
--- and therefore doesn't really make sense as an OccName.  See Note
--- [Lexing type pseudo-keywords] in Lexer.x
+-- 'agreement', 'observer', 'nonconsuming', 'choice', 'key' and
+-- 'maintainer'. Note that 'controller' is not here - this is because
+-- it is layout inducing and therefore doesn't really make sense as an
+-- OccName.  See Note [Lexing type pseudo-keywords] in Lexer.x
 varid :: { Located RdrName }
         : VARID            { sL1 $1 $! mkUnqual varName (getVARID $1) }
         | special_id       { sL1 $1 $! mkUnqual varName (unLoc $1) }
@@ -3838,6 +3850,8 @@ varid :: { Located RdrName }
         | 'observer'       { sL1 $1 $! mkUnqual varName (fsLit "observer") }
         | 'nonconsuming'   { sL1 $1 $! mkUnqual varName (fsLit "nonconsuming") }
         | 'choice'         { sL1 $1 $! mkUnqual varName (fsLit "choice") }
+        | 'key'            { sL1 $1 $! mkUnqual varName (fsLit "key") }
+        | 'maintainer'     { sL1 $1 $! mkUnqual varName (fsLit "maintainer") }
         -- If this changes relative to tyvarid, update 'checkRuleTyVarBndrNames' in RdrHsSyn.hs
         -- See Note [Parsing explicit foralls in Rules]
 
@@ -3864,9 +3878,7 @@ varsym_no_minus :: { Located RdrName } -- varsym not including '-'
 -- These special_ids are treated as keywords in various places, but as
 -- ordinary ids elsewhere.  'special_id' collects all these except
 -- 'unsafe', 'interruptible', 'forall', 'family', 'role', 'stock', and
--- 'anyclass', 'ensure', 'signatory', 'agreement', 'controller',
--- 'observer', 'nonconsuming' whose treatment differs depending on
--- context
+-- 'anyclass'whose treatment differs depending on context.
 special_id :: { Located FastString }
 special_id
         : 'as'                  { sL1 $1 (fsLit "as") }
