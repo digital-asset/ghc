@@ -2989,7 +2989,7 @@ mkTemplateFlexChoiceDecls dataName conName flxs binds = do
   foldM f [] flxs
 } where {
     f :: [LHsDecl GhcPs] -> Located FlexChoiceData -> P ([LHsDecl GhcPs])
-  ; f acc (L loc (FlexChoiceDecl controllers choice_decl)) = do {
+  ; f acc (L loc (FlexChoiceData controllers choice_decl)) = do {
       decls <- mkTemplateChoiceDecls dataName conName
                                controllers (L loc choice_decl) ArgAsPat binds
     ; return (acc ++ decls)
