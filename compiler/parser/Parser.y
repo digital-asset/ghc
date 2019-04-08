@@ -1254,7 +1254,7 @@ agreement_decl :: { LHsExpr GhcPs }
 key_decl :: { Located KeyData }
     -- We use `infixexp` rather than `exp` here because we need to
     -- exclude the case `infixexp OF_TYPE sigtype`
-  : 'key' infixexp OF_TYPE sigtype               {% runExpCmdP $2 >>= \ $2 -> return $ sLL $1 $> $ KeyData { kdKeyExpr = $2, kdKeyTy = $4 } }
+  : 'key' infixexp OF_TYPE btype                 {% runExpCmdP $2 >>= \ $2 -> return $ sLL $1 $> $ KeyData { kdKeyExpr = $2, kdKeyTy = $4 } }
 
 maintainer_decl :: { LHsExpr GhcPs }
   : 'maintainer' parties                         { sLL $1 $> $ unLoc (applyConcat $2) }
