@@ -43,8 +43,8 @@ module   RdrHsSyn (
         placeHolderPunRhs,
 
         -- DAML Template Syntax
-        ChoiceDecl(..),
-        FlexChoiceDecl(..),
+        ChoiceData(..),
+        FlexChoiceData(..),
         TemplateBodyDecl(..),
         mkTemplateDecl,
         applyToParties,
@@ -2505,7 +2505,7 @@ mkInlinePragma src (inl, match_info) mb_act
 ------------------------------------------------------------------------------
 -- DAML Template Syntax
 
-data ChoiceDecl = ChoiceDecl
+data ChoiceData = ChoiceData
   { cdChoiceName          :: Located RdrName
   , cdChoiceFields        :: Maybe (LHsType GhcPs)
   , cdChoiceReturnTy      :: LHsType GhcPs
@@ -2514,18 +2514,18 @@ data ChoiceDecl = ChoiceDecl
   , cdChoiceDoc           :: Maybe LHsDocString
   }
 
--- A `FlexChoiceDecl` is a `ChoiceDecl` augmented with its controller
+-- A `FlexChoiceData` is a `ChoiceData` augmented with its controller
 -- set.
-data FlexChoiceDecl = FlexChoiceDecl (LHsExpr GhcPs) ChoiceDecl
+data FlexChoiceData = FlexChoiceData (LHsExpr GhcPs) ChoiceData
 
 data TemplateBodyDecl
   = EnsureDecl (LHsExpr GhcPs)
   | SignatoryDecl (LHsExpr GhcPs)
   | ObserverDecl (LHsExpr GhcPs)
   | AgreementDecl (LHsExpr GhcPs)
-  | ChoiceGroupDecl (Located (LHsExpr GhcPs, Located [Located ChoiceDecl]))
+  | ChoiceGroupDecl (Located (LHsExpr GhcPs, Located [Located ChoiceData]))
   | LetBindingsDecl (Located ([AddAnn], LHsLocalBinds GhcPs))
-  | FlexibleChoiceDecl (Located FlexChoiceDecl)
+  | FlexChoiceDecl (Located FlexChoiceData)
 
 -- | Classify a list of template body declarations.
 extractTemplateBodyDecls ::
@@ -2534,9 +2534,9 @@ extractTemplateBodyDecls ::
      , [LHsExpr GhcPs] -- signatories (list of lists)
      , [LHsExpr GhcPs] -- observers (list of lists)
      , [LHsExpr GhcPs] -- agreement
-     , [Located (LHsExpr GhcPs, Located [Located ChoiceDecl])] -- controlled choice groups
+     , [Located (LHsExpr GhcPs, Located [Located ChoiceData])] -- controlled choice groups
      , [LHsLocalBinds GhcPs] -- let bindings
-     , [Located FlexChoiceDecl] -- flexible choices
+     , [Located FlexChoiceData] -- flexible choices
      )
 extractTemplateBodyDecls = foldl extract ([], [], [], [], [], [], [])
   where
@@ -2548,7 +2548,7 @@ extractTemplateBodyDecls = foldl extract ([], [], [], [], [], [], [])
         AgreementDecl a              -> (es, ss, os, a : as, gs, bs, fs)
         ChoiceGroupDecl g            -> (es, ss, os, as, g : gs, bs, fs)
         LetBindingsDecl (L _ (_, b)) -> (es, ss, os, as, gs, b : bs, fs)
-        FlexibleChoiceDecl f         -> (es, ss, os, as, gs, bs, f : fs)
+        FlexChoiceDecl f             -> (es, ss, os, as, gs, bs, f : fs)
 
 -- | Utility for calculating 'DA.Internal.Desugar' names referenced
 -- during desugaring.
@@ -2861,13 +2861,13 @@ mkTemplateChoiceInstDecl
   -> Located RdrName -- ctor 'T'
   -> Located RdrName -- ctor 'S'
   -> LHsExpr GhcPs   -- (list of) controllers
-  -> ChoiceDecl      -- choice 'S' (with result type 'R')
+  -> ChoiceData      -- choice 'S' (with result type 'R')
   -> ArgPattern      -- 'arg@S{..}' or '_'?
   -> Maybe (LHsLocalBinds GhcPs) -- local binds
   -> P (LHsDecl GhcPs)  -- resulting declaration
 mkTemplateChoiceInstDecl
   dataName choiceName conName
-    choiceConName controllers (ChoiceDecl{..}) argPatType binds = do
+    choiceConName controllers (ChoiceData{..}) argPatType binds = do
 { -- Function bindings.
   ; mbChoiceControllerDecl <-
       mkTemplateControllerFunBindDecl
@@ -2913,12 +2913,12 @@ mkTemplateChoiceDecls
   :: LHsType GhcPs -- data 'T'
   -> Located RdrName -- ctor 'T'
   -> LHsExpr GhcPs -- (list of) controllers
-  -> Located ChoiceDecl -- choice 'S' (with result type 'R')
+  -> Located ChoiceData -- choice 'S' (with result type 'R')
   -> ArgPattern -- 'arg@S{..}' or '_'?
   -> Maybe (LHsLocalBinds GhcPs) -- local binds
   -> P ([LHsDecl GhcPs]) -- resulting declarations
 mkTemplateChoiceDecls
-  dataName conName controllers (L _ (choice@ChoiceDecl{..})) argPatType binds = do
+  dataName conName controllers (L _ (choice@ChoiceData{..})) argPatType binds = do
 {
   -- Calculate data constructor info from the choice name and (maybe)
   -- record type.
@@ -2950,7 +2950,7 @@ mkTemplateChoiceDecls
 mkTemplateChoiceGroupDecls ::
        LHsType GhcPs                   -- data 'T'
     -> Located RdrName                 -- ctor 'T'
-    -> [Located (LHsExpr GhcPs, Located [Located ChoiceDecl])] -- choice groups
+    -> [Located (LHsExpr GhcPs, Located [Located ChoiceData])] -- choice groups
     -> Maybe (LHsLocalBinds GhcPs)     -- binds
     -> P ([LHsDecl GhcPs])             -- resulting declarations
 mkTemplateChoiceGroupDecls dataName conName cgs binds = do
@@ -2958,7 +2958,7 @@ mkTemplateChoiceGroupDecls dataName conName cgs binds = do
   foldM f [] cgs -- for each choice group
 } where {
     f :: [LHsDecl GhcPs]
-      -> Located (LHsExpr GhcPs, Located [Located ChoiceDecl])
+      -> Located (LHsExpr GhcPs, Located [Located ChoiceData])
       -> P ([LHsDecl GhcPs])
   ; f acc (L _ (controllers, (L _ choice_decls))) =  do { -- for each choice
         decls <- foldM (g controllers) [] choice_decls
@@ -2966,7 +2966,7 @@ mkTemplateChoiceGroupDecls dataName conName cgs binds = do
     } where {
         g :: LHsExpr GhcPs
           -> [LHsDecl GhcPs]
-          -> Located ChoiceDecl
+          -> Located ChoiceData
           -> P ([LHsDecl GhcPs])
       ; g controllers acc choice_decl = do {    -- harvest decls
           decls <- mkTemplateChoiceDecls dataName conName
@@ -2978,18 +2978,18 @@ mkTemplateChoiceGroupDecls dataName conName cgs binds = do
 
 -- | Contruct a @data S = S {...}@ and @instance Choice T S R@ for all
 -- choices with flexible controllers.
-mkTemplateFlexibleChoiceDecls ::
+mkTemplateFlexChoiceDecls ::
        LHsType GhcPs                   -- data 'T'
     -> Located RdrName                 -- ctor 'T'
-    -> [Located FlexChoiceDecl]        -- flexible choices
+    -> [Located FlexChoiceData]        -- flexible choices
     -> Maybe (LHsLocalBinds GhcPs)     -- binds
     -> P ([LHsDecl GhcPs])             -- resulting declarations
-mkTemplateFlexibleChoiceDecls dataName conName flxs binds = do
+mkTemplateFlexChoiceDecls dataName conName flxs binds = do
 {
   foldM f [] flxs
 } where {
-    f :: [LHsDecl GhcPs] -> Located FlexChoiceDecl -> P ([LHsDecl GhcPs])
-  ; f acc (L loc (FlexChoiceDecl controllers choice_decl)) = do {
+    f :: [LHsDecl GhcPs] -> Located FlexChoiceData -> P ([LHsDecl GhcPs])
+  ; f acc (L loc (FlexChoiceData controllers choice_decl)) = do {
       decls <- mkTemplateChoiceDecls dataName conName
                                controllers (L loc choice_decl) ArgAsPat binds
     ; return (acc ++ decls)
@@ -3037,7 +3037,7 @@ mkTemplateDecl lname@(L nloc _name) fields (L _ decls) = do
   templateInstDecl <-
     mkTemplateTemplateInstDecl dataName conName ens' sig' obs'' agr' binds'
   choiceGroupDecls <- mkTemplateChoiceGroupDecls dataName conName cgs binds'
-  flexibleChoiceDecls <- mkTemplateFlexibleChoiceDecls dataName conName flxs binds'
+  flexibleChoiceDecls <- mkTemplateFlexChoiceDecls dataName conName flxs binds'
   return $ toOL ([dataDecl, templateInstDecl] ++ choiceGroupDecls ++ flexibleChoiceDecls)
   where
     -- | Calculate an expression for the full list of a contract's
