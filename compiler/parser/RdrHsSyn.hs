@@ -45,6 +45,7 @@ module   RdrHsSyn (
         -- DAML Template Syntax
         ChoiceData(..),
         FlexChoiceData(..),
+        KeyData(..),
         TemplateBodyDecl(..),
         mkTemplateDecl,
         applyToParties,
@@ -2514,8 +2515,11 @@ data ChoiceData = ChoiceData
   , cdChoiceDoc           :: Maybe LHsDocString
   }
 
--- A `FlexChoiceData` is a `ChoiceData` augmented with its controller
--- set.
+data KeyData = KeyData
+  { kdKeyExpr    :: LHsExpr GhcPs
+  , kdKeyTy      :: LHsType GhcPs
+  }
+
 data FlexChoiceData = FlexChoiceData (LHsExpr GhcPs) ChoiceData
 
 data TemplateBodyDecl
@@ -2526,6 +2530,8 @@ data TemplateBodyDecl
   | ChoiceGroupDecl (Located (LHsExpr GhcPs, Located [Located ChoiceData]))
   | LetBindingsDecl (Located ([AddAnn], LHsLocalBinds GhcPs))
   | FlexChoiceDecl (Located FlexChoiceData)
+  | KeyDecl (Located KeyData)
+  | MaintainerDecl (LHsExpr GhcPs)
 
 -- | Classify a list of template body declarations.
 extractTemplateBodyDecls ::
@@ -2537,18 +2543,22 @@ extractTemplateBodyDecls ::
      , [Located (LHsExpr GhcPs, Located [Located ChoiceData])] -- controlled choice groups
      , [LHsLocalBinds GhcPs] -- let bindings
      , [Located FlexChoiceData] -- flexible choices
+     , [Located KeyData] -- key
+     , [LHsExpr GhcPs] -- maintainer
      )
-extractTemplateBodyDecls = foldl extract ([], [], [], [], [], [], [])
+extractTemplateBodyDecls = foldl extract ([], [], [], [], [], [], [], [], [])
   where
-    extract (es, ss, os, as, gs, bs, fs) (L _ decl) =
+    extract (es, ss, os, as, gs, bs, fs, ks, ms) (L _ decl) =
       case decl of
-        EnsureDecl e                 -> (e : es, ss, os, as, gs, bs, fs)
-        SignatoryDecl s              -> (es, s : ss, os, as, gs, bs, fs)
-        ObserverDecl o               -> (es, ss, o : os, as, gs, bs, fs)
-        AgreementDecl a              -> (es, ss, os, a : as, gs, bs, fs)
-        ChoiceGroupDecl g            -> (es, ss, os, as, g : gs, bs, fs)
-        LetBindingsDecl (L _ (_, b)) -> (es, ss, os, as, gs, b : bs, fs)
-        FlexChoiceDecl f             -> (es, ss, os, as, gs, bs, f : fs)
+        EnsureDecl e                 -> (e : es, ss, os, as, gs, bs, fs, ks, ms)
+        SignatoryDecl s              -> (es, s : ss, os, as, gs, bs, fs, ks, ms)
+        ObserverDecl o               -> (es, ss, o : os, as, gs, bs, fs, ks, ms)
+        AgreementDecl a              -> (es, ss, os, a : as, gs, bs, fs, ks, ms)
+        ChoiceGroupDecl g            -> (es, ss, os, as, g : gs, bs, fs, ks, ms)
+        LetBindingsDecl (L _ (_, b)) -> (es, ss, os, as, gs, b : bs, fs, ks, ms)
+        FlexChoiceDecl f             -> (es, ss, os, as, gs, bs, f : fs, ks, ms)
+        KeyDecl k                    -> (es, ss, os, as, gs, bs, fs, k : ks, ms)
+        MaintainerDecl m             -> (es, ss, os, as, gs, bs, fs, ks, m : ms)
 
 -- | Utility for calculating 'DA.Internal.Desugar' names referenced
 -- during desugaring.
@@ -2998,15 +3008,21 @@ mkTemplateFlexChoiceDecls dataName conName flxs binds = do
 
 -- | Validate @template@ multiplicity constraints.
 checkTemplateDeclConstraints
-  :: SrcSpan               -- loc of 'T' in @template T@
-  -> [LHsExpr GhcPs]       -- ensure
-  -> [LHsExpr GhcPs]       -- agreement
-  -> [LHsLocalBinds GhcPs] -- binds
+  :: SrcSpan                   -- loc of 'T' in @template T@
+  -> [LHsExpr GhcPs]           -- ensure
+  -> [LHsExpr GhcPs]           -- agreement
+  -> [LHsLocalBinds GhcPs]     -- binds
+  -> [Located KeyData]          -- key
+  -> [LHsExpr GhcPs]           -- maintainer
   -> P ()
-checkTemplateDeclConstraints nloc ens agr bns
+checkTemplateDeclConstraints nloc ens agr bns kys mts
   | length ens > 1 = addFatalError nloc (text "Multiple 'ensure' declarations")
   | length agr > 1 = addFatalError nloc (text "Multiple 'agreement' declarations")
+  | length kys > 1 = addFatalError nloc (text "Multiple 'key' declarations")
+  | length mts > 1 = addFatalError nloc (text "Multiple 'maintainer' declarations")
   | length bns > 1 = addFatalError nloc (text "Multiple 'let' block declarations")
+  | length mts == 1 && length kys == 0 = addFatalError nloc (text "Missing 'key' declaration")
+  | length kys == 1 && length mts == 0 = addFatalError nloc (text "Missing 'maintainer' declaration")
   | otherwise      = return ()
 
 -- | Desugar a @template@ declaration into a list of decls (this is
@@ -3018,7 +3034,7 @@ mkTemplateDecl
   -> P (OrdList (LHsDecl GhcPs)) -- Desugared declarations
 mkTemplateDecl lname@(L nloc _name) fields (L _ decls) = do
   let dataName = L nloc (HsTyVar noExt NotPromoted lname)
-      (ens, sig, obs, agr, cgs, binds, flxs) = extractTemplateBodyDecls decls
+      (ens, sig, obs, agr, cgs, binds, flxs, keys, maintainers) = extractTemplateBodyDecls decls
       sig' =
         if null sig
           then Nothing
@@ -3028,7 +3044,7 @@ mkTemplateDecl lname@(L nloc _name) fields (L _ decls) = do
           then Nothing
           else Just $ applyConcat $ noLoc obs
       obs'' = Just $ allTemplateObservers obs' (map (\(L _ pr) -> fst pr) cgs)
-  checkTemplateDeclConstraints nloc ens agr binds
+  checkTemplateDeclConstraints nloc ens agr binds keys maintainers
   let (ens', agr', binds') = (listToMaybe ens, listToMaybe agr, listToMaybe binds)
   -- Calculate 'T' data constructor info from 'T' and the record type
   -- denoted by 'fields'.
