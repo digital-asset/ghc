@@ -1175,33 +1175,33 @@ template_body_decl :: { Located TemplateBodyDecl }
   | agreement_decl                               { sL1 $1 $ AgreementDecl $1 }
   | choice_group_decl                            { sL1 $1 $ ChoiceGroupDecl $1 }
   | let_bindings_decl                            { sL1 $1 $ LetBindingsDecl $1 }
-  | flex_choice_decl                             { sL1 $1 $ FlexibleChoiceDecl $1 }
+  | flex_choice_decl                             { sL1 $1 $ FlexChoiceDecl $1 }
 
 let_bindings_decl :: { Located ([AddAnn], Located (HsLocalBinds GhcPs)) }
   : 'let' binds                 { sLL $1 $> (mj AnnWhere $1 : (fst $ unLoc $2)
                                              , snd $ unLoc $2) }
 
-choice_group_decl :: { Located (LHsExpr GhcPs , Located [Located ChoiceDecl]) }
+choice_group_decl :: { Located (LHsExpr GhcPs , Located [Located ChoiceData]) }
   : 'controller' party_list 'can' choice_decl_list  { sLL $1 $> (applyConcat $2, $4) }
 
-choice_decl_list :: { Located [Located ChoiceDecl] }
+choice_decl_list :: { Located [Located ChoiceData] }
   : '{' choice_decls '}'                         { sLL $1 $3 $ reverse (unLoc $2) }
   | vocurly choice_decls close                   { let cs = reverse (unLoc $2) in
                                                     L (comb2 $1
                                                         (last (void $1:map void cs))
                                                       ) $ cs }
 
-choice_decls :: { Located [Located ChoiceDecl] }
+choice_decls :: { Located [Located ChoiceData] }
  : choice_decls ';' choice_decl                  { sLL $1 $> $ $3 : (unLoc $1) }
  | choice_decls ';'                              { sLL $1 $> $ unLoc $1 }
  | choice_decl                                   { sL1 $1 [$1] }
  | {- empty -}                                   { sL0 [] }
 
-choice_decl :: { Located ChoiceDecl }
+choice_decl :: { Located ChoiceData }
   : nonconsuming qtycon OF_TYPE btype_ maybe_docprev arecord_with_opt 'do' stmtlist -- note the use of 'btype_'
     {% $8 >>= \ $8 ->
         return $ sL (comb3 $1 $2 $>) $
-            ChoiceDecl { cdChoiceName         = $2
+            ChoiceData { cdChoiceName         = $2
                        , cdChoiceReturnTy     = $4
                        , cdChoiceFields       = $6
                        , cdChoiceBody         = $8
@@ -1209,11 +1209,11 @@ choice_decl :: { Located ChoiceDecl }
                        , cdChoiceDoc          = $5 }
     }
 
-flex_choice_decl :: { Located FlexChoiceDecl }
+flex_choice_decl :: { Located FlexChoiceData }
   : nonconsuming 'choice' qtycon OF_TYPE btype_ maybe_docprev arecord_with_opt 'controller' party_list flexible_choice_body
     { sL (comb3 $1 $2 $>) $
-        FlexChoiceDecl (applyConcat $9)
-            ChoiceDecl { cdChoiceName = $3
+        FlexChoiceData (applyConcat $9)
+            ChoiceData { cdChoiceName = $3
                        , cdChoiceReturnTy = $5
                        , cdChoiceFields = $7
                        , cdChoiceBody = $10
