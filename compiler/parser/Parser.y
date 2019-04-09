@@ -3878,7 +3878,7 @@ varsym_no_minus :: { Located RdrName } -- varsym not including '-'
 -- These special_ids are treated as keywords in various places, but as
 -- ordinary ids elsewhere.  'special_id' collects all these except
 -- 'unsafe', 'interruptible', 'forall', 'family', 'role', 'stock', and
--- 'anyclass'whose treatment differs depending on context.
+-- 'anyclass' whose treatment differs depending on context.
 special_id :: { Located FastString }
 special_id
         : 'as'                  { sL1 $1 (fsLit "as") }
