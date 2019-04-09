@@ -2819,7 +2819,7 @@ mkTemplateTypeDecl
         , tcdFixity   = Prefix
         , tcdDataDefn = dataDefn
         }
-  return $ [L loc $ TyClD noExt dataDecl]
+  return [L loc $ TyClD noExt dataDecl]
 
 -- | Construct an @instance Template T@.
 mkTemplateTemplateInstDecl ::
