@@ -2584,17 +2584,17 @@ applyConcat (L loc ps) =
 -- | Utility for constructing patterns of the form 'arg@T'.
 asPatPrefixCon :: String -> Located RdrName -> Pat GhcPs
 asPatPrefixCon varName conName =
-  AsPat noExt
+  XPat (noLoc $ AsPat noExt
     (noLoc $ mkRdrUnqual (mkVarOcc varName))
-    (noLoc $ ConPatIn conName $ PrefixCon [])
+    (noLoc $ XPat (noLoc $ ConPatIn conName $ PrefixCon [])))
 
 -- | Utility for constructing patterns of the form 'arg@T{..}'.
 asPatRecWild :: String -> Located RdrName -> Pat GhcPs
 asPatRecWild varName conName =
-  AsPat noExt
+  XPat (noLoc $ AsPat noExt
     (noLoc $ mkRdrUnqual (mkVarOcc varName))
-    (noLoc $ ConPatIn conName $
-      RecCon $ HsRecFields { rec_flds = [], rec_dotdot = Just $ noLoc 0 })
+    (noLoc $ XPat (noLoc $ ConPatIn conName $
+      RecCon $ HsRecFields { rec_flds = [], rec_dotdot = Just $ noLoc 0 })))
 
 -- | Utility function for constructing patterns of the form 'arg@X'
 -- where 'X' is either a record wildcard pattern or a prefix
@@ -2605,8 +2605,8 @@ argPatOfChoice choiceConName Nothing = asPatPrefixCon "arg" choiceConName
 argPatOfChoice choiceConName (Just (L _ (HsRecTy _ []))) = asPatPrefixCon "arg" choiceConName
 argPatOfChoice choiceConName _ = asPatRecWild "arg" choiceConName
 
--- | Construct an 'ensure', 'signatory', 'observer' or 'agreement'
--- function binding.
+-- | Construct an 'ensure', 'signatory', 'observer', 'agreement' or
+-- 'maintainer' function binding.
 mkTemplateFunBindDecl ::
      String                      -- function name
   -> Located RdrName             -- data ctor 'T'
@@ -2783,7 +2783,7 @@ mkTemplateTypeDecl ::
   -> (Located RdrName
      , HsConDeclDetails GhcPs
      , Maybe LHsDocString)  -- result of 'splitCon'
-  -> P (LHsDecl GhcPs)      -- the resulting @data@ declaration
+  -> P ([LHsDecl GhcPs])      -- the resulting @data@ declaration
 mkTemplateTypeDecl
   loc lname@(L nloc _name) (conName, conDetails, conDoc) = do
   -- NOTE (SM, SF): We assume that the program does not have any
@@ -2823,7 +2823,7 @@ mkTemplateTypeDecl
         , tcdFixity   = Prefix
         , tcdDataDefn = dataDefn
         }
-  return $ L loc $ TyClD noExt dataDecl
+  return $ [L loc $ TyClD noExt dataDecl]
 
 -- | Construct an @instance Template T@.
 mkTemplateTemplateInstDecl ::
@@ -2834,7 +2834,7 @@ mkTemplateTemplateInstDecl ::
   -> Maybe (LHsExpr GhcPs)       -- observer
   -> Maybe (LHsExpr GhcPs)       -- agreement
   -> Maybe (LHsLocalBinds GhcPs) -- binds
-  -> P (LHsDecl GhcPs)           -- resulting declaration
+  -> P ([LHsDecl GhcPs])         -- resulting declaration
 mkTemplateTemplateInstDecl dataName conName ens sig obs agr binds = do
 { -- Function bindings.
     mbEnsureDecl <- mkTemplateFunBindDecl "ensure" conName ens binds
@@ -2858,10 +2858,10 @@ mkTemplateTemplateInstDecl dataName conName ens sig obs agr binds = do
           , cid_datafam_insts = []
           , cid_overlap_mode  = Nothing }
   -- Instance declaration.
-  ; return $ noLoc $ InstD noExt $
-    ClsInstD
-    { cid_d_ext = noExt
-    , cid_inst = classInstDecl }
+  ; return $ [noLoc $ InstD noExt $
+              ClsInstD { cid_d_ext = noExt
+                       , cid_inst = classInstDecl }
+             ]
 }
 
 -- | Construct an @instance Choice T S R@.
@@ -2874,7 +2874,7 @@ mkTemplateChoiceInstDecl
   -> ChoiceData      -- choice 'S' (with result type 'R')
   -> ArgPattern      -- 'arg@S{..}' or '_'?
   -> Maybe (LHsLocalBinds GhcPs) -- local binds
-  -> P (LHsDecl GhcPs)  -- resulting declaration
+  -> P ([LHsDecl GhcPs])  -- resulting declaration
 mkTemplateChoiceInstDecl
   dataName choiceName conName
     choiceConName controllers (ChoiceData{..}) argPatType binds = do
@@ -2911,10 +2911,51 @@ mkTemplateChoiceInstDecl
           , cid_datafam_insts = []
           , cid_overlap_mode  = Nothing }
  -- Instance declaration.
-  ; return $ noLoc $ InstD noExt $
+  ; return $ [noLoc $ InstD noExt $
     ClsInstD
     { cid_d_ext = noExt
-    , cid_inst = classInstDecl }
+    , cid_inst = classInstDecl } ]
+}
+
+-- | Construct an @instance TemplateKey C K@.
+mkTemplateKeyInstDecl
+  :: LHsType GhcPs   -- data 'C'
+  -> Located RdrName -- ctor 'C'
+  -> Maybe (Located KeyData) -- key expr and type
+  -> Maybe (LHsExpr GhcPs) -- (list of) maintainers
+  -> Maybe (LHsLocalBinds GhcPs) -- binds
+  -> P ([LHsDecl GhcPs]) -- resulting declaration
+mkTemplateKeyInstDecl _ _ Nothing _ _ = return []
+mkTemplateKeyInstDecl _ _ _ Nothing _ = return []
+mkTemplateKeyInstDecl dataName conName (Just (L _ KeyData{..})) maintainers binds = do
+{ -- Function bindings.
+  ; mbKeyDecl <- mkTemplateFunBindDecl "key" conName (Just kdKeyExpr) binds
+  ; mbMaintainerDecl <- mkTemplateFunBindDecl "maintainer" conName maintainers binds
+  -- Class instance declaration.
+  ; let funBinds = listToBag $ reverse $
+          foldl (\acc decl -> case decl of Nothing -> acc; Just d -> d : acc)
+            [] [ mbKeyDecl, mbMaintainerDecl]
+        className = noLoc $ HsTyVar noExt NotPromoted
+                    $ noLoc $ qualifyDesugar $ mkClsOcc "TemplateKey"
+        tyApps =
+          HsAppTy noExt
+            (noLoc $ HsAppTy noExt className dataName)
+            kdKeyTy
+        classInstDecl = ClsInstDecl
+          { cid_ext = noExt
+          , cid_poly_ty = HsIB
+            { hsib_ext = noExt
+            , hsib_body = noLoc $ tyApps }
+          , cid_binds = funBinds
+          , cid_sigs = []
+          , cid_tyfam_insts = []
+          , cid_datafam_insts = []
+          , cid_overlap_mode  = Nothing }
+ -- Instance declaration.
+  ; return $ [ noLoc $ InstD noExt $
+    ClsInstD
+    { cid_d_ext = noExt
+    , cid_inst = classInstDecl } ]
 }
 
 -- | Contruct a @data S = S {...}@ and @instance Choice T S R@ for a
@@ -2952,7 +2993,7 @@ mkTemplateChoiceDecls
                    Just (L loc str) ->
                      [L loc (DocD noExt (DocCommentNext str))]
 
-  ; return $ mbDocDecl ++ [dataDecl, templateInstDecl]
+  ; return $ mbDocDecl ++ dataDecl ++ templateInstDecl
 }
 
 -- | Contruct a @data S = S {...}@ and @instance Choice T S R@ for all
@@ -3012,7 +3053,7 @@ checkTemplateDeclConstraints
   -> [LHsExpr GhcPs]           -- ensure
   -> [LHsExpr GhcPs]           -- agreement
   -> [LHsLocalBinds GhcPs]     -- binds
-  -> [Located KeyData]          -- key
+  -> [Located KeyData]         -- key
   -> [LHsExpr GhcPs]           -- maintainer
   -> P ()
 checkTemplateDeclConstraints nloc ens agr bns kys mts
@@ -3021,7 +3062,7 @@ checkTemplateDeclConstraints nloc ens agr bns kys mts
   | length kys > 1 = addFatalError nloc (text "Multiple 'key' declarations")
   | length mts > 1 = addFatalError nloc (text "Multiple 'maintainer' declarations")
   | length bns > 1 = addFatalError nloc (text "Multiple 'let' block declarations")
-  | length mts == 1 && length kys == 0 = addFatalError nloc (text "Missing 'key' declaration")
+  | length mts >= 1 && length kys == 0 = addFatalError nloc (text "Missing 'key' declaration")
   | length kys == 1 && length mts == 0 = addFatalError nloc (text "Missing 'maintainer' declaration")
   | otherwise      = return ()
 
@@ -3038,23 +3079,31 @@ mkTemplateDecl lname@(L nloc _name) fields (L _ decls) = do
       sig' =
         if null sig
           then Nothing
-          else Just $ applyConcat $ noLoc sig
+          -- We allow multiple signatory declarations.
+          else Just $ applyConcat $ noLoc sig -- Concat them.
       obs' =
         if null obs
           then Nothing
-          else Just $ applyConcat $ noLoc obs
+          -- We allow multiple observer declarations.
+          else Just $ applyConcat $ noLoc obs  -- Concat them.
       obs'' = Just $ allTemplateObservers obs' (map (\(L _ pr) -> fst pr) cgs)
+      maintainers' =
+        if null maintainers
+          then Nothing
+          -- We allow multiple maintainer declarations.
+          else Just $ applyConcat $ noLoc maintainers -- Concat them.
   checkTemplateDeclConstraints nloc ens agr binds keys maintainers
-  let (ens', agr', binds') = (listToMaybe ens, listToMaybe agr, listToMaybe binds)
+  let (ens', agr', binds', keys') =
+        (listToMaybe ens, listToMaybe agr, listToMaybe binds, listToMaybe keys)
   -- Calculate 'T' data constructor info from 'T' and the record type
   -- denoted by 'fields'.
   ci@(conName, _, _) <- splitCon [fields, dataName]
   dataDecl <- mkTemplateTypeDecl (combineLocs lname fields) lname ci
-  templateInstDecl <-
-    mkTemplateTemplateInstDecl dataName conName ens' sig' obs'' agr' binds'
+  templateInstDecl <- mkTemplateTemplateInstDecl dataName conName ens' sig' obs'' agr' binds'
   choiceGroupDecls <- mkTemplateChoiceGroupDecls dataName conName cgs binds'
-  flexibleChoiceDecls <- mkTemplateFlexChoiceDecls dataName conName flxs binds'
-  return $ toOL ([dataDecl, templateInstDecl] ++ choiceGroupDecls ++ flexibleChoiceDecls)
+  flexChoiceDecls <- mkTemplateFlexChoiceDecls dataName conName flxs binds'
+  templateKeyInstDecl <- mkTemplateKeyInstDecl dataName conName keys' maintainers' binds'
+  return $ toOL $ dataDecl ++ templateInstDecl ++ choiceGroupDecls ++ flexChoiceDecls ++ templateKeyInstDecl
   where
     -- | Calculate an expression for the full list of a contract's
     -- observers.
