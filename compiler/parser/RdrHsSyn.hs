@@ -2660,10 +2660,7 @@ funBind loc tag mg =
             }
 
 -- | Utility for constructing a class instance declaration.
-classInstDecl
-  :: (XCClsInstDecl pass ~ NoExt,
-       XHsIB pass (LHsType pass) ~ NoExt) =>
-     HsType pass -> LHsBinds pass -> ClsInstDecl pass
+classInstDecl :: HsType GhcPs -> LHsBinds GhcPs -> ClsInstDecl GhcPs
 classInstDecl tyApps funBinds =
   ClsInstDecl { cid_ext = noExt
               , cid_poly_ty = HsIB {
