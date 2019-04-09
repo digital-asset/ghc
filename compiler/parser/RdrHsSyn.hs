@@ -2544,7 +2544,7 @@ extractTemplateBodyDecls ::
      , [LHsLocalBinds GhcPs] -- let bindings
      , [Located FlexChoiceData] -- flexible choices
      , [Located KeyData] -- key
-     , [LHsExpr GhcPs] -- maintainer
+     , [LHsExpr GhcPs] -- maintainers (list of lists)
      )
 extractTemplateBodyDecls = foldl extract ([], [], [], [], [], [], [], [], [])
   where
@@ -2605,8 +2605,89 @@ argPatOfChoice choiceConName Nothing = asPatPrefixCon "arg" choiceConName
 argPatOfChoice choiceConName (Just (L _ (HsRecTy _ []))) = asPatPrefixCon "arg" choiceConName
 argPatOfChoice choiceConName _ = asPatRecWild "arg" choiceConName
 
--- | Construct an 'ensure', 'signatory', 'observer', 'agreement' or
--- 'maintainer' function binding.
+-- | Utility for constructing a match context.
+matchContext :: Located RdrName -> HsMatchContext RdrName
+matchContext tag = FunRhs
+             { mc_fun = tag
+             , mc_fixity = Prefix
+             , mc_strictness = NoSrcStrict }
+
+-- | Utility for constructing a match with a single right-hand-side.
+matchWithBinds
+  :: HsMatchContext RdrName
+  -> [Pat GhcPs]
+  -> SrcSpan
+  -> LHsExpr GhcPs
+  -> Maybe (LHsLocalBinds GhcPs)
+  -> Match GhcPs (LHsExpr GhcPs)
+matchWithBinds ctxt args loc body binds =
+  Match { m_ext = noExt
+        , m_ctxt = ctxt
+        , m_rhs_sig = Nothing
+        , m_pats = fmap noLoc args
+        , m_grhss = GRHSs { grhssExt = noExt
+                          , grhssGRHSs = [L loc $ GRHS noExt [] body]
+                          , grhssLocalBinds =
+                            case binds of
+                              Just binds' -> binds'
+                              Nothing -> noLoc $ emptyLocalBinds
+                          }
+        }
+
+-- | Utility for constructing a match group with a single alternate.
+matchGroup
+   :: SrcSpan
+   -> Match GhcPs (LHsExpr GhcPs)
+   -> MatchGroup GhcPs (LHsExpr GhcPs)
+matchGroup loc m = MG { mg_ext = noExt
+                      , mg_alts = L loc $ [L loc $ m]
+                      , mg_origin = FromSource
+                      }
+
+-- | Utility for constructing a function binding.
+funBind
+  :: SrcSpan
+  -> Located RdrName
+  -> MatchGroup GhcPs (LHsExpr GhcPs)
+  -> P (Maybe (LHsBind GhcPs))
+funBind loc tag mg =
+  return $ Just $ L loc $
+    FunBind { fun_ext = noExt
+            , fun_id = tag
+            , fun_matches = mg
+            , fun_co_fn = WpHole
+            , fun_tick = []
+            }
+
+-- | Utility for constructing a class instance declaration.
+classInstDecl
+  :: (XCClsInstDecl pass ~ NoExt,
+       XHsIB pass (LHsType pass) ~ NoExt) =>
+     HsType pass -> LHsBinds pass -> ClsInstDecl pass
+classInstDecl tyApps funBinds =
+  ClsInstDecl { cid_ext = noExt
+              , cid_poly_ty = HsIB {
+                    hsib_ext = noExt
+                  , hsib_body = noLoc $ tyApps
+                  }
+              , cid_binds = funBinds
+              , cid_sigs = []
+              , cid_tyfam_insts = []
+              , cid_datafam_insts = []
+              , cid_overlap_mode  = Nothing
+              }
+
+-- | Utility for constructing an instance declaration.
+instDecl :: ClsInstDecl GhcPs -> P ([LHsDecl GhcPs])
+instDecl cid = do
+  return $ [noLoc $ InstD noExt $
+            ClsInstD { cid_d_ext = noExt
+                     , cid_inst = cid
+                     }
+           ]
+
+-- | Construct an 'ensure', 'signatory', 'observer', 'agreement',
+-- 'key' or 'maintainer' function binding.
 mkTemplateFunBindDecl ::
      String                      -- function name
   -> Located RdrName             -- data ctor 'T'
@@ -2617,35 +2698,15 @@ mkTemplateFunBindDecl _ _ Nothing _ = return Nothing
 mkTemplateFunBindDecl fname con_name (Just body) binds = do
   let tag = noLoc $ mkRdrUnqual (mkVarOcc fname)
       this = asPatRecWild "this" con_name
-      bodyLoc = getLoc body
-      fun_rhs = FunRhs
-        { mc_fun = tag
-        , mc_fixity = Prefix
-        , mc_strictness = NoSrcStrict }
-      match = Match
-        { m_ext = noExt
-        , m_ctxt = fun_rhs
-        , m_rhs_sig = Nothing
-        , m_pats = [noLoc $ this]
-        , m_grhss = GRHSs
-                    { grhssExt = noExt
-                    , grhssGRHSs = [L bodyLoc $ GRHS noExt [] body]
-                    , grhssLocalBinds =
-                        case binds of
-                          Just binds' -> binds'
-                          Nothing -> noLoc $ emptyLocalBinds } }
-      match_group = MG
-        { mg_ext = noExt
-        , mg_alts = L bodyLoc $ [L bodyLoc $ match]
-        , mg_origin = FromSource }
-  return $ Just $ L bodyLoc $
-    FunBind
-    { fun_ext = noExt
-    , fun_id = tag
-    , fun_matches = match_group
-    , fun_co_fn = WpHole
-    , fun_tick = [] }
+      loc = getLoc body
+      ctx = matchContext tag
+      match = matchWithBinds ctx [this] loc body binds
+      match_group = matchGroup loc match
+  funBind loc tag match_group
 
+-- [Controlled choice groups - Old syntax] This data structure is a
+-- tiny backwards compatibility hack for 'controller' function
+-- bindings.
 data ArgPattern = ArgWildcardPat | ArgAsPat
 
 -- | Construct a 'controller' function binding.
@@ -2662,39 +2723,15 @@ mkTemplateControllerFunBindDecl
   conName (Just body) choiceConName mbChoiceFields argPatType binds = do
   let tag = noLoc $ mkRdrUnqual (mkVarOcc "choiceController")
       this = asPatRecWild "this" conName
-      bodyLoc = getLoc body
+      loc = getLoc body
       arg = case argPatType of
-               -- Old syntax (controlled choice groups) backwards
-               -- compatibility hack.
+               -- See note [Controlled choice groups - Old syntax]
                ArgWildcardPat -> WildPat noExt
                ArgAsPat -> argPatOfChoice choiceConName mbChoiceFields
-      fun_rhs = FunRhs
-        { mc_fun = tag
-        , mc_fixity = Prefix
-        , mc_strictness = NoSrcStrict }
-      match = Match
-        { m_ext = noExt
-        , m_ctxt = fun_rhs
-        , m_rhs_sig = Nothing
-        , m_pats = fmap noLoc [this, arg]
-        , m_grhss = GRHSs
-                    { grhssExt = noExt
-                    , grhssGRHSs = [L bodyLoc $ GRHS noExt [] body]
-                    , grhssLocalBinds =
-                        case binds of
-                          Just binds' -> binds'
-                          Nothing -> noLoc $ emptyLocalBinds } }
-      match_group = MG
-        { mg_ext = noExt
-        , mg_alts = L bodyLoc $ [L bodyLoc $ match]
-        , mg_origin = FromSource }
-  return $ Just $ L bodyLoc $
-    FunBind
-    { fun_ext = noExt
-    , fun_id = tag
-    , fun_matches = match_group
-    , fun_co_fn = WpHole
-    , fun_tick = [] }
+      ctx = matchContext tag
+      match = matchWithBinds ctx [this, arg] loc body binds
+      match_group = matchGroup loc match
+  funBind loc tag match_group
 
 -- | Construct a 'consuming' function binding.  This will only return
 -- @Just@ a function if the provied argument is 'True' indicating that
@@ -2708,30 +2745,11 @@ mkTemplateConsumingFunBindDecl (L loc nonconsuming) =
     False  -> return Nothing
     True -> do
       let tag = noLoc $ mkRdrUnqual (mkVarOcc "consuming")
-          fun_rhs = FunRhs
-              { mc_fun = tag
-             , mc_fixity = Prefix
-             , mc_strictness = NoSrcStrict }
-          body = HsVar noExt $ L loc $ qualifyDesugar $ mkVarOcc "nonconsuming"
-          match = Match
-            { m_ext = noExt
-            , m_ctxt = fun_rhs
-            , m_rhs_sig = Nothing
-            , m_pats = []
-            , m_grhss = GRHSs
-                { grhssExt = noExt
-                , grhssGRHSs = [L loc $ GRHS noExt [] $ L loc body]
-                , grhssLocalBinds = noLoc $ emptyLocalBinds } }
-          match_group = MG
-            { mg_ext = noExt
-            , mg_alts = L loc $ [L loc $ match]
-            , mg_origin = FromSource }
-      return $ Just $ L loc $
-        FunBind { fun_ext = noExt
-                , fun_id = tag
-                , fun_matches = match_group
-                , fun_co_fn = WpHole
-                , fun_tick = [] }
+          ctx = matchContext tag
+          body = L loc $ HsVar noExt $ L loc $ qualifyDesugar $ mkVarOcc "nonconsuming"
+          match = matchWithBinds ctx [] loc body Nothing
+          match_group = matchGroup loc match
+      funBind loc tag match_group
 
 -- | Construct a 'choice' function binding.
 mkTemplateChoiceFunBindDecl ::
@@ -2745,36 +2763,13 @@ mkTemplateChoiceFunBindDecl
   conName choiceConName mbChoiceFields body@(L loc (_ann, stmts)) binds = do
   let tag = noLoc $ mkRdrUnqual (mkVarOcc "choice")
       this = asPatRecWild "this" conName
-      self = VarPat noExt $ noLoc $ mkRdrUnqual (mkVarOcc "self")
+      self = XPat (noLoc $ VarPat noExt $ noLoc $ mkRdrUnqual (mkVarOcc "self"))
       arg = argPatOfChoice choiceConName mbChoiceFields
-      fun_rhs = FunRhs
-        { mc_fun = tag
-        , mc_fixity = Prefix
-        , mc_strictness = NoSrcStrict }
-      do_ = HsDo noExt DoExpr (L loc stmts)
-      match = Match
-        { m_ext = noExt
-        , m_ctxt = fun_rhs
-        , m_rhs_sig = Nothing
-        , m_pats = fmap noLoc [this, self, arg]
-        , m_grhss = GRHSs
-                  { grhssExt = noExt
-                  , grhssGRHSs = [L loc $ GRHS noExt [] $ L loc do_]
-                  , grhssLocalBinds =
-                    case binds of
-                          Just binds' -> binds'
-                          Nothing -> noLoc $ emptyLocalBinds } }
-      match_group = MG
-          { mg_ext = noExt
-          , mg_alts = L loc $ [L loc $ match]
-          , mg_origin = FromSource }
-  return $ Just $ L (combineLocs choiceConName body) $
-    FunBind
-    { fun_ext = noExt
-    , fun_id = tag
-    , fun_matches = match_group
-    , fun_co_fn = WpHole
-    , fun_tick = [] }
+      do_ = L loc $ HsDo noExt DoExpr (L loc stmts)
+      ctx = matchContext tag
+      match = matchWithBinds ctx [this, self, arg] loc do_ binds
+      match_group = matchGroup loc match
+  funBind (combineLocs choiceConName body) tag match_group
 
 -- | Construct a @data X = X{...} deriving (Eq, Show)@
 mkTemplateTypeDecl ::
@@ -2847,21 +2842,9 @@ mkTemplateTemplateInstDecl dataName conName ens sig obs agr binds = do
             [] [mbEnsureDecl, mbSignatoryDecl, mbObserverDecl, mbAgreementDecl]
         className = noLoc $ HsTyVar noExt NotPromoted
                     $ noLoc $ qualifyDesugar $ mkClsOcc "Template"
-        classInstDecl = ClsInstDecl
-          { cid_ext = noExt
-          , cid_poly_ty = HsIB
-            { hsib_ext = noExt
-            , hsib_body = noLoc $ HsAppTy noExt className dataName  }
-          , cid_binds = funBinds
-          , cid_sigs = []
-          , cid_tyfam_insts = []
-          , cid_datafam_insts = []
-          , cid_overlap_mode  = Nothing }
+        class_inst_decl = classInstDecl (HsAppTy noExt className dataName) funBinds
   -- Instance declaration.
-  ; return $ [noLoc $ InstD noExt $
-              ClsInstD { cid_d_ext = noExt
-                       , cid_inst = classInstDecl }
-             ]
+  ; instDecl class_inst_decl
 }
 
 -- | Construct an @instance Choice T S R@.
@@ -2889,9 +2872,7 @@ mkTemplateChoiceInstDecl
   -- Class instance declaration.
   ; let funBinds = listToBag $ reverse $
           foldl (\acc decl -> case decl of Nothing -> acc; Just d -> d : acc)
-            [] [ mbChoiceControllerDecl
-               , mbChoiceChoiceDecl
-               , mbChoiceConsumingDecl]
+            [] [ mbChoiceControllerDecl, mbChoiceChoiceDecl, mbChoiceConsumingDecl]
         choiceClassName = noLoc $
           HsTyVar noExt NotPromoted $ noLoc $ qualifyDesugar $ mkClsOcc "Choice"
         tyApps =
@@ -2900,21 +2881,9 @@ mkTemplateChoiceInstDecl
             (noLoc $ HsAppTy noExt choiceClassName dataName)
             choiceName)
           cdChoiceReturnTy
-        classInstDecl = ClsInstDecl
-          { cid_ext = noExt
-          , cid_poly_ty = HsIB
-            { hsib_ext = noExt
-            , hsib_body = noLoc $ tyApps }
-          , cid_binds = funBinds
-          , cid_sigs = []
-          , cid_tyfam_insts = []
-          , cid_datafam_insts = []
-          , cid_overlap_mode  = Nothing }
- -- Instance declaration.
-  ; return $ [noLoc $ InstD noExt $
-    ClsInstD
-    { cid_d_ext = noExt
-    , cid_inst = classInstDecl } ]
+        class_inst_decl = classInstDecl tyApps funBinds
+  -- Instance declaration.
+  ; instDecl class_inst_decl
 }
 
 -- | Construct an @instance TemplateKey C K@.
@@ -2941,21 +2910,9 @@ mkTemplateKeyInstDecl dataName conName (Just (L _ KeyData{..})) maintainers bind
           HsAppTy noExt
             (noLoc $ HsAppTy noExt className dataName)
             kdKeyTy
-        classInstDecl = ClsInstDecl
-          { cid_ext = noExt
-          , cid_poly_ty = HsIB
-            { hsib_ext = noExt
-            , hsib_body = noLoc $ tyApps }
-          , cid_binds = funBinds
-          , cid_sigs = []
-          , cid_tyfam_insts = []
-          , cid_datafam_insts = []
-          , cid_overlap_mode  = Nothing }
- -- Instance declaration.
-  ; return $ [ noLoc $ InstD noExt $
-    ClsInstD
-    { cid_d_ext = noExt
-    , cid_inst = classInstDecl } ]
+        class_inst_decl = classInstDecl tyApps funBinds
+  -- Instance declaration.
+  ; instDecl class_inst_decl
 }
 
 -- | Contruct a @data S = S {...}@ and @instance Choice T S R@ for a
@@ -2986,8 +2943,7 @@ mkTemplateChoiceDecls
                   cdChoiceName choiceConInfo
   ; templateInstDecl <- mkTemplateChoiceInstDecl dataName choiceName
                            conName choiceConName controllers choice argPatType binds
-
-  -- prepend the choice documentation, if any, as a DocNext
+  -- Prepend the choice documentation, if any, as a 'DocNext'.
   ; mbDocDecl <- pure $ case cdChoiceDoc of
                    Nothing -> []
                    Just (L loc str) ->
@@ -3071,7 +3027,7 @@ checkTemplateDeclConstraints nloc ens agr bns kys mts
 mkTemplateDecl
   :: Located RdrName -- The template name
   -> LHsType GhcPs -- The template's record type
-  -> Located [Located TemplateBodyDecl]  -- Functions, controlled choice groups, flexible choices
+  -> Located [Located TemplateBodyDecl]  -- Template declarations
   -> P (OrdList (LHsDecl GhcPs)) -- Desugared declarations
 mkTemplateDecl lname@(L nloc _name) fields (L _ decls) = do
   let dataName = L nloc (HsTyVar noExt NotPromoted lname)
