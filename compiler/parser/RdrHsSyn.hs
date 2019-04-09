@@ -2659,6 +2659,10 @@ funBind loc tag mg =
             , fun_tick = []
             }
 
+-- | Put all your cats in a bag.
+bagOfCatMaybes :: [Maybe a] -> Bag a
+bagOfCatMaybes = listToBag . catMaybes
+
 -- | Utility for constructing a class instance declaration.
 classInstDecl :: HsType GhcPs -> LHsBinds GhcPs -> ClsInstDecl GhcPs
 classInstDecl tyApps funBinds =
@@ -2834,9 +2838,8 @@ mkTemplateTemplateInstDecl dataName conName ens sig obs agr binds = do
   ; mbObserverDecl <- mkTemplateFunBindDecl "observer" conName obs binds
   ; mbAgreementDecl<- mkTemplateFunBindDecl "agreement" conName agr binds
   -- Class instance declaration.
-  ; let funBinds = listToBag $ reverse $
-          foldl (\acc decl -> case decl of Nothing -> acc; Just d  -> d : acc)
-            [] [mbEnsureDecl, mbSignatoryDecl, mbObserverDecl, mbAgreementDecl]
+  ; let funBinds = bagOfCatMaybes
+          [mbEnsureDecl, mbSignatoryDecl, mbObserverDecl, mbAgreementDecl]
         className = noLoc $ HsTyVar noExt NotPromoted
                     $ noLoc $ qualifyDesugar $ mkClsOcc "Template"
         class_inst_decl = classInstDecl (HsAppTy noExt className dataName) funBinds
@@ -2867,9 +2870,8 @@ mkTemplateChoiceInstDecl
         conName choiceConName cdChoiceFields cdChoiceBody binds
   ; mbChoiceConsumingDecl <- mkTemplateConsumingFunBindDecl cdChoiceNonConsuming
   -- Class instance declaration.
-  ; let funBinds = listToBag $ reverse $
-          foldl (\acc decl -> case decl of Nothing -> acc; Just d -> d : acc)
-            [] [ mbChoiceControllerDecl, mbChoiceChoiceDecl, mbChoiceConsumingDecl]
+  ; let funBinds = bagOfCatMaybes
+          [mbChoiceControllerDecl, mbChoiceChoiceDecl, mbChoiceConsumingDecl]
         choiceClassName = noLoc $
           HsTyVar noExt NotPromoted $ noLoc $ qualifyDesugar $ mkClsOcc "Choice"
         tyApps =
@@ -2898,9 +2900,7 @@ mkTemplateKeyInstDecl dataName conName (Just (L _ KeyData{..})) maintainers bind
   ; mbKeyDecl <- mkTemplateFunBindDecl "key" conName (Just kdKeyExpr) binds
   ; mbMaintainerDecl <- mkTemplateFunBindDecl "maintainer" conName maintainers binds
   -- Class instance declaration.
-  ; let funBinds = listToBag $ reverse $
-          foldl (\acc decl -> case decl of Nothing -> acc; Just d -> d : acc)
-            [] [ mbKeyDecl, mbMaintainerDecl]
+  ; let funBinds = bagOfCatMaybes [mbKeyDecl, mbMaintainerDecl]
         className = noLoc $ HsTyVar noExt NotPromoted
                     $ noLoc $ qualifyDesugar $ mkClsOcc "TemplateKey"
         tyApps =
@@ -3013,10 +3013,9 @@ checkTemplateDeclConstraints nloc ens agr bns kys mts
   | length ens > 1 = addFatalError nloc (text "Multiple 'ensure' declarations")
   | length agr > 1 = addFatalError nloc (text "Multiple 'agreement' declarations")
   | length kys > 1 = addFatalError nloc (text "Multiple 'key' declarations")
-  | length mts > 1 = addFatalError nloc (text "Multiple 'maintainer' declarations")
   | length bns > 1 = addFatalError nloc (text "Multiple 'let' block declarations")
-  | length mts >= 1 && length kys == 0 = addFatalError nloc (text "Missing 'key' declaration")
-  | length kys == 1 && length mts == 0 = addFatalError nloc (text "Missing 'maintainer' declaration")
+  | length mts >= 1 && null kys = addFatalError nloc (text "Missing 'key' declaration")
+  | length kys == 1 && null mts = addFatalError nloc (text "Missing 'maintainer' declaration")
   | otherwise      = return ()
 
 -- | Desugar a @template@ declaration into a list of decls (this is
