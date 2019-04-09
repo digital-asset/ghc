@@ -2830,7 +2830,7 @@ mkTemplateTemplateInstDecl ::
   -> Maybe (LHsExpr GhcPs)       -- observer
   -> Maybe (LHsExpr GhcPs)       -- agreement
   -> Maybe (LHsLocalBinds GhcPs) -- binds
-  -> P ([LHsDecl GhcPs])         -- resulting declaration
+  -> P [LHsDecl GhcPs]         -- resulting declaration
 mkTemplateTemplateInstDecl dataName conName ens sig obs agr binds = do
 { -- Function bindings.
     mbEnsureDecl <- mkTemplateFunBindDecl "ensure" conName ens binds
