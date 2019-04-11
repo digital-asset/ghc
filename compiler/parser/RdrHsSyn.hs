@@ -18,7 +18,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
 
-
 module   RdrHsSyn (
         mkHsOpApp,
         mkHsIntegral, mkHsFractional, mkHsIsString,
@@ -2536,20 +2535,38 @@ data TemplateBodyDecl
 data TemplateBodyDecls =
   TemplateBodyDecls {
       tbdEnsures :: [LHsExpr GhcPs]
-    , tbdSignatories :: [LHsExpr GhcPs] -- (list of lists)
-    , tbdObservers :: [LHsExpr GhcPs] -- (list of lists)
+    , tbdSignatories :: [LHsExpr GhcPs]
+    , tbdObservers :: [LHsExpr GhcPs]
     , tbdAgreements :: [LHsExpr GhcPs]
     , tbdControlledChoiceGroups :: [Located (LHsExpr GhcPs, Located [Located ChoiceData])]
     , tbdLetBindings :: [LHsLocalBinds GhcPs]
     , tbdFlexChoices :: [Located FlexChoiceData]
     , tbdKeys :: [Located KeyData]
-    , tbdMaintainers :: [LHsExpr GhcPs] -- (list of lists)
+    , tbdMaintainers :: [LHsExpr GhcPs]
     }
+
+-- I don't believe I can derive 'Monoid' without adding a package dependency.
+
+instance Semigroup TemplateBodyDecls where
+  (<>) x y = TemplateBodyDecls {
+      tbdEnsures = tbdEnsures x Monoid.<> tbdEnsures y
+    , tbdSignatories = tbdSignatories x Monoid.<> tbdSignatories y
+    , tbdObservers = tbdObservers x Monoid.<> tbdObservers y
+    , tbdAgreements = tbdAgreements x Monoid.<> tbdAgreements y
+    , tbdControlledChoiceGroups = tbdControlledChoiceGroups x Monoid.<> tbdControlledChoiceGroups y
+    , tbdLetBindings = tbdLetBindings x Monoid.<> tbdLetBindings y
+    , tbdFlexChoices = tbdFlexChoices x Monoid.<> tbdFlexChoices y
+    , tbdKeys = tbdKeys x Monoid.<> tbdKeys y
+    , tbdMaintainers = tbdMaintainers x Monoid.<> tbdMaintainers y
+    }
+
+instance Monoid TemplateBodyDecls where
+  mempty = TemplateBodyDecls [] [] [] [] [] [] [] [] []
 
 -- | Classify a list of template body declarations.
 extractTemplateBodyDecls :: [Located TemplateBodyDecl] -> TemplateBodyDecls
 extractTemplateBodyDecls =
-  foldl extract (TemplateBodyDecls [] [] [] [] [] [] [] [] [])
+  foldl extract mempty
   where
     extract acc@(TemplateBodyDecls {..}) (L _ decl) =
       case decl of
