@@ -2533,32 +2533,35 @@ data TemplateBodyDecl
   | KeyDecl (Located KeyData)
   | MaintainerDecl (LHsExpr GhcPs)
 
+data TemplateBodyDecls =
+  TemplateBodyDecls {
+      tbdEnsures :: [LHsExpr GhcPs]
+    , tbdSignatories :: [LHsExpr GhcPs] -- (list of lists)
+    , tbdObservers :: [LHsExpr GhcPs] -- (list of lists)
+    , tbdAgreements :: [LHsExpr GhcPs]
+    , tbdControlledChoiceGroups :: [Located (LHsExpr GhcPs, Located [Located ChoiceData])]
+    , tbdLetBindings :: [LHsLocalBinds GhcPs]
+    , tbdFlexChoices :: [Located FlexChoiceData]
+    , tbdKeys :: [Located KeyData]
+    , tbdMaintainers :: [LHsExpr GhcPs] -- (list of lists)
+    }
+
 -- | Classify a list of template body declarations.
-extractTemplateBodyDecls ::
-     [Located TemplateBodyDecl]
-  -> ( [LHsExpr GhcPs] -- ensure
-     , [LHsExpr GhcPs] -- signatories (list of lists)
-     , [LHsExpr GhcPs] -- observers (list of lists)
-     , [LHsExpr GhcPs] -- agreement
-     , [Located (LHsExpr GhcPs, Located [Located ChoiceData])] -- controlled choice groups
-     , [LHsLocalBinds GhcPs] -- let bindings
-     , [Located FlexChoiceData] -- flexible choices
-     , [Located KeyData] -- key
-     , [LHsExpr GhcPs] -- maintainers (list of lists)
-     )
-extractTemplateBodyDecls = foldl extract ([], [], [], [], [], [], [], [], [])
+extractTemplateBodyDecls :: [Located TemplateBodyDecl] -> TemplateBodyDecls
+extractTemplateBodyDecls =
+  foldl extract (TemplateBodyDecls [] [] [] [] [] [] [] [] [])
   where
-    extract (es, ss, os, as, gs, bs, fs, ks, ms) (L _ decl) =
+    extract acc@(TemplateBodyDecls {..}) (L _ decl) =
       case decl of
-        EnsureDecl e                 -> (e : es, ss, os, as, gs, bs, fs, ks, ms)
-        SignatoryDecl s              -> (es, s : ss, os, as, gs, bs, fs, ks, ms)
-        ObserverDecl o               -> (es, ss, o : os, as, gs, bs, fs, ks, ms)
-        AgreementDecl a              -> (es, ss, os, a : as, gs, bs, fs, ks, ms)
-        ChoiceGroupDecl g            -> (es, ss, os, as, g : gs, bs, fs, ks, ms)
-        LetBindingsDecl (L _ (_, b)) -> (es, ss, os, as, gs, b : bs, fs, ks, ms)
-        FlexChoiceDecl f             -> (es, ss, os, as, gs, bs, f : fs, ks, ms)
-        KeyDecl k                    -> (es, ss, os, as, gs, bs, fs, k : ks, ms)
-        MaintainerDecl m             -> (es, ss, os, as, gs, bs, fs, ks, m : ms)
+        EnsureDecl e                 -> acc{ tbdEnsures = e : tbdEnsures }
+        SignatoryDecl s              -> acc{ tbdSignatories = s : tbdSignatories }
+        ObserverDecl o               -> acc{ tbdObservers = o : tbdObservers }
+        AgreementDecl a              -> acc{ tbdAgreements = a : tbdAgreements }
+        ChoiceGroupDecl g            -> acc{ tbdControlledChoiceGroups = g : tbdControlledChoiceGroups }
+        LetBindingsDecl (L _ (_, b)) -> acc{ tbdLetBindings = b : tbdLetBindings }
+        FlexChoiceDecl f             -> acc{ tbdFlexChoices = f : tbdFlexChoices }
+        KeyDecl k                    -> acc{ tbdKeys = k : tbdKeys }
+        MaintainerDecl m             -> acc{ tbdMaintainers = m : tbdMaintainers }
 
 -- | Utility for calculating 'DA.Internal.Desugar' names referenced
 -- during desugaring.
@@ -3027,7 +3030,16 @@ mkTemplateDecl
   -> P (OrdList (LHsDecl GhcPs)) -- Desugared declarations
 mkTemplateDecl lname@(L nloc _name) fields (L _ decls) = do
   let dataName = L nloc (HsTyVar noExt NotPromoted lname)
-      (ens, sig, obs, agr, cgs, binds, flxs, keys, maintainers) = extractTemplateBodyDecls decls
+      TemplateBodyDecls {
+          tbdEnsures = ens
+        , tbdSignatories = sig
+        , tbdObservers = obs
+        , tbdAgreements = agr
+        , tbdControlledChoiceGroups = cgs
+        , tbdLetBindings = binds
+        , tbdFlexChoices = flxs
+        , tbdKeys = keys
+        , tbdMaintainers = maintainers } = extractTemplateBodyDecls decls
       sig' =
         if null sig
           then Nothing
