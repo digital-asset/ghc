@@ -2546,8 +2546,6 @@ data TemplateBodyDecls =
     , tbdMaintainers :: [LHsExpr GhcPs]
     }
 
--- I don't believe I can derive 'Monoid' without adding a package dependency.
-
 instance Semigroup TemplateBodyDecls where
   (<>) x y = TemplateBodyDecls {
       tbdEnsures = tbdEnsures x Monoid.<> tbdEnsures y
@@ -2564,22 +2562,21 @@ instance Semigroup TemplateBodyDecls where
 instance Monoid TemplateBodyDecls where
   mempty = TemplateBodyDecls [] [] [] [] [] [] [] [] []
 
+templateBodyDeclToDecls :: Located TemplateBodyDecl -> TemplateBodyDecls
+templateBodyDeclToDecls (L _ decl) = case decl of
+  EnsureDecl e                 -> TemplateBodyDecls [e] [] [] [] [] [] [] [] []
+  SignatoryDecl s              -> TemplateBodyDecls [] [s] [] [] [] [] [] [] []
+  ObserverDecl o               -> TemplateBodyDecls [] [] [o] [] [] [] [] [] []
+  AgreementDecl a              -> TemplateBodyDecls [] [] [] [a] [] [] [] [] []
+  ChoiceGroupDecl g            -> TemplateBodyDecls [] [] [] [] [g] [] [] [] []
+  LetBindingsDecl (L _ (_, b)) -> TemplateBodyDecls [] [] [] [] [] [b] [] [] []
+  FlexChoiceDecl f             -> TemplateBodyDecls [] [] [] [] [] [] [f] [] []
+  KeyDecl k                    -> TemplateBodyDecls [] [] [] [] [] [] [] [k] []
+  MaintainerDecl m             -> TemplateBodyDecls [] [] [] [] [] [] [] [] [m]
+
 -- | Classify a list of template body declarations.
 extractTemplateBodyDecls :: [Located TemplateBodyDecl] -> TemplateBodyDecls
-extractTemplateBodyDecls =
-  foldl extract mempty
-  where
-    extract acc@(TemplateBodyDecls {..}) (L _ decl) =
-      case decl of
-        EnsureDecl e                 -> acc{ tbdEnsures = e : tbdEnsures }
-        SignatoryDecl s              -> acc{ tbdSignatories = s : tbdSignatories }
-        ObserverDecl o               -> acc{ tbdObservers = o : tbdObservers }
-        AgreementDecl a              -> acc{ tbdAgreements = a : tbdAgreements }
-        ChoiceGroupDecl g            -> acc{ tbdControlledChoiceGroups = g : tbdControlledChoiceGroups }
-        LetBindingsDecl (L _ (_, b)) -> acc{ tbdLetBindings = b : tbdLetBindings }
-        FlexChoiceDecl f             -> acc{ tbdFlexChoices = f : tbdFlexChoices }
-        KeyDecl k                    -> acc{ tbdKeys = k : tbdKeys }
-        MaintainerDecl m             -> acc{ tbdMaintainers = m : tbdMaintainers }
+extractTemplateBodyDecls = foldMap templateBodyDeclToDecls
 
 -- | Utility for calculating 'DA.Internal.Desugar' names referenced
 -- during desugaring.
