@@ -2506,18 +2506,18 @@ mkInlinePragma src (inl, match_info) mb_act
 ------------------------------------------------------------------------------
 -- DAML Template Syntax
 
-data ChoiceData = ChoiceData
-  { cdChoiceName          :: Located RdrName
-  , cdChoiceFields        :: Maybe (LHsType GhcPs)
-  , cdChoiceReturnTy      :: LHsType GhcPs
-  , cdChoiceBody          :: Located ([AddAnn],[LStmt GhcPs (LHsExpr GhcPs)])
-  , cdChoiceNonConsuming  :: Located Bool
-  , cdChoiceDoc           :: Maybe LHsDocString
+data ChoiceData = ChoiceData {
+    cdChoiceName :: Located RdrName
+  , cdChoiceFields :: Maybe (LHsType GhcPs)
+  , cdChoiceReturnTy :: LHsType GhcPs
+  , cdChoiceBody :: Located ([AddAnn],[LStmt GhcPs (LHsExpr GhcPs)])
+  , cdChoiceNonConsuming :: Located Bool
+  , cdChoiceDoc :: Maybe LHsDocString
   }
 
-data KeyData = KeyData
-  { kdKeyExpr    :: LHsExpr GhcPs
-  , kdKeyTy      :: LHsType GhcPs
+data KeyData = KeyData {
+    kdKeyExpr :: LHsExpr GhcPs
+  , kdKeyTy :: LHsType GhcPs
   }
 
 data FlexChoiceData = FlexChoiceData (LHsExpr GhcPs) ChoiceData
@@ -2533,8 +2533,7 @@ data TemplateBodyDecl
   | KeyDecl (Located KeyData)
   | MaintainerDecl (LHsExpr GhcPs)
 
-data TemplateBodyDecls =
-  TemplateBodyDecls {
+data TemplateBodyDecls = TemplateBodyDecls {
       tbdEnsures :: [LHsExpr GhcPs]
     , tbdSignatories :: [LHsExpr GhcPs]
     , tbdObservers :: [LHsExpr GhcPs]
@@ -3045,45 +3044,30 @@ mkTemplateDecl
   -> P (OrdList (LHsDecl GhcPs)) -- Desugared declarations
 mkTemplateDecl lname@(L nloc _name) fields (L _ decls) = do
   let dataName = L nloc (HsTyVar noExt NotPromoted lname)
-      TemplateBodyDecls {
-          tbdEnsures = ens
-        , tbdSignatories = sig
-        , tbdObservers = obs
-        , tbdAgreements = agr
-        , tbdControlledChoiceGroups = cgs
-        , tbdLetBindings = binds
-        , tbdFlexChoices = flxs
-        , tbdKeys = keys
-        , tbdMaintainers = maintainers } = extractTemplateBodyDecls decls
-      sig' =
-        if null sig
-          then Nothing
-          -- We allow multiple signatory declarations.
-          else Just $ applyConcat $ noLoc sig -- Concat them.
-      obs' =
-        if null obs
-          then Nothing
-          -- We allow multiple observer declarations.
-          else Just $ applyConcat $ noLoc obs  -- Concat them.
-      obs'' = Just $ allTemplateObservers obs' (map (\(L _ pr) -> fst pr) cgs)
-      maintainers' =
-        if null maintainers
-          then Nothing
-          -- We allow multiple maintainer declarations.
-          else Just $ applyConcat $ noLoc maintainers -- Concat them.
-  checkTemplateDeclConstraints nloc ens agr binds keys maintainers
-  let (ens', agr', binds', keys') =
-        (listToMaybe ens, listToMaybe agr, listToMaybe binds, listToMaybe keys)
+      TemplateBodyDecls {..} = extractTemplateBodyDecls decls
+      tbdSignatories' = mergeDecls tbdSignatories
+      tbdObservers' = Just $ allTemplateObservers (mergeDecls tbdObservers) (map (\(L _ pr) -> fst pr) tbdControlledChoiceGroups)
+      tbdMaintainers' = mergeDecls tbdMaintainers
+  checkTemplateDeclConstraints nloc tbdEnsures tbdAgreements tbdLetBindings tbdKeys tbdMaintainers
+  let (tbdEnsures', tbdAgreements', tbdLetBindings', tbdKeys') =
+        (listToMaybe tbdEnsures, listToMaybe tbdAgreements, listToMaybe tbdLetBindings, listToMaybe tbdKeys)
   -- Calculate 'T' data constructor info from 'T' and the record type
   -- denoted by 'fields'.
   ci@(conName, _, _) <- splitCon [fields, dataName]
   dataDecl <- mkTemplateTypeDecl (combineLocs lname fields) lname ci
-  templateInstDecl <- mkTemplateTemplateInstDecl dataName conName ens' sig' obs'' agr' binds'
-  choiceGroupDecls <- mkTemplateChoiceGroupDecls dataName conName cgs binds'
-  flexChoiceDecls <- mkTemplateFlexChoiceDecls dataName conName flxs binds'
-  templateKeyInstDecl <- mkTemplateKeyInstDecl dataName conName keys' maintainers' binds'
+  templateInstDecl <- mkTemplateTemplateInstDecl dataName conName tbdEnsures' tbdSignatories' tbdObservers' tbdAgreements' tbdLetBindings'
+  choiceGroupDecls <- mkTemplateChoiceGroupDecls dataName conName tbdControlledChoiceGroups tbdLetBindings'
+  flexChoiceDecls <- mkTemplateFlexChoiceDecls dataName conName tbdFlexChoices tbdLetBindings'
+  templateKeyInstDecl <- mkTemplateKeyInstDecl dataName conName tbdKeys' tbdMaintainers' tbdLetBindings'
   return $ toOL $ dataDecl ++ templateInstDecl ++ choiceGroupDecls ++ flexChoiceDecls ++ templateKeyInstDecl
   where
+    -- | We support multiple 'signatory', 'observer' and 'maintainer'
+    -- declarations in a template.
+    mergeDecls :: [LHsExpr GhcPs] -> Maybe (LHsExpr GhcPs)
+    mergeDecls xs
+      | null xs = Nothing
+      | otherwise = Just $ applyConcat $ noLoc xs -- Concat them.
+
     -- | Calculate an expression for the full list of a contract's
     -- observers.
     allTemplateObservers
@@ -3091,14 +3075,10 @@ mkTemplateDecl lname@(L nloc _name) fields (L _ decls) = do
       -> [LHsExpr GhcPs] -- Contract controllers (list of lists).
       -> LHsExpr GhcPs -- Union (list) of observers and controllers.
     allTemplateObservers obs controllers =
-      let app =
-            HsApp noExt
-              (noLoc $ HsVar noExt $ noLoc $ qualifyDesugar $ mkVarOcc "concat")
-              (noLoc $ ExplicitList noExt Nothing observers)
+      let app = applyConcat (L noSrcSpan $ maybeToList obs ++ controllers)
       in case obs of
-           Nothing -> noLoc app
-           Just (L loc _) -> L loc app
-      where observers = maybeToList obs ++ controllers -- Dups not removed.
+           Nothing -> app
+           Just (L loc _) -> L loc (unLoc app)
 
 -----------------------------------------------------------------------------
 -- utilities for foreign declarations
