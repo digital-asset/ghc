@@ -87,9 +87,6 @@ main = do
                     , "- examples/mini-compile"
                     ]
 
-        -- Replace `ghc-prim` with `daml-prim`; this avoids an error importing `GHC.Prim` in MiniCompileTest.hs.
-        cmd "sed -i.bak s/\"ghc-prim\"/\"daml-prim\"/g examples/mini-compile/src/Main.hs"
-
         cmd "stack build --no-terminal --interleaved-output"
         cmd "stack exec --no-terminal -- ghc-lib --version"
         cmd "stack exec --no-terminal -- mini-hlint examples/mini-hlint/test/MiniHlintTest.hs"
