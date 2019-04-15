@@ -24,11 +24,6 @@ main = do
     when isWindows $
         cmd "stack exec -- pacman -S autoconf automake-wrapper make patch python tar --noconfirm"
 
-    let cmdInPythonVenv x = do
-        if isWindows
-            then cmd $ "py -3 -m venv venv && venv\\Scripts\\activate && " ++ x
-            else cmd $ "python3.6 -m venv venv && source venv/bin/activate && " ++ x
-
     args <- getArgs
     let featureBranch = args !! 0
     putStrLn $ "[Info] Git branch name: " ++ featureBranch
