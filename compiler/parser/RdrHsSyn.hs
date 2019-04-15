@@ -3046,7 +3046,7 @@ mkTemplateDecl lname@(L nloc _name) fields (L _ decls) = do
   let dataName = L nloc (HsTyVar noExt NotPromoted lname)
       TemplateBodyDecls {..} = extractTemplateBodyDecls decls
       tbdSignatories' = mergeDecls tbdSignatories
-      tbdObservers' = Just $ allTemplateObservers (mergeDecls tbdObservers) (map (\(L _ pr) -> fst pr) tbdControlledChoiceGroups)
+      tbdObservers' = Just $ allTemplateObservers (mergeDecls tbdObservers) $ map (fst . unLoc) tbdControlledChoiceGroups
       tbdMaintainers' = mergeDecls tbdMaintainers
   checkTemplateDeclConstraints nloc tbdEnsures tbdAgreements tbdLetBindings tbdKeys tbdMaintainers
   let (tbdEnsures', tbdAgreements', tbdLetBindings', tbdKeys') =
