@@ -54,8 +54,8 @@ main = do
 
             cmd "stack build --stack-yaml=hadrian/stack.yaml --only-dependencies --no-terminal --interleaved-output"
             if isWindows
-                then cmdInPythonVenv "hadrian/build.stack.bat --configure --flavour=quickest -j"
-                else cmdInPythonVenv "hadrian/build.stack.sh --configure --flavour=quickest -j"
+                then cmd "hadrian/build.stack.bat --configure --flavour=quickest -j"
+                else cmd "hadrian/build.stack.sh --configure --flavour=quickest -j"
 
             cmd "stack exec --no-terminal -- _build/stage1/bin/ghc --version"
             cmd "git merge --no-edit upstream/da-unit-ids"
