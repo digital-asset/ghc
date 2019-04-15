@@ -2588,7 +2588,7 @@ applyToParties :: LHsExpr GhcPs -> LHsExpr GhcPs
 applyToParties p@(L loc _) =
   L loc $ HsApp noExt
     (L loc $ HsVar noExt $ L loc $ qualifyDesugar $  mkVarOcc "toParties")
-    p
+    (L loc (HsPar noExt p)) -- Add parens (see https://github.com/digital-asset/daml/issues/5).
 
 -- | Calculate the application of 'concat' to a list of expressions
 -- (invoked from Parser.y).
