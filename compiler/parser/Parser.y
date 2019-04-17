@@ -1207,12 +1207,12 @@ choice_decl :: { Located ChoiceData }
   : consuming qtycon OF_TYPE btype_ maybe_docprev arecord_with_opt 'do' stmtlist -- note the use of 'btype_'
     {% $8 >>= \ $8 ->
         return $ sL (comb3 $1 $2 $>) $
-            ChoiceData { cdChoiceName         = $2
-                       , cdChoiceReturnTy     = $4
-                       , cdChoiceFields       = $6
-                       , cdChoiceBody         = $8
+            ChoiceData { cdChoiceName = $2
+                       , cdChoiceReturnTy = $4
+                       , cdChoiceFields = $6
+                       , cdChoiceBody = $8
                        , cdChoiceConsuming = $1
-                       , cdChoiceDoc          = $5 }
+                       , cdChoiceDoc = $5 }
     }
 
 flex_choice_decl :: { Located FlexChoiceData }
