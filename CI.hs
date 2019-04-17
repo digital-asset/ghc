@@ -21,6 +21,7 @@ main = do
         (t, _) <- duration $ system_ x
         putStrLn $ "# Completed in " ++ showDuration t ++ ": " ++ x ++ "\n"
         hFlush stdout
+
     when isWindows $
         cmd "stack exec -- pacman -S autoconf automake-wrapper make patch python tar --noconfirm"
 
@@ -43,7 +44,8 @@ main = do
             putStrLn $ "[Info] Entered " ++ ghcDir
             cmd $ "git remote add upstream " ++ daGhcDir
             cmd $ "git fetch upstream da-unit-ids " ++ featureBranch
-            cmd $ "git checkout `git merge-base upstream/" ++ featureBranch ++ " master`"
+            base <- cmdWithResult $ "git merge-base upstream/" ++ featureBranch ++ " master"
+            cmd $ "git checkout " ++ base
             cmd $ "git merge --no-edit upstream/" ++ featureBranch
             cmd "git submodule update --init --recursive"
 
@@ -87,3 +89,12 @@ main = do
         cmd "stack exec --no-terminal -- mini-hlint examples/mini-hlint/test/MiniHlintTest.hs"
         cmd "stack exec --no-terminal -- mini-hlint examples/mini-hlint/test/MiniHlintTest_error_handling.hs"
         cmd "stack exec --no-terminal -- mini-compile examples/mini-compile/test/MiniCompileTest.hs"
+
+cmdWithResult :: String -> IO String
+cmdWithResult x = do
+    putStrLn $ "\n\n# Running: " ++ x
+    hFlush stdout
+    (t, res) <- duration $ systemOutput_ x
+    putStrLn $ "# Completed in " ++ showDuration t ++ ": " ++ x ++ "\n"
+    hFlush stdout
+    return res
