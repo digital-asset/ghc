@@ -2511,7 +2511,7 @@ data ChoiceData = ChoiceData {
   , cdChoiceFields :: Maybe (LHsType GhcPs)
   , cdChoiceReturnTy :: LHsType GhcPs
   , cdChoiceBody :: Located ([AddAnn],[LStmt GhcPs (LHsExpr GhcPs)])
-  , cdChoiceNonConsuming :: Located Bool
+  , cdChoiceConsuming :: Located (Maybe String)
   , cdChoiceDoc :: Maybe LHsDocString
   }
 
@@ -2752,19 +2752,18 @@ mkTemplateControllerFunBindDecl
   funBind loc tag match_group
 
 -- | Construct a 'consuming' function binding.  This will only return
--- @Just@ a function if the provied argument is 'True' indicating that
--- the choice the function corresponds to is "non-consuming". In that
--- case, the function computed is simply @consuming = nonconsuming@.
+-- @Just@ a function if the provied argument is 'Just style'
+-- indicating a choice is "postconsuming" or "nonconsuming".
 mkTemplateConsumingFunBindDecl
-  :: Located Bool
+  :: Located (Maybe String)
   -> P (Maybe (LHsBind GhcPs))
-mkTemplateConsumingFunBindDecl (L loc nonconsuming) =
-  case nonconsuming of
-    False  -> return Nothing
-    True -> do
+mkTemplateConsumingFunBindDecl (L loc consuming) =
+  case consuming of
+    Nothing -> return Nothing
+    Just style -> do
       let tag = noLoc $ mkRdrUnqual (mkVarOcc "consuming")
           ctx = matchContext tag
-          body = L loc $ HsVar noExt $ L loc $ qualifyDesugar $ mkVarOcc "nonconsuming"
+          body = L loc $ HsVar noExt $ L loc $ qualifyDesugar $ mkVarOcc style
           match = matchWithBinds ctx [] loc body Nothing
           match_group = matchGroup loc match
       funBind loc tag match_group
@@ -2885,7 +2884,7 @@ mkTemplateChoiceInstDecl
   ; mbChoiceChoiceDecl <-
       mkTemplateChoiceFunBindDecl
         conName choiceConName cdChoiceFields cdChoiceBody binds
-  ; mbChoiceConsumingDecl <- mkTemplateConsumingFunBindDecl cdChoiceNonConsuming
+  ; mbChoiceConsumingDecl <- mkTemplateConsumingFunBindDecl cdChoiceConsuming
   -- Class instance declaration.
   ; let funBinds = bagOfCatMaybes
           [mbChoiceControllerDecl, mbChoiceChoiceDecl, mbChoiceConsumingDecl]

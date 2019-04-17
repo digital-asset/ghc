@@ -656,6 +656,8 @@ data Token
   | ITchoice
   | ITobserver
   | ITnonconsuming
+  | ITpreconsuming
+  | ITpostconsuming
   | ITkey
   | ITmaintainer
 
@@ -888,6 +890,8 @@ reservedWordsFM = listToUFM $
          ( "choice",         ITchoice,        xbit DamlTemplateBit),
          ( "observer",       ITobserver,      xbit DamlTemplateBit),
          ( "nonconsuming",   ITnonconsuming,  xbit DamlTemplateBit),
+         ( "preconsuming",   ITpreconsuming,  xbit DamlTemplateBit),
+         ( "postconsuming",  ITpostconsuming, xbit DamlTemplateBit),
          ( "key",            ITkey,           xbit DamlTemplateBit),
          ( "maintainer",     ITmaintainer,    xbit DamlTemplateBit),
 
@@ -914,9 +918,10 @@ on. In fact, by unconditionally lexing these pseudo-keywords as special, we
 can get better error messages.
 
 We use the same technique for the DamlTemplate keywords 'ensure',
-'signatory', 'agreement', 'controller', 'choice' 'observer' and
-'nonconsuming' which all serve as markers for special kinds of
-declarations inside a template declaration context.
+'signatory', 'agreement', 'controller', 'choice' 'observer',
+'preconsuming', 'nonconsuming' and 'postconsuming'which all serve as
+markers for special kinds of declarations inside a template
+declaration context.
 
 Also, note that these are included in the `varid` production in the parser --
 a key detail to make all this work.

@@ -519,6 +519,8 @@ are the most common patterns, rewritten as regular expressions for clarity:
  'choice'       { L _ ITchoice }
  'observer'     { L _ ITobserver }
  'nonconsuming' { L _ ITnonconsuming }
+ 'preconsuming' { L _ ITpreconsuming }
+ 'postconsuming'{ L _ ITpostconsuming }
  'key'          { L _ ITkey }
  'maintainer'   { L _ ITmaintainer }
 
@@ -1202,35 +1204,37 @@ choice_decls :: { Located [Located ChoiceData] }
  | {- empty -}                                   { sL0 [] }
 
 choice_decl :: { Located ChoiceData }
-  : nonconsuming qtycon OF_TYPE btype_ maybe_docprev arecord_with_opt 'do' stmtlist -- note the use of 'btype_'
+  : consuming qtycon OF_TYPE btype_ maybe_docprev arecord_with_opt 'do' stmtlist -- note the use of 'btype_'
     {% $8 >>= \ $8 ->
         return $ sL (comb3 $1 $2 $>) $
             ChoiceData { cdChoiceName         = $2
                        , cdChoiceReturnTy     = $4
                        , cdChoiceFields       = $6
                        , cdChoiceBody         = $8
-                       , cdChoiceNonConsuming = $1
+                       , cdChoiceConsuming = $1
                        , cdChoiceDoc          = $5 }
     }
 
 flex_choice_decl :: { Located FlexChoiceData }
-  : nonconsuming 'choice' qtycon OF_TYPE btype_ maybe_docprev arecord_with_opt 'controller' party_list flexible_choice_body
+  : consuming 'choice' qtycon OF_TYPE btype_ maybe_docprev arecord_with_opt 'controller' party_list flexible_choice_body
     { sL (comb3 $1 $2 $>) $
         FlexChoiceData (applyConcat $9)
             ChoiceData { cdChoiceName = $3
                        , cdChoiceReturnTy = $5
                        , cdChoiceFields = $7
                        , cdChoiceBody = $10
-                       , cdChoiceNonConsuming = $1
+                       , cdChoiceConsuming = $1
                        , cdChoiceDoc = $6 }
     }
 
 flexible_choice_body :: { Located ([AddAnn],[LStmt GhcPs (LHsExpr GhcPs)]) }
   : 'do' stmtlist                                {% $2 >>= \ $2 -> return $ sLL $1 $2 $ unLoc $2 }
 
-nonconsuming :: { Located Bool }
- : 'nonconsuming'                                { sL1 $1 True }
- | {- empty -}                                   { sL0 False }
+consuming :: { Located (Maybe String) }
+ : 'preconsuming'                                { sL1 $1 Nothing }
+ | 'nonconsuming'                                { sL1 $1 (Just "nonconsuming") }
+ | 'postconsuming'                               { sL1 $1 (Just "postconsuming") }
+ | {- empty -}                                   { sL0 Nothing }
 
 -- This production is only used by choice_decl.
 arecord_with_opt :: { Maybe (LHsType GhcPs)}
@@ -3831,10 +3835,11 @@ qvarid :: { Located RdrName }
 -- the use of extensions. However, because they are listed here, this
 -- is OK and they can be used as normal varids.  The same holds for
 -- the DamlTemplate extension pseudo-keywords 'ensure', 'signatory',
--- 'agreement', 'observer', 'nonconsuming', 'choice', 'key' and
--- 'maintainer'. Note that 'controller' is not here - this is because
--- it is layout inducing and therefore doesn't really make sense as an
--- OccName.  See Note [Lexing type pseudo-keywords] in Lexer.x
+-- 'agreement', 'observer', 'preconsuming', 'postconsuming',
+-- 'nonconsuming', 'choice', 'key' and 'maintainer'. Note that
+-- 'controller' is not here - this is because it is layout inducing
+-- and therefore doesn't really make sense as an OccName.  See Note
+-- [Lexing type pseudo-keywords] in Lexer.x
 varid :: { Located RdrName }
         : VARID            { sL1 $1 $! mkUnqual varName (getVARID $1) }
         | special_id       { sL1 $1 $! mkUnqual varName (unLoc $1) }
@@ -3849,6 +3854,8 @@ varid :: { Located RdrName }
         | 'agreement'      { sL1 $1 $! mkUnqual varName (fsLit "agreement") }
         | 'observer'       { sL1 $1 $! mkUnqual varName (fsLit "observer") }
         | 'nonconsuming'   { sL1 $1 $! mkUnqual varName (fsLit "nonconsuming") }
+        | 'preconsuming'   { sL1 $1 $! mkUnqual varName (fsLit "preconsuming") }
+        | 'postconsuming'  { sL1 $1 $! mkUnqual varName (fsLit "postconsuming") }
         | 'choice'         { sL1 $1 $! mkUnqual varName (fsLit "choice") }
         | 'key'            { sL1 $1 $! mkUnqual varName (fsLit "key") }
         | 'maintainer'     { sL1 $1 $! mkUnqual varName (fsLit "maintainer") }
