@@ -11,29 +11,54 @@ pr:
     include:
     - da-master
 
-strategy:
-  matrix:
-    linux:   {image: "Ubuntu 16.04"}
-    windows: {image: "vs2017-win2016"}
-    mac:     {image: "macOS-10.13"}
+jobs:
+  - job: linux
+    timeoutInMinutes: 360
+    pool:
+      # vmImage: 'ubuntu-16.04'
+      name: 'linux-pool'
+    steps:
+      - task: UsePythonVersion@0
+        inputs:
+          versionSpec: '3.6'
+          architecture: 'x64'
 
-pool: {vmImage: '$(image)'}
+      - script: |
+          curl -sSL https://get.haskellstack.org/ | sh
+          stack setup --resolver=lts-12.10
+          stack runhaskell CI.hs $(Build.SourceBranchName) --package=extra
 
-steps:
-  - task: UsePythonVersion@0
-    inputs:
-      versionSpec: '3.6'
-      architecture: 'x64'
+  - job: macos
+    timeoutInMinutes: 360
+    pool:
+      vmImage: 'macOS-10.13'
+    steps:
+      - task: UsePythonVersion@0
+        inputs:
+          versionSpec: '3.6'
+          architecture: 'x64'
 
-  # macOS
-  - bash: |
-      /usr/bin/ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
-      brew install autoconf automake gmp
-    condition: eq( variables['Agent.OS'], 'Darwin' )
-    displayName: Install brew
+      - bash: |
+          /usr/bin/ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
+          brew install autoconf automake gmp
+        displayName: Install brew
 
+        - script: |
+          curl -sSL https://get.haskellstack.org/ | sh
+          stack setup --resolver=lts-12.10
+          stack runhaskell CI.hs $(Build.SourceBranchName) --package=extra
 
-  - script: |
-      curl -sSL https://get.haskellstack.org/ | sh
-      stack setup --resolver=lts-12.10
-      stack runhaskell CI.hs $(Build.SourceBranchName) --package=extra
+  - job: windows
+    timeoutInMinutes: 360
+    pool:
+      vmImage: 'vs2017-win2016'
+    steps:
+      - task: UsePythonVersion@0
+        inputs:
+          versionSpec: '3.6'
+          architecture: 'x64'
+
+      - script: |
+          curl -sSL https://get.haskellstack.org/ | sh
+          stack setup --resolver=lts-12.10
+          stack runhaskell CI.hs $(Build.SourceBranchName) --package=extra
