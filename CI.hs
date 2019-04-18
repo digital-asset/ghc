@@ -57,14 +57,16 @@ main = do
             cmd "stack exec --no-terminal -- _build/stage1/bin/ghc --version"
             cmd "git merge --no-edit upstream/da-unit-ids"
 
-        cmd "stack setup > /dev/null 2>&1"
+        if isWindows
+            then cmd "stack setup > output.log 2>&1"
+            else cmd "stack setup > /dev/null 2>&1"
         cmd "stack build --no-terminal --interleaved-output"
         cmd "stack exec --no-terminal -- ghc-lib-gen ghc --ghc-lib-parser"
 
         stackYaml <- readFile' "stack.yaml"
         writeFile "stack.yaml" $ stackYaml ++ unlines ["- ghc"]
         cmd "stack sdist ghc --tar-dir=."
-        removeFile "ghc/ghc-lib-parser.cabal"
+        --removeFile "ghc/ghc-lib-parser.cabal"
 
         cmd "cd ghc && git clean -xf && git checkout ."
         cmd "stack exec --no-terminal -- ghc-lib-gen ghc --ghc-lib"
@@ -74,7 +76,7 @@ main = do
         cmd "tar -xf ghc-lib-0.1.0.tar.gz"
         cmd "mv ghc-lib-parser-0.1.0 ghc-lib-parser"
         cmd "mv ghc-lib-0.1.0 ghc-lib"
-        removeFile "ghc/ghc-lib.cabal"
+        --removeFile "ghc/ghc-lib.cabal"
 
         writeFile "stack.yaml" $
            stackYaml ++
