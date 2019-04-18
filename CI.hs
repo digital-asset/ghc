@@ -44,7 +44,8 @@ main = do
             putStrLn $ "[Info] Entered " ++ ghcDir
             cmd $ "git remote add upstream " ++ daGhcDir
             cmd $ "git fetch upstream da-unit-ids " ++ featureBranch
-            base <- cmdWithResult $ "git merge-base upstream/" ++ featureBranch ++ " master"
+            base <- systemOutput_ $ "git merge-base upstream/" ++ featureBranch ++ " master"
+            putStrLn $ "[Info] merge-base is " ++ base
             cmd $ "git checkout " ++ base
             cmd $ "git merge --no-edit upstream/" ++ featureBranch
             cmd "git submodule update --init --recursive"
@@ -58,7 +59,7 @@ main = do
             cmd "git merge --no-edit upstream/da-unit-ids"
 
         if isWindows
-            then cmd "stack setup > output.log 2>&1"
+            then cmd "stack setup > nul 2>&1"
             else cmd "stack setup > /dev/null 2>&1"
         cmd "stack build --no-terminal --interleaved-output"
         cmd "stack exec --no-terminal -- ghc-lib-gen ghc --ghc-lib-parser"
@@ -89,12 +90,3 @@ main = do
         cmd "stack exec --no-terminal -- mini-hlint examples/mini-hlint/test/MiniHlintTest.hs"
         cmd "stack exec --no-terminal -- mini-hlint examples/mini-hlint/test/MiniHlintTest_error_handling.hs"
         cmd "stack exec --no-terminal -- mini-compile examples/mini-compile/test/MiniCompileTest.hs"
-
-cmdWithResult :: String -> IO String
-cmdWithResult x = do
-    putStrLn $ "\n\n# Running: " ++ x
-    hFlush stdout
-    (t, res) <- duration $ systemOutput_ x
-    putStrLn $ "# Completed in " ++ showDuration t ++ ": " ++ x ++ "\n"
-    hFlush stdout
-    return res
