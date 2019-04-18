@@ -21,7 +21,6 @@ main = do
         (t, _) <- duration $ system_ x
         putStrLn $ "# Completed in " ++ showDuration t ++ ": " ++ x ++ "\n"
         hFlush stdout
-
     when isWindows $
         cmd "stack exec -- pacman -S autoconf automake-wrapper make patch python tar --noconfirm"
 
@@ -45,7 +44,6 @@ main = do
             cmd $ "git remote add upstream " ++ daGhcDir
             cmd $ "git fetch upstream da-unit-ids " ++ featureBranch
             base <- systemOutput_ $ "git merge-base upstream/" ++ featureBranch ++ " master"
-            putStrLn $ "[Info] merge-base is " ++ base
             cmd $ "git checkout " ++ base
             cmd $ "git merge --no-edit upstream/" ++ featureBranch
             cmd "git submodule update --init --recursive"
