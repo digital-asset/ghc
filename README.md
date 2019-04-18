@@ -1,7 +1,7 @@
 The Glasgow Haskell Compiler
 ============================
 
-[![pipeline status](https://gitlab.haskell.org/ghc/ghc/badges/master/pipeline.svg?style=flat)](https://gitlab.haskell.org/ghc/ghc/commits/master) [![Build Status](https://dev.azure.com/digitalasset/ghc/_apis/build/status/digital-asset.ghc?branchName=da-master&jobName=Job&configuration=linux&label=Linux)](https://dev.azure.com/digitalasset/ghc/_build/latest?definitionId=12&branchName=da-master) [![Build Status](https://dev.azure.com/digitalasset/ghc/_apis/build/status/digital-asset.ghc?branchName=da-master&jobName=Job&configuration=mac&label=macOS)](https://dev.azure.com/digitalasset/ghc/_build/latest?definitionId=12&branchName=da-master)
+[![pipeline status](https://gitlab.haskell.org/ghc/ghc/badges/master/pipeline.svg?style=flat)](https://gitlab.haskell.org/ghc/ghc/commits/master) [![Build Status](https://dev.azure.com/digitalasset/ghc/_apis/build/status/digital-asset.ghc?branchName=da-master&jobName=Job&configuration=linux&label=Linux)](https://dev.azure.com/digitalasset/ghc/_build/latest?definitionId=12&branchName=da-master) [![Build Status](https://dev.azure.com/digitalasset/ghc/_apis/build/status/digital-asset.ghc?branchName=da-master&jobName=Job&configuration=mac&label=macOS)](https://dev.azure.com/digitalasset/ghc/_build/latest?definitionId=12&branchName=da-master) [![Build Status](https://dev.azure.com/digitalasset/ghc/_apis/build/status/digital-asset.ghc?branchName=da-master&jobName=Job&configuration=windows&label=Windows)](https://dev.azure.com/digitalasset/ghc/_build/latest?definitionId=12&branchName=da-master)
 
 This is the source tree for [GHC][1], a compiler and interactive
 environment for the Haskell functional programming language.
