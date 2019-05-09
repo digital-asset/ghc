@@ -29,6 +29,7 @@ module DynFlags (
         glasgowExtsFlags,
         warningGroups, warningHierarchies,
         hasPprDebug, hasNoDebugOutput, hasNoStateHack, hasNoOptCoercion,
+        performNewColonConvention,
         dopt, dopt_set, dopt_unset,
         gopt, gopt_set, gopt_unset, setGeneralFlag', unSetGeneralFlag',
         wopt, wopt_set, wopt_unset,
@@ -1674,6 +1675,10 @@ shouldUseHexWordLiterals dflags =
 -- | Are we building with @-fPIE@ or @-fPIC@ enabled?
 positionIndependent :: DynFlags -> Bool
 positionIndependent dflags = gopt Opt_PIC dflags || gopt Opt_PIE dflags
+
+-- | Display error messages using the "new colon convention"?
+performNewColonConvention :: DynFlags -> Bool
+performNewColonConvention = xopt LangExt.NewColonConvention
 
 -----------------------------------------------------------------------------
 -- Ways
@@ -4096,7 +4101,7 @@ wWarningFlagsDeps = [
   flagSpec "partial-fields"              Opt_WarnPartialFields,
   flagSpec "prepositive-qualified-module"
                                          Opt_WarnPrepositiveQualifiedModule
- ]
+  ]
 
 -- | These @-\<blah\>@ flags can all be reversed with @-no-\<blah\>@
 negatableFlagsDeps :: [(Deprecation, FlagSpec GeneralFlag)]
@@ -4382,6 +4387,7 @@ xFlagsDeps = [
   flagSpec "CUSKs"                            LangExt.CUSKs,
   flagSpec "ConstrainedClassMethods"          LangExt.ConstrainedClassMethods,
   flagSpec "ConstraintKinds"                  LangExt.ConstraintKinds,
+  flagSpec "DamlVersionRequired"              LangExt.DamlVersionRequired,
   flagSpec "DataKinds"                        LangExt.DataKinds,
   depFlagSpecCond "DatatypeContexts"          LangExt.DatatypeContexts
     id
@@ -4452,6 +4458,7 @@ xFlagsDeps = [
   flagSpec "NamedWildCards"                   LangExt.NamedWildCards,
   flagSpec "NegativeLiterals"                 LangExt.NegativeLiterals,
   flagSpec "HexFloatLiterals"                 LangExt.HexFloatLiterals,
+  flagSpec "NewColonConvention"               LangExt.NewColonConvention,
   flagSpec "NondecreasingIndentation"         LangExt.NondecreasingIndentation,
   depFlagSpec' "NullaryTypeClasses"           LangExt.NullaryTypeClasses
     (deprecatedForExtension "MultiParamTypeClasses"),
@@ -4510,7 +4517,9 @@ xFlagsDeps = [
   flagSpec "UndecidableSuperClasses"          LangExt.UndecidableSuperClasses,
   flagSpec "UnicodeSyntax"                    LangExt.UnicodeSyntax,
   flagSpec "UnliftedFFITypes"                 LangExt.UnliftedFFITypes,
-  flagSpec "ViewPatterns"                     LangExt.ViewPatterns
+  flagSpec "ViewPatterns"                     LangExt.ViewPatterns,
+  flagSpec "WithRecordSyntax"                 LangExt.WithRecordSyntax,
+  flagSpec "DamlTemplate"                     LangExt.DamlTemplate
   ]
 
 defaultFlags :: Settings -> [GeneralFlag]

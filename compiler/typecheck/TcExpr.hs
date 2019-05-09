@@ -10,7 +10,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module TcExpr ( tcPolyExpr, tcMonoExpr, tcMonoExprNC,
+module TcExpr ( tcPolyExpr, tcMonoExpr, tcMonoExprNC, tcExprSig,
                 tcInferSigma, tcInferSigmaNC, tcInferRho, tcInferRhoNC,
                 tcSyntaxOp, tcSyntaxOpGen, SyntaxOpType(..), synKnownType,
                 tcCheckId,
@@ -590,7 +590,7 @@ tcExpr (HsMultiIf _ alts) res_ty
              -- Just like TcMatches
              -- Note [Case branches must never infer a non-tau type]
 
-       ; alts' <- mapM (wrapLocM $ tcGRHS match_ctxt res_ty) alts
+       ; alts' <- mapM (wrapLocM $ tcGRHS match_ctxt res_ty Nothing) alts
        ; res_ty <- readExpType res_ty
        ; return (HsMultiIf res_ty alts') }
   where match_ctxt = MC { mc_what = IfAlt, mc_body = tcBody }
@@ -1635,7 +1635,7 @@ tcExprSig expr (CompleteSig { sig_bndr = poly_id, sig_loc = loc })
     do { (tv_prs, theta, tau) <- tcInstType tcInstSkolTyVars poly_id
        ; given <- newEvVars theta
        ; traceTc "tcExprSig: CompleteSig" $
-         vcat [ text "poly_id:" <+> ppr poly_id <+> dcolon <+> ppr (idType poly_id)
+         vcat [ text "poly_id:" <+> ppr poly_id <+> of_type <+> ppr (idType poly_id)
               , text "tv_prs:" <+> ppr tv_prs ]
 
        ; let skol_info = SigSkol ExprSigCtxt (idType poly_id) tv_prs
@@ -1771,7 +1771,7 @@ tcInferId id_name
 
   | otherwise
   = do { (expr, ty) <- tc_infer_id (nameRdrName id_name) id_name
-       ; traceTc "tcInferId" (ppr id_name <+> dcolon <+> ppr ty)
+       ; traceTc "tcInferId" (ppr id_name <+> of_type <+> ppr ty)
        ; return (expr, ty) }
 
 tc_infer_assert :: Name -> TcM (HsExpr GhcTcId, TcSigmaType)
@@ -2618,7 +2618,7 @@ badFieldTypes :: [(FieldLabelString,TcType)] -> SDoc
 badFieldTypes prs
   = hang (text "Record update for insufficiently polymorphic field"
                          <> plural prs <> colon)
-       2 (vcat [ ppr f <+> dcolon <+> ppr ty | (f,ty) <- prs ])
+       2 (vcat [ ppr f <+> of_type <+> ppr ty | (f,ty) <- prs ])
 
 badFieldsUpd
   :: [LHsRecField' (AmbiguousFieldOcc GhcTc) (LHsExpr GhcRn)]

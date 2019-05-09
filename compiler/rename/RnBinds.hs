@@ -521,6 +521,7 @@ rnBind sig_fn (PatSynBind x bind)
 
 rnBind _ b = pprPanic "rnBind" (ppr b)
 
+
 {- Note [Pattern bindings that bind no variables]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 Generally, we want to warn about pattern bindings like
@@ -1179,7 +1180,7 @@ rnMatch' :: Outputable (body GhcPs) => HsMatchContext Name
          -> (Located (body GhcPs) -> RnM (Located (body GhcRn), FreeVars))
          -> Match GhcPs (Located (body GhcPs))
          -> RnM (Match GhcRn (Located (body GhcRn)), FreeVars)
-rnMatch' ctxt rnBody (Match { m_ctxt = mf, m_pats = pats, m_grhss = grhss })
+rnMatch' ctxt rnBody (Match { m_ctxt = mf, m_pats = pats, m_rhs_sig = msig, m_grhss = grhss })
   = do  { -- Note that there are no local fixity decls for matches
         ; rnPats ctxt pats      $ \ pats' -> do
         { (grhss', grhss_fvs) <- rnGRHSs ctxt rnBody grhss
@@ -1187,9 +1188,21 @@ rnMatch' ctxt rnBody (Match { m_ctxt = mf, m_pats = pats, m_grhss = grhss })
                       (FunRhs { mc_fun = L _ funid }, FunRhs { mc_fun = L lf _ })
                                             -> mf { mc_fun = L lf funid }
                       _                     -> ctxt
+        ; (msig', sig_fvs) <- rnMatchRhsSigTy (mc_fun mf) msig
         ; return (Match { m_ext = noExt, m_ctxt = mf', m_pats = pats'
-                        , m_grhss = grhss'}, grhss_fvs ) }}
+                        , m_rhs_sig = msig'
+                        , m_grhss = grhss'}, grhss_fvs `plusFV` sig_fvs ) }}
 rnMatch' _ _ (XMatch _) = panic "rnMatch'"
+
+rnMatchRhsSigTy :: Located RdrName
+                -> Maybe (LHsSigWcType GhcPs)
+                -> RnM (Maybe (LHsSigWcType GhcRn), FreeVars)
+rnMatchRhsSigTy _    Nothing   = return (Nothing, mempty)
+rnMatchRhsSigTy name (Just ty) =
+  do { let ctx = MatchRhsSigCtx name
+     ; (ty', fvs) <- rnHsSigWcType BindUnlessForall ctx ty
+     ; return (Just ty', fvs) }
+
 
 emptyCaseErr :: HsMatchContext Name -> SDoc
 emptyCaseErr ctxt = hang (text "Empty list of alternatives in" <+> pp_ctxt)

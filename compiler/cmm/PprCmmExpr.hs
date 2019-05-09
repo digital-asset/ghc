@@ -193,9 +193,9 @@ pprLit lit = sdocWithDynFlags $ \dflags ->
     CmmInt i rep ->
         hcat [ (if i < 0 then parens else id)(integer i)
              , ppUnless (rep == wordWidth dflags) $
-               space <> dcolon <+> ppr rep ]
+               space <> of_type <+> ppr rep ]
 
-    CmmFloat f rep     -> hsep [ double (fromRat f), dcolon, ppr rep ]
+    CmmFloat f rep     -> hsep [ double (fromRat f), of_type, ppr rep ]
     CmmVec lits        -> char '<' <> commafy (map pprLit lits) <> char '>'
     CmmLabel clbl      -> ppr clbl
     CmmLabelOff clbl i -> ppr clbl <> ppr_offset i
@@ -232,8 +232,8 @@ pprLocalReg (LocalReg uniq rep) = sdocWithDynFlags $ \dflags ->
 -- Temp Jan08
     char '_' <> pprUnique dflags uniq <>
        (if isWord32 rep -- && not (isGcPtrType rep) -- Temp Jan08               -- sigh
-                    then dcolon <> ptr <> ppr rep
-                    else dcolon <> ptr <> ppr rep)
+                    then of_type <> ptr <> ppr rep
+                    else of_type <> ptr <> ppr rep)
    where
      pprUnique dflags unique =
         if gopt Opt_SuppressUniques dflags
