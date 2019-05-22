@@ -41,5 +41,5 @@ jobs:
 
       - script: |
           curl -sSL https://get.haskellstack.org/ | sh
-          stack setup --resolver=lts-12.10
+          stack setup --resolver=lts-13.21
           stack runhaskell CI.hs $(Build.SourceBranchName) --package=extra
