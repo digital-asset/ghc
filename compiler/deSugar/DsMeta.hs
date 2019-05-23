@@ -1413,7 +1413,7 @@ repClauseTup (dL->L _ (Match { m_pats = ps
        gs <- repGuards guards
      ; clause <- repClause ps1 gs ds
      ; wrapGenSyms (ss1++ss2) clause }}}
-repClauseTup (dL->L _ (Match _ _ _ (XGRHSs _))) = panic "repClauseTup"
+repClauseTup (dL->L _ (Match _ _ _ _ (XGRHSs _))) = panic "repClauseTup"
 repClauseTup _ = panic "repClauseTup"
 
 repGuards ::  [LGRHS GhcRn (LHsExpr GhcRn)] ->  DsM (Core TH.BodyQ)

@@ -449,7 +449,7 @@ cgCase (StgApp v []) bndr alt_type@(PrimAlt _) alts
       --   swap (# x | #) = (# | x #)
       --   swap (# | y #) = (# y | #)
 
-    pp_bndr id = ppr id <+> dcolon <+> ppr (idType id) <+> parens (ppr (idPrimRep id))
+    pp_bndr id = ppr id <+> of_type <+> ppr (idType id) <+> parens (ppr (idPrimRep id))
 
 {- Note [Dodgy unsafeCoerce 2, #3132]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

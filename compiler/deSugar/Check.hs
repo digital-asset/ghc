@@ -378,6 +378,7 @@ checkGuardMatches hs_ctx guards@(GRHSs _ grhss _) = do
                   Match { m_ext = noExt
                         , m_ctxt = hs_ctx
                         , m_pats = []
+                        , m_rhs_sig = Nothing
                         , m_grhss = guards }
     checkMatches dflags dsMatchContext [] [match]
 checkGuardMatches _ (XGRHSs _) = panic "checkGuardMatches"
@@ -2544,7 +2545,7 @@ dsPmWarn dflags ctx@(DsMatchContext kind loc) pm_result
     -- Print a type-annotated wildcard (for non-exhaustive `EmptyCase`s for
     -- which we only know the type and have no inhabitants at hand)
     warnEmptyCase ty = pprContext False ctx (text "are non-exhaustive") $ \_ ->
-      hang (text "Patterns not matched:") 4 (underscore <+> dcolon <+> ppr ty)
+      hang (text "Patterns not matched:") 4 (underscore <+> of_type <+> ppr ty)
 
 {- Note [Inaccessible warnings for record updates]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -2618,7 +2619,7 @@ exhaustiveWarningFlag (StmtCtxt {}) = Nothing -- Don't warn about incomplete pat
 pprContext :: Bool -> DsMatchContext -> SDoc -> ((SDoc -> SDoc) -> SDoc) -> SDoc
 pprContext singular (DsMatchContext kind _loc) msg rest_of_msg_fun
   = vcat [text txt <+> msg,
-          sep [ text "In" <+> ppr_match <> char ':'
+          sep [ text "In" <+> ppr_match <> colon
               , nest 4 (rest_of_msg_fun pref)]]
   where
     txt | singular  = "Pattern match"

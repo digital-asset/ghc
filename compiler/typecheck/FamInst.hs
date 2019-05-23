@@ -168,9 +168,9 @@ newFamInst flavor axiom@(CoAxiom { co_ax_tc = fam_tc })
        ; let lhs'     = substTys subst lhs
              rhs'     = substTy  subst rhs
              tcvs'    = tvs' ++ cvs'
-       ; ifErrsM (return ()) $ -- Don't lint when there are errors, because
-                               -- errors might mean TcTyCons.
-                               -- See Note [Recover from validity error] in TcTyClsDecls
+       ; whenNoErrs $ -- Don't lint when there are errors, because
+                      -- errors might mean TcTyCons.
+                      -- See Note [Recover from validity error] in TcTyClsDecls
          when (gopt Opt_DoCoreLinting dflags) $
            -- Check that the types involved in this instance are well formed.
            -- Do /not/ expand type synonyms, for the reasons discussed in

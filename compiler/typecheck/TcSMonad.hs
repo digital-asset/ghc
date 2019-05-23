@@ -3415,7 +3415,7 @@ newWantedEq_SI :: ShadowInfo -> CtLoc -> Role
                -> TcS (CtEvidence, Coercion)
 newWantedEq_SI si loc role ty1 ty2
   = do { hole <- wrapTcS $ TcM.newCoercionHole pty
-       ; traceTcS "Emitting new coercion hole" (ppr hole <+> dcolon <+> ppr pty)
+       ; traceTcS "Emitting new coercion hole" (ppr hole <+> of_type <+> ppr pty)
        ; return ( CtWanted { ctev_pred = pty, ctev_dest = HoleDest hole
                            , ctev_nosh = si
                            , ctev_loc = loc}
@@ -3431,7 +3431,7 @@ newWantedEvVarNC_SI :: ShadowInfo -> CtLoc -> TcPredType -> TcS CtEvidence
 -- Don't look up in the solved/inerts; we know it's not there
 newWantedEvVarNC_SI si loc pty
   = do { new_ev <- newEvVar pty
-       ; traceTcS "Emitting new wanted" (ppr new_ev <+> dcolon <+> ppr pty $$
+       ; traceTcS "Emitting new wanted" (ppr new_ev <+> of_type <+> ppr pty $$
                                          pprCtLoc loc)
        ; return (CtWanted { ctev_pred = pty, ctev_dest = EvVarDest new_ev
                           , ctev_nosh = si

@@ -8,7 +8,6 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeFamilies #-}
-
 module TcAnnotations ( tcAnnotations, annCtxt ) where
 
 import GhcPrelude

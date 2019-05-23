@@ -192,7 +192,7 @@ etaExpandCoAxBranch (CoAxBranch { cab_tvs = tvs
 pprCoAxiom :: CoAxiom br -> SDoc
 -- Used in debug-printing only
 pprCoAxiom ax@(CoAxiom { co_ax_tc = tc, co_ax_branches = branches })
-  = hang (text "axiom" <+> ppr ax <+> dcolon)
+  = hang (text "axiom" <+> ppr ax <+> of_type)
        2 (vcat (map (pprCoAxBranchUser tc) (fromBranches branches)))
 
 pprCoAxBranchUser :: TyCon -> CoAxBranch -> SDoc
@@ -495,7 +495,7 @@ coVarRole cv
   | tc `hasKey` eqReprPrimTyConKey
   = Representational
   | otherwise
-  = pprPanic "coVarRole: unknown tycon" (ppr cv <+> dcolon <+> ppr (varType cv))
+  = pprPanic "coVarRole: unknown tycon" (ppr cv <+> of_type <+> ppr (varType cv))
 
   where
     tc = case tyConAppTyCon_maybe (varType cv) of

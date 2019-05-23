@@ -141,4 +141,8 @@ data Extension
    | StarIsType
    | ImportQualifiedPost
    | CUSKs
+   | NewColonConvention
+   | DamlVersionRequired
+   | WithRecordSyntax
+   | DamlTemplate
    deriving (Eq, Enum, Show, Generic, Bounded)

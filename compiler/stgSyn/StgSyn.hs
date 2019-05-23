@@ -847,7 +847,7 @@ pprStgExpr (StgCase expr bndr alt_type [alt])
 pprStgExpr (StgCase expr bndr alt_type alts)
   = sep [sep [text "case",
            nest 4 (hsep [pprStgExpr expr,
-             whenPprDebug (dcolon <+> ppr alt_type)]),
+             whenPprDebug (of_type <+> ppr alt_type)]),
            text "of", pprBndr CaseBind bndr, char '{'],
            nest 2 (vcat (map (pprStgAlt True) alts)),
            char '}']

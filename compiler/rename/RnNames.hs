@@ -1271,7 +1271,7 @@ warnMissingSignatures gbl_env
                   add_pat_syn_warn p
                     = add_warn name $
                       hang (text "Pattern synonym with no type signature:")
-                         2 (text "pattern" <+> pprPrefixName name <+> dcolon <+> pp_ty)
+                         2 (text "pattern" <+> pprPrefixName name <+> of_type <+> pp_ty)
                     where
                       name  = patSynName p
                       pp_ty = pprPatSynType p
@@ -1284,7 +1284,7 @@ warnMissingSignatures gbl_env
                                ty_msg  = pprSigmaType ty
                          ; add_warn name $
                            hang (text "Top-level binding with no type signature:")
-                              2 (pprPrefixName name <+> dcolon <+> ty_msg) }
+                              2 (pprPrefixName name <+> of_type <+> ty_msg) }
 
                   add_warn name msg
                     = when (name `elemNameSet` sig_ns && export_check name)
