@@ -540,11 +540,11 @@ pprHoleFit (HFDC sWrp sWrpVars sTy sProv sMs) hf = hang display 2 provenance
                                   Just (_, unfunned) -> unwrapTypeVars unfunned
                                   _ -> []
                 where (vars, unforalled) = splitForAllVarBndrs t
-          holeVs = sep $ map (parens . (text "_" <+> dcolon <+>) . ppr) matches
+          holeVs = sep $ map (parens . (text "_" <+> of_type <+>) . ppr) matches
           holeDisp = if sMs then holeVs
                      else sep $ replicate (length matches) $ text "_"
           occDisp = pprPrefixOcc name
-          tyDisp = ppWhen sTy $ dcolon <+> ppr ty
+          tyDisp = ppWhen sTy $ of_type <+> ppr ty
           has = not . null
           wrapDisp = ppWhen (has wrap && (sWrp || sWrpVars))
                       $ text "with" <+> if sWrp || not sTy

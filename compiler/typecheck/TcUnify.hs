@@ -910,7 +910,7 @@ fill_infer_result orig_ty (IR { ir_uniq = u, ir_lvl = res_lvl
       = do { let ty_lvl = tcTypeLevel ty
            ; MASSERT2( not (ty_lvl `strictlyDeeperThan` res_lvl),
                        ppr u $$ ppr res_lvl $$ ppr ty_lvl $$
-                       ppr ty <+> dcolon <+> ppr (tcTypeKind ty) $$ ppr orig_ty )
+                       ppr ty <+> of_type <+> ppr (typeKind ty) $$ ppr orig_ty )
            ; cts <- readTcRef ref
            ; case cts of
                Just already_there -> pprPanic "writeExpType"
@@ -1647,8 +1647,8 @@ uUnfilledVar2 origin t_or_k swapped tv1 ty2
       , Just ty2' <- metaTyVarUpdateOK dflags tv1 ty2
       = do { co_k <- uType KindLevel kind_origin (tcTypeKind ty2') (tyVarKind tv1)
            ; traceTc "uUnfilledVar2 ok" $
-             vcat [ ppr tv1 <+> dcolon <+> ppr (tyVarKind tv1)
-                  , ppr ty2 <+> dcolon <+> ppr (tcTypeKind  ty2)
+             vcat [ ppr tv1 <+> of_type <+> ppr (tyVarKind tv1)
+                  , ppr ty2 <+> of_type <+> ppr (typeKind  ty2)
                   , ppr (isTcReflCo co_k), ppr co_k ]
 
            ; if isTcReflCo co_k  -- only proceed if the kinds matched.

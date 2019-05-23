@@ -25,6 +25,7 @@ import RdrName
 import Var
 import Outputable
 import SrcLoc (Located)
+import Data.Kind
 
 import Data.Kind
 

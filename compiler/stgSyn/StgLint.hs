@@ -283,7 +283,7 @@ pp_binders bs
   = sep (punctuate comma (map pp_binder bs))
   where
     pp_binder b
-      = hsep [ppr b, dcolon, ppr (idType b)]
+      = hsep [ppr b, of_type, ppr (idType b)]
 
 initL :: Module -> Bool -> IdSet -> LintM a -> Maybe MsgDoc
 initL this_mod unarised locals (LintM m) = do
@@ -384,7 +384,7 @@ getLintFlags = LintM $ \_mod lf _loc _scope errs -> (lf, errs)
 checkInScope :: Id -> LintM ()
 checkInScope id = LintM $ \mod _lf loc scope errs
  -> if nameIsLocalOrFrom mod (idName id) && not (id `elemVarSet` scope) then
-        ((), addErr errs (hsep [ppr id, dcolon, ppr (idType id),
+        ((), addErr errs (hsep [ppr id, of_type, ppr (idType id),
                                 text "is out of scope"]) loc)
     else
         ((), errs)

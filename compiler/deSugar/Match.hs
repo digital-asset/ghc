@@ -440,7 +440,7 @@ tidy1 v _ (LazyPat _ pat)
           putSrcSpanDs (getLoc pat) $
           errDs (hang (text "A lazy (~) pattern cannot bind variables of unlifted type." $$
                        text "Unlifted variables:")
-                    2 (vcat (map (\id -> ppr id <+> dcolon <+> ppr (idType id))
+                    2 (vcat (map (\id -> ppr id <+> of_type <+> ppr (idType id))
                                  unlifted_bndrs)))
 
         ; (_,sel_prs) <- mkSelectorBinds [] pat (Var v)
