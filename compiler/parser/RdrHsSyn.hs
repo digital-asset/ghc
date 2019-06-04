@@ -3011,7 +3011,7 @@ instDecl cid = do
            ]
 
 -- | Construct an 'ensure', 'signatory', 'observer', 'agreement',
--- 'key' or 'maintainer' function binding.
+-- 'key'.
 mkTemplateFunBindDecl ::
      String                      -- function name
   -> Located RdrName             -- data ctor 'T'
@@ -3025,6 +3025,25 @@ mkTemplateFunBindDecl fname con_name (Just body) binds = do
       loc = getLoc body
       ctx = matchContext tag
       match = matchWithBinds ctx [this] loc body binds
+      match_group = matchGroup loc match
+  funBind loc tag match_group
+
+-- | Construct a 'maintainer' function binding. Note for future
+-- refactoring : this only differs from 'mkTemplateFunBindDecl' in the
+-- generated function's argument ('key' vs. 'this').
+mkMaintainerFunBindDecl ::
+     String                      -- function name
+  -> Located RdrName             -- data ctor 'T'
+  -> Maybe (LHsExpr GhcPs)       -- function body
+  -> Maybe (LHsLocalBinds GhcPs) -- local binds
+  -> P (Maybe (LHsBind GhcPs))   -- function binding
+mkMaintainerFunBindDecl _ _ Nothing _ = return Nothing
+mkMaintainerFunBindDecl fname con_name (Just body) binds = do
+  let tag = noLoc $ mkRdrUnqual (mkVarOcc fname)
+      key = XPat (noLoc $ VarPat noExt $ noLoc $ mkRdrUnqual (mkVarOcc "key"))
+      loc = getLoc body
+      ctx = matchContext tag
+      match = matchWithBinds ctx [key] loc body binds
       match_group = matchGroup loc match
   funBind loc tag match_group
 
@@ -3220,7 +3239,7 @@ mkTemplateKeyInstDecl _ _ _ Nothing _ = return []
 mkTemplateKeyInstDecl dataName conName (Just (L _ KeyData{..})) maintainers binds = do
 { -- Function bindings.
   ; mbKeyDecl <- mkTemplateFunBindDecl "key" conName (Just kdKeyExpr) binds
-  ; mbMaintainerDecl <- mkTemplateFunBindDecl "maintainer" conName maintainers binds
+  ; mbMaintainerDecl <- mkMaintainerFunBindDecl "maintainer" conName maintainers binds
   -- Class instance declaration.
   ; let funBinds = bagOfCatMaybes [mbKeyDecl, mbMaintainerDecl]
         className = noLoc $ HsTyVar noExt NotPromoted
