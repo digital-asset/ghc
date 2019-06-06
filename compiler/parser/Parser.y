@@ -505,6 +505,8 @@ are the most common patterns, rewritten as regular expressions for clarity:
  'signature'    { L _ ITsignature }
  'dependency'   { L _ ITdependency }
 
+ 'daml'         { L _ ITdaml }
+
  '{-# INLINE'             { L _ (ITinline_prag _ _ _) } -- INLINE or INLINABLE
  '{-# SPECIALISE'         { L _ (ITspec_prag _) }
  '{-# SPECIALISE_INLINE'  { L _ (ITspec_inline_prag _ _) }
@@ -755,17 +757,49 @@ signature :: { Located (HsModule GhcPs) }
                     ([mj AnnSignature $2, mj AnnWhere $6] ++ fst $7) }
 
 module :: { Located (HsModule GhcPs) }
-       : maybedocheader 'module' modid maybemodwarning maybeexports 'where' body
+       : daml_version maybedocheader 'module' modid maybemodwarning maybeexports 'where' body
              {% fileSrcSpan >>= \ loc ->
-                ams (cL loc (HsModule (Just $3) $5 (fst $ snd $7)
-                              (snd $ snd $7) $4 $1)
+                ams (L loc (HsModule (Just $4) $6 (fst $ snd $8)
+                              (snd $ snd $8) $5 $2)
                     )
-                    ([mj AnnModule $2, mj AnnWhere $6] ++ fst $7) }
-        | body2
+                    ([mj AnnModule $3, mj AnnWhere $7] ++ fst $8) }
+        | daml_version body2
                 {% fileSrcSpan >>= \ loc ->
-                   ams (cL loc (HsModule Nothing Nothing
-                               (fst $ snd $1) (snd $ snd $1) Nothing Nothing))
-                       (fst $1) }
+                   ams (L loc (HsModule Nothing Nothing
+                               (fst $ snd $2) (snd $ snd $2) Nothing Nothing))
+                       (fst $2) }
+
+daml_version :: { () }
+  : daml version     { ()
+                       -- No need to check that damlVersionRequiredEnabled
+                       -- as 'daml' is only parsed as a keyword if it is.
+                     }
+
+  | {- empty  -}     {% do
+                          required <- extension damlSyntaxEnabled
+                          when required $ do
+                            loc <- fileSrcSpan
+                            parseErrorSDoc loc $ text "Missing daml version"
+                     }
+
+
+daml :: { () }
+  : 'daml'           {}
+
+version :: { () }
+  : RATIONAL         {% do
+                          let num = getRATIONAL $1
+                              version = fl_value num
+                              version_text = fl_text num
+                          if version == 1.2 then
+                            return ()
+                          else do
+                            loc <- fileSrcSpan
+                            parseErrorSDoc loc $ text $
+                                "Unrecognized daml version '" ++
+                                 (case version_text of SourceText txt -> txt) ++
+                                 "' (expected 1.2)"
+                      }
 
 maybedocheader :: { Maybe LHsDocString }
         : moduleheader            { $1 }
@@ -812,17 +846,17 @@ top1    :: { ([LImportDecl GhcPs], [LHsDecl GhcPs]) }
 -- Module declaration & imports only
 
 header  :: { Located (HsModule GhcPs) }
-        : maybedocheader 'module' modid maybemodwarning maybeexports 'where' header_body
+        : daml_version maybedocheader 'module' modid maybemodwarning maybeexports 'where' header_body
                 {% fileSrcSpan >>= \ loc ->
-                   ams (cL loc (HsModule (Just $3) $5 $7 [] $4 $1
-                          )) [mj AnnModule $2,mj AnnWhere $6] }
+                   ams (L loc (HsModule (Just $4) $6 $8 [] $5 $2
+                          )) [mj AnnModule $3,mj AnnWhere $7] }
         | maybedocheader 'signature' modid maybemodwarning maybeexports 'where' header_body
                 {% fileSrcSpan >>= \ loc ->
                    ams (cL loc (HsModule (Just $3) $5 $7 [] $4 $1
                           )) [mj AnnModule $2,mj AnnWhere $6] }
-        | header_body2
+        | daml_version header_body2
                 {% fileSrcSpan >>= \ loc ->
-                   return (cL loc (HsModule Nothing Nothing $1 [] Nothing
+                   return (L loc (HsModule Nothing Nothing $2 [] Nothing
                           Nothing)) }
 
 header_body :: { [LImportDecl GhcPs] }
