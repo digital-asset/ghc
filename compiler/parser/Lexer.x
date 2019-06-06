@@ -671,6 +671,13 @@ data Token
   | ITcomment_line_prag         -- See Note [Nested comment line pragmas]
 
   | ITdotdot                    -- reserved symbols
+  -- Note: ITcons and ITof_type should be used in place of ITcolon and
+  -- ITdcolon.  They add a layer of indirection to make the swapped
+  -- colon convention possible.  However, ITcolon and ITdcolon are
+  -- left here to keep any submodules (e.g. Haddock) that use them
+  -- compiling without modification.
+  | ITcons              IsUnicodeSyntax
+  | ITof_type           IsUnicodeSyntax
   | ITcolon
   | ITdcolon            IsUnicodeSyntax
   | ITequal
@@ -884,8 +891,8 @@ reservedSymsFM = listToUFM $
     map (\ (x,w,y,z) -> (mkFastString x,(w,y,z)))
       [ ("..",  ITdotdot,                   NormalSyntax,  0 )
         -- (:) is a reserved op, meaning only list cons
-       ,(":",   ITcolon,                    NormalSyntax,  0 )
-       ,("::",  ITdcolon NormalSyntax,      NormalSyntax,  0 )
+       ,(":",   ITcons NormalSyntax,        NormalSyntax,  0 )
+       ,("::",  ITof_type NormalSyntax,     NormalSyntax,  0 )
        ,("=",   ITequal,                    NormalSyntax,  0 )
        ,("\\",  ITlam,                      NormalSyntax,  0 )
        ,("|",   ITvbar,                     NormalSyntax,  0 )
@@ -1353,29 +1360,38 @@ varsym = sym ITvarsym
 consym = sym ITconsym
 
 sym :: (FastString -> Token) -> Action
-sym con span buf len =
+sym con span buf len = do
+  nccInEffect <- extension damlSyntaxEnabled
+  -- possibly swap ':' and '::'
+  let tweakToken = if nccInEffect then newColonConvention else id
   case lookupUFM reservedSymsFM fs of
     Just (keyword, NormalSyntax, 0) ->
-      return $ L span keyword
+      return $ L span $ tweakToken keyword
     Just (keyword, NormalSyntax, i) -> do
       exts <- getExts
       if exts .&. i /= 0
-        then return $ L span keyword
-        else return $ L span (con fs)
+        then return $ L span $ tweakToken keyword
+        else return $ L span $ tweakToken (con fs)
     Just (keyword, UnicodeSyntax, 0) -> do
       exts <- getExts
       if xtest UnicodeSyntaxBit exts
-        then return $ L span keyword
-        else return $ L span (con fs)
+        then return $ L span $ tweakToken keyword
+        else return $ L span $ tweakToken (con fs)
     Just (keyword, UnicodeSyntax, i) -> do
       exts <- getExts
       if exts .&. i /= 0 && xtest UnicodeSyntaxBit exts
-        then return $ L span keyword
-        else return $ L span (con fs)
+        then return $ L span $ tweakToken keyword
+        else return $ L span $ tweakToken (con fs)
     Nothing ->
       return $ L span $! con fs
   where
     !fs = lexemeToFastString buf len
+
+-- Swap cons and of_type
+newColonConvention :: Token -> Token
+newColonConvention (ITcons _) = ITof_type UnicodeSyntax  -- need to maintain char count?
+newColonConvention (ITof_type _) = ITcons NormalSyntax
+newColonConvention tok = tok
 
 -- Variations on the integral numeric literal.
 tok_integral :: (SourceText -> Integer -> Token)

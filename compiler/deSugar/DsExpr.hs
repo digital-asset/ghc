@@ -236,8 +236,8 @@ dsLExpr (dL->L loc e)
     do { core_expr <- dsExpr e
    -- uncomment this check to test the hsExprType function in TcHsSyn
    --    ; MASSERT2( exprType core_expr `eqType` hsExprType e
-   --              , ppr e <+> dcolon <+> ppr (hsExprType e) $$
-   --                ppr core_expr <+> dcolon <+> ppr (exprType core_expr) )
+   --              , ppr e <+> of_type <+> ppr (hsExprType e) $$
+   --                ppr core_expr <+> of_type <+> ppr (exprType core_expr) )
        ; return core_expr }
 
 -- | Variant of 'dsLExpr' that ensures that the result is not levity
@@ -1169,6 +1169,6 @@ badUseOfLevPolyPrimop id ty
 levPolyPrimopErr :: Id -> Type -> [Type] -> DsM ()
 levPolyPrimopErr primop ty bad_tys
   = errDs $ vcat [ hang (text "Cannot use primitive with levity-polymorphic arguments:")
-                      2 (ppr primop <+> dcolon <+> pprWithTYPE ty)
+                      2 (ppr primop <+> of_type <+> pprWithTYPE ty)
                  , hang (text "Levity-polymorphic arguments:")
-                      2 (vcat (map (\t -> pprWithTYPE t <+> dcolon <+> pprWithTYPE (typeKind t)) bad_tys)) ]
+                      2 (vcat (map (\t -> pprWithTYPE t <+> of_type <+> pprWithTYPE (typeKind t)) bad_tys)) ]

@@ -887,7 +887,7 @@ type instance XXConDeclField (GhcPass _) = NoExt
 
 instance (p ~ GhcPass pass, OutputableBndrId p)
        => Outputable (ConDeclField p) where
-  ppr (ConDeclField _ fld_n fld_ty _) = ppr fld_n <+> dcolon <+> ppr fld_ty
+  ppr (ConDeclField _ fld_n fld_ty _) = ppr fld_n <+> of_type <+> ppr fld_ty
   ppr (XConDeclField x) = ppr x
 
 -- HsConDetails is used for patterns/expressions *and* for data type
@@ -1320,7 +1320,7 @@ instance (p ~ GhcPass pass, OutputableBndrId p)
 instance (p ~ GhcPass pass, OutputableBndrId p)
        => Outputable (HsTyVarBndr p) where
     ppr (UserTyVar _ n)     = ppr n
-    ppr (KindedTyVar _ n k) = parens $ hsep [ppr n, dcolon, ppr k]
+    ppr (KindedTyVar _ n k) = parens $ hsep [ppr n, of_type, ppr k]
     ppr (XTyVarBndr n)      = ppr n
 
 instance (p ~ GhcPass pass,Outputable thing)
@@ -1396,7 +1396,7 @@ pprConDeclFields fields = braces (sep (punctuate comma (map ppr_fld fields)))
   where
     ppr_fld (L _ (ConDeclField { cd_fld_names = ns, cd_fld_type = ty,
                                  cd_fld_doc = doc }))
-        = ppr_names ns <+> dcolon <+> ppr ty <+> ppr_mbDoc doc
+        = ppr_names ns <+> of_type <+> ppr ty <+> ppr_mbDoc doc
     ppr_fld (L _ (XConDeclField x)) = ppr x
     ppr_names [n] = ppr n
     ppr_names ns = sep (punctuate comma (map ppr ns))
@@ -1442,9 +1442,9 @@ ppr_mono_ty (HsTupleTy _ con tys) = tupleParens std_con (pprWithCommas ppr tys)
 ppr_mono_ty (HsSumTy _ tys)
   = tupleParens UnboxedTuple (pprWithBars ppr tys)
 ppr_mono_ty (HsKindSig _ ty kind)
-  = ppr_mono_lty ty <+> dcolon <+> ppr kind
+  = ppr_mono_lty ty <+> of_type <+> ppr kind
 ppr_mono_ty (HsListTy _ ty)       = brackets (ppr_mono_lty ty)
-ppr_mono_ty (HsIParamTy _ n ty)   = (ppr n <+> dcolon <+> ppr_mono_lty ty)
+ppr_mono_ty (HsIParamTy _ n ty)   = (ppr n <+> of_type <+> ppr_mono_lty ty)
 ppr_mono_ty (HsSpliceTy _ s)      = pprSplice s
 ppr_mono_ty (HsExplicitListTy _ prom tys)
   | isPromoted prom = quote $ brackets (maybeAddSpace tys $ interpp'SP tys)

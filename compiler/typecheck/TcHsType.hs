@@ -175,7 +175,7 @@ pprSigCtxt :: UserTypeCtxt -> LHsType GhcRn -> SDoc
 pprSigCtxt ctxt hs_ty
   | Just n <- isSigMaybe ctxt
   = hang (text "In the type signature:")
-       2 (pprPrefixOcc n <+> dcolon <+> ppr hs_ty)
+       2 (pprPrefixOcc n <+> of_type <+> ppr hs_ty)
 
   | otherwise
   = hang (text "In" <+> pprUserTypeCtxt ctxt <> colon)
@@ -1144,7 +1144,7 @@ checkExpectedKind sat hs_ty ty act exp
                                                         (tyConArity tc - length args)
                                                         act)
                    ; let tc_ty = mkTyConApp tc $ args ++ tc_args
-                   ; traceTc "checkExpectedKind:satTyFam" (vcat [ ppr tc <+> dcolon <+> ppr act
+                   ; traceTc "checkExpectedKind:satTyFam" (vcat [ ppr tc <+> of_type <+> ppr act
                                                    , ppr kind ])
                    ; return (tc_ty, kind) }
            _ -> return (ty, act)
@@ -2848,7 +2848,7 @@ reportFloatingKvs tycon_name flav all_tvs bad_tvs
                  2 (ppr_tv_bndrs tidy_all_tvs) ]
 
     ppr_tv_bndrs tvs = sep (map pp_tv tvs)
-    pp_tv tv         = parens (ppr tv <+> dcolon <+> ppr (tyVarKind tv))
+    pp_tv tv         = parens (ppr tv <+> of_type <+> ppr (tyVarKind tv))
 
 -- | If the inner action emits constraints, report them as errors and fail;
 -- otherwise, propagates the return value. Useful as a wrapper around

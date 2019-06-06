@@ -1089,7 +1089,7 @@ ppr_expr (RecordUpd { rupd_expr = L _ aexp, rupd_flds = rbinds })
   = hang (ppr aexp) 2 (braces (fsep (punctuate comma (map ppr rbinds))))
 
 ppr_expr (ExprWithTySig _ expr sig)
-  = hang (nest 2 (ppr_lexpr expr) <+> dcolon)
+  = hang (nest 2 (ppr_lexpr expr) <+> of_type)
          4 (ppr sig)
 
 ppr_expr (ArithSeq _ _ info) = brackets (ppr info)

@@ -1121,7 +1121,7 @@ pprFamilyDecl top_level (FamilyDecl { fdInfo = info, fdLName = ltycon
 
     pp_kind = case result of
                 NoSig    _         -> empty
-                KindSig  _ kind    -> dcolon <+> ppr kind
+                KindSig  _ kind    -> of_type <+> ppr kind
                 TyVarSig _ tv_bndr -> text "=" <+> ppr tv_bndr
                 XFamilyResultSig x -> ppr x
     pp_inj = case mb_inj of
@@ -1421,7 +1421,7 @@ pp_data_defn pp_hdr (HsDataDefn { dd_ND = new_or_data, dd_ctxt = context
                Just ct -> ppr ct
     pp_sig = case mb_sig of
                Nothing   -> empty
-               Just kind -> dcolon <+> ppr kind
+               Just kind -> of_type <+> ppr kind
     pp_derivings (L _ ds) = vcat (map ppr ds)
 pp_data_defn _ (XHsDataDefn x) = ppr x
 
@@ -1460,7 +1460,7 @@ pprConDecl (ConDeclH98 { con_name = L _ con
 pprConDecl (ConDeclGADT { con_names = cons, con_qvars = qvars
                         , con_mb_cxt = mcxt, con_args = args
                         , con_res_ty = res_ty, con_doc = doc })
-  = ppr_mbDoc doc <+> ppr_con_names cons <+> dcolon
+  = ppr_mbDoc doc <+> ppr_con_names cons <+> of_type
     <+> (sep [pprHsForAll (hsq_explicit qvars) cxt,
               ppr_arrow_chain (get_args args ++ [ppr res_ty]) ])
   where
@@ -2077,10 +2077,10 @@ instance (p ~ GhcPass pass, OutputableBndrId p)
        => Outputable (ForeignDecl p) where
   ppr (ForeignImport { fd_name = n, fd_sig_ty = ty, fd_fi = fimport })
     = hang (text "foreign import" <+> ppr fimport <+> ppr n)
-         2 (dcolon <+> ppr ty)
+         2 (of_type <+> ppr ty)
   ppr (ForeignExport { fd_name = n, fd_sig_ty = ty, fd_fe = fexport }) =
     hang (text "foreign export" <+> ppr fexport <+> ppr n)
-       2 (dcolon <+> ppr ty)
+       2 (of_type <+> ppr ty)
   ppr (XForeignDecl x) = ppr x
 
 instance Outputable ForeignImport where
@@ -2227,7 +2227,7 @@ instance (p ~ GhcPass pass, OutputableBndrId p) => Outputable (RuleDecl p) where
 
 instance (p ~ GhcPass pass, OutputableBndrId p) => Outputable (RuleBndr p) where
    ppr (RuleBndr _ name) = ppr name
-   ppr (RuleBndrSig _ name ty) = parens (ppr name <> dcolon <> ppr ty)
+   ppr (RuleBndrSig _ name ty) = parens (ppr name <> of_type <> ppr ty)
    ppr (XRuleBndr x) = ppr x
 
 {-
