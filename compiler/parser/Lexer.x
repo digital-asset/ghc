@@ -606,6 +606,7 @@ data Token
   | ITthen
   | ITtype
   | ITwhere
+  | ITwith
 
   | ITforall            IsUnicodeSyntax -- GHC extension keywords
   | ITexport
@@ -820,6 +821,7 @@ reservedWordsFM = listToUFM $
 
          ( "forall",         ITforall NormalSyntax, 0),
          ( "mdo",            ITmdo,           xbit RecursiveDoBit),
+         ( "with",           ITwith,          xbit DamlSyntaxBit),
              -- See Note [Lexing type pseudo-keywords]
          ( "family",         ITfamily,        0 ),
          ( "role",           ITrole,          0 ),
@@ -1484,6 +1486,7 @@ maybe_layout t = do -- If the alternative layout rule is enabled then
           f ITlcase = pushLexState layout
           f ITlet   = pushLexState layout
           f ITwhere = pushLexState layout
+          f ITwith  = pushLexState layout
           f ITrec   = pushLexState layout
           f ITif    = pushLexState layout_if
           f _       = return ()
@@ -2337,6 +2340,7 @@ data ExtBits
   | DoAndIfThenElseBit
   | MultiWayIfBit
   | GadtSyntaxBit
+  | DamlSyntaxBit
 
   -- Flags that are updated once parsing starts
   | InRulePragBit
@@ -2423,6 +2427,7 @@ mkParserFlags' warningFlags extensionFlags thisPackage
       .|. DoAndIfThenElseBit          `xoptBit` LangExt.DoAndIfThenElse
       .|. MultiWayIfBit               `xoptBit` LangExt.MultiWayIf
       .|. GadtSyntaxBit               `xoptBit` LangExt.GADTSyntax
+      .|. DamlSyntaxBit               `xoptBit` LangExt.DamlSyntax
     optBits =
           HaddockBit        `setBitIf` isHaddock
       .|. RawTokenStreamBit `setBitIf` rawTokStream

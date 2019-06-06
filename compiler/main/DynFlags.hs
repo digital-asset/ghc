@@ -4449,7 +4449,8 @@ xFlagsDeps = [
   flagSpec "UndecidableSuperClasses"          LangExt.UndecidableSuperClasses,
   flagSpec "UnicodeSyntax"                    LangExt.UnicodeSyntax,
   flagSpec "UnliftedFFITypes"                 LangExt.UnliftedFFITypes,
-  flagSpec "ViewPatterns"                     LangExt.ViewPatterns
+  flagSpec "ViewPatterns"                     LangExt.ViewPatterns,
+  flagSpec "DamlSyntax"                       LangExt.DamlSyntax
   ]
 
 defaultFlags :: Settings -> [GeneralFlag]
