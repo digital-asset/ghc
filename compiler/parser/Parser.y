@@ -2309,6 +2309,9 @@ fielddecls1 :: { [LConDeclField GhcPs] }
         : fielddecl maybe_docnext ',' maybe_docprev fielddecls1
             {% addAnnotation (gl $1) AnnComma (gl $3) >>
                return ((addFieldDoc $1 $4) : addFieldDocs $5 $2) }
+        | fielddecl maybe_docnext ';' maybe_docprev fielddecls1
+            {% addAnnotation (gl $1) AnnComma (gl $3) >>
+               return ((addFieldDoc $1 $4) : addFieldDocs $5 $2) }
         | fielddecl   { [$1] }
 
 fielddecl :: { LConDeclField GhcPs }
@@ -3114,6 +3117,9 @@ fbinds  :: { ([AddAnn],([LHsRecField GhcPs (LHsExpr GhcPs)], Bool)) }
 
 fbinds1 :: { ([AddAnn],([LHsRecField GhcPs (LHsExpr GhcPs)], Bool)) }
         : fbind ',' fbinds1
+                {% addAnnotation (gl $1) AnnComma (gl $2) >>
+                   return (case $3 of (ma,(flds, dd)) -> (ma,($1 : flds, dd))) }
+        | fbind ';' fbinds1
                 {% addAnnotation (gl $1) AnnComma (gl $2) >>
                    return (case $3 of (ma,(flds, dd)) -> (ma,($1 : flds, dd))) }
         | fbind                         { ([],([$1], False)) }
