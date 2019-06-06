@@ -52,11 +52,12 @@ module Lexer (
    P(..), ParseResult(..), mkParserFlags, mkParserFlags', ParserFlags,
    getRealSrcLoc, getPState, withThisPackage,
    failLocMsgP, failSpanMsgP, srcParseFail,
-   getMessages,
+   getMessages, extension,
    popContext, pushModuleContext, setLastToken, setSrcLoc,
    activeContext, nextIsEOF,
    getLexState, popLexState, pushLexState,
    ExtBits(..), getBit,
+   damlSyntaxEnabled,
    addWarning,
    lexTokenStream,
    addAnnotation,AddAnn,addAnnsAt,mkParensApiAnn,
@@ -638,6 +639,8 @@ data Token
   | ITdependency
   | ITrequires
 
+  | ITdaml
+
   -- Pragmas, see  note [Pragma source text] in BasicTypes
   | ITinline_prag       SourceText InlineSpec RuleMatchInfo
   | ITspec_prag         SourceText                -- SPECIALISE
@@ -854,7 +857,9 @@ reservedWordsFM = listToUFM $
 
          ( "rec",            ITrec,           xbit ArrowsBit .|.
                                               xbit RecursiveDoBit),
-         ( "proc",           ITproc,          xbit ArrowsBit)
+         ( "proc",           ITproc,          xbit ArrowsBit),
+
+         ( "daml",           ITdaml,          xbit DamlSyntaxBit)
      ]
 
 {-----------------------------------
@@ -2352,8 +2357,11 @@ data ExtBits
   deriving Enum
 
 
+damlSyntaxEnabled :: ExtsBitmap -> Bool
+damlSyntaxEnabled = xtest DamlSyntaxBit
 
-
+extension :: (ExtsBitmap -> Bool) -> P Bool
+extension p = P $ \s -> POk s (p $! (pExtsBitmap . options) s)
 
 -- PState for parsing options pragmas
 --

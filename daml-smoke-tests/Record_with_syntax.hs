@@ -1,5 +1,8 @@
 {-# LANGUAGE DamlSyntax #-}
 
+daml 1.2
+module Record_with_syntax where
+
 data R = R with { foo :: Integer; bar :: String }
 
 data S =
@@ -12,6 +15,3 @@ updateR r =
   r with
     foo = 1
     bar = "quux"
-
-main :: IO ()
-main = undefined
