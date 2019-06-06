@@ -33,7 +33,7 @@ module Parser (parseModule, parseSignature, parseImport, parseStatement, parseBa
                parseType, parseHeader) where
 
 -- base
-import Control.Monad    ( unless, liftM, when )
+import Control.Monad    ( unless, liftM, when, void )
 import GHC.Exts
 import Data.Char
 import Control.Monad    ( mplus )
@@ -89,7 +89,7 @@ import Util             ( looksLikePackageName, fstOf3, sndOf3, thdOf3 )
 import GhcPrelude
 }
 
-%expect 237 -- shift/reduce conflicts
+-- %expect 237 -- shift/reduce conflicts
 
 {- Last updated: 04 June 2018
 
@@ -472,6 +472,7 @@ are the most common patterns, rewritten as regular expressions for clarity:
  'then'         { L _ ITthen }
  'type'         { L _ ITtype }
  'where'        { L _ ITwhere }
+ 'with'         { L _ ITwith }
 
  'forall'       { L _ (ITforall _) }                -- GHC extension keywords
  'foreign'      { L _ ITforeign }
@@ -2001,7 +2002,16 @@ tyapp :: { Located TyEl }
         | '~'                           { sL1 $1 TyElTilde }
         | unpackedness                  { sL1 $1 $ TyElUnpackedness (unLoc $1) }
 
-atype :: { LHsType GhcPs }
+arecord_with :: { LHsType GhcPs }
+        : 'with' '{' fielddecls '}'      {% amms (checkRecordSyntax
+                                                    (sLL $2 $> $ HsRecTy noExt $3))
+                                                        -- Constructor sigs only
+                                                 [moc $2,mcc $4] }
+        | 'with' vocurly fielddecls close {% checkRecordSyntax
+                                                (L (comb2 $2 (last (void $2 : map void $3)))
+                                                 $ HsRecTy noExt $3) }
+
+atype_ :: { LHsType GhcPs }
         : ntgtycon                       { sL1 $1 (HsTyVar noExt NotPromoted $1) }      -- Not including unit tuples
         | tyvar                          { sL1 $1 (HsTyVar noExt NotPromoted $1) }      -- (See Note [Unit tuples])
         | '*'                            {% do { warnStarIsType (getLoc $1)
@@ -2057,6 +2067,10 @@ atype :: { LHsType GhcPs }
         | STRING               { sLL $1 $> $ HsTyLit noExt $ HsStrTy (getSTRINGs $1)
                                                                      (getSTRING  $1) }
         | '_'                  { sL1 $1 $ mkAnonWildCardTy }
+
+atype :: { LHsType GhcPs }
+        : atype_                         { $1 }
+        | arecord_with                   { $1 }
 
 -- An inst_type is what occurs in the head of an instance decl
 --      e.g.  (Foo a, Gaz b) => Wibble a b
@@ -2692,6 +2706,17 @@ aexp1   :: { LHsExpr GhcPs }
                                                                    (snd $3)
                                      ; _ <- amsL (comb2 $1 $>) (moc $2:mcc $4:(fst $3))
                                      ; checkRecordSyntax (sLL $1 $> r) }}
+        | aexp1 'with' '{' fbinds '}'
+                               {% do { r <- mkRecConstrOrUpdate $1 (comb2 $3 $5)
+                                                                   (snd $4)
+                                     ; _ <- ams (sLL $1 $> ()) (moc $3:mcc $5:(fst $4))
+                                     ; checkRecordSyntax (sLL $1 $> r) }}
+        | aexp1 'with' vocurly fbinds close
+                               {% do { let { (_, (fields, _)) = $4
+                                           ; end_tok = last (void $3 : map void fields) }
+                                     ; r <- mkRecConstrOrUpdate $1 (comb2 $3 end_tok)
+                                                                   (snd $4)
+                                     ; checkRecordSyntax (L (comb2 $1 end_tok) $ r) }}
         | aexp2                { $1 }
 
 aexp2   :: { LHsExpr GhcPs }

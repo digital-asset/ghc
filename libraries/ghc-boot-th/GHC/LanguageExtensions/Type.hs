@@ -139,4 +139,6 @@ data Extension
    | NumericUnderscores
    | QuantifiedConstraints
    | StarIsType
+
+   | DamlSyntax
    deriving (Eq, Enum, Show, Generic)
