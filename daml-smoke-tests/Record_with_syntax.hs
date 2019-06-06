@@ -1,6 +1,11 @@
 {-# LANGUAGE DamlSyntax #-}
 
-data R = R with foo :: Integer; bar :: String
+data R = R with { foo :: Integer; bar :: String }
+
+data S =
+  S with
+    quux :: Integer
+    corge :: String
 
 updateR :: R -> R
 updateR r =
