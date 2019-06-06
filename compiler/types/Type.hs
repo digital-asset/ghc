@@ -2275,7 +2275,7 @@ isUnliftedType :: HasDebugCallStack => Type -> Bool
         -- construct them
 isUnliftedType ty
   = not (isLiftedType_maybe ty `orElse`
-         pprPanic "isUnliftedType" (ppr ty <+> dcolon <+> ppr (typeKind ty)))
+         pprPanic "isUnliftedType" (ppr ty <+> of_type <+> ppr (typeKind ty)))
 
 -- | Is this a type of kind RuntimeRep? (e.g. LiftedRep)
 isRuntimeRepKindedTy :: Type -> Bool
@@ -2303,7 +2303,7 @@ getRuntimeRep :: HasDebugCallStack => Type -> Type
 getRuntimeRep ty
   = case getRuntimeRep_maybe ty of
       Just r  -> r
-      Nothing -> pprPanic "getRuntimeRep" (ppr ty <+> dcolon <+> ppr (typeKind ty))
+      Nothing -> pprPanic "getRuntimeRep" (ppr ty <+> of_type <+> ppr (typeKind ty))
 
 isUnboxedTupleType :: Type -> Bool
 isUnboxedTupleType ty
@@ -2719,7 +2719,7 @@ typeKind ty@(ForAllTy {})
   = case occCheckExpand tvs body_kind of   -- We must make sure tv does not occur in kind
       Just k' -> k'                        -- As it is already out of scope!
       Nothing -> pprPanic "typeKind"
-                  (ppr ty $$ ppr tvs $$ ppr body <+> dcolon <+> ppr body_kind)
+                  (ppr ty $$ ppr tvs $$ ppr body <+> of_type <+> ppr body_kind)
   where
     (tvs, body) = splitTyVarForAllTys ty
     body_kind   = typeKind body
@@ -2753,7 +2753,7 @@ tcTypeKind ty@(ForAllTy {})
   = case occCheckExpand tvs body_kind of   -- We must make sure tv does not occur in kind
       Just k' -> k'                        -- As it is already out of scope!
       Nothing -> pprPanic "tcTypeKind"
-                  (ppr ty $$ ppr tvs $$ ppr body <+> dcolon <+> ppr body_kind)
+                  (ppr ty $$ ppr tvs $$ ppr body <+> of_type <+> ppr body_kind)
   where
     (tvs, body) = splitTyVarForAllTys ty
     body_kind = tcTypeKind body

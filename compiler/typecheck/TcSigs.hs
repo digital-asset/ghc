@@ -456,7 +456,7 @@ tcPatSynSig name sig_ty
 tcPatSynSig _ (XHsImplicitBndrs _) = panic "tcPatSynSig"
 
 ppr_tvs :: [TyVar] -> SDoc
-ppr_tvs tvs = braces (vcat [ ppr tv <+> dcolon <+> ppr (tyVarKind tv)
+ppr_tvs tvs = braces (vcat [ ppr tv <+> of_type <+> ppr (tyVarKind tv)
                            | tv <- tvs])
 
 

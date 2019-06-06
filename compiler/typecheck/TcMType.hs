@@ -775,7 +775,7 @@ writeMetaTyVarRef :: TcTyVar -> TcRef MetaDetails -> TcType -> TcM ()
 -- the ref cell must be for the same tyvar
 writeMetaTyVarRef tyvar ref ty
   | not debugIsOn
-  = do { traceTc "writeMetaTyVar" (ppr tyvar <+> dcolon <+> ppr (tyVarKind tyvar)
+  = do { traceTc "writeMetaTyVar" (ppr tyvar <+> of_type <+> ppr (tyVarKind tyvar)
                                    <+> text ":=" <+> ppr ty)
        ; writeTcRef ref (Indirect ty) }
 
@@ -1433,7 +1433,7 @@ quantifyTyVars gbl_tvs
              bad_msg = hang (text "Quantification by level numbers would fail")
                           2 (vcat [ text "Outer level =" <+> ppr outer_tclvl
                                   , text "dep_tkvs ="    <+> ppr dep_tkvs
-                                  , text "co_vars ="     <+> vcat [ ppr cv <+> dcolon <+> ppr (varType cv)
+                                  , text "co_vars ="     <+> vcat [ ppr cv <+> of_type <+> ppr (varType cv)
                                                                   | cv <- nonDetEltsUniqSet covars ]
                                   , text "co_tvs ="      <+> ppr co_tvs
                                   , text "dep_kvs ="     <+> ppr dep_kvs

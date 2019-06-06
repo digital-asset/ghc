@@ -1204,7 +1204,7 @@ mkHoleError tidy_simples ctxt ct@(CHoleCan { cc_hole = hole })
                                -- equalities (#15039)
       = pprType hole_ty
       | otherwise
-      = pprType hole_ty <+> dcolon <+> pprKind hole_kind
+      = pprType hole_ty <+> of_type <+> pprKind hole_kind
 
     tyvars_msg = ppUnless (null tyvars) $
                  text "Where:" <+> (vcat (map loc_msg other_tvs)
@@ -1273,7 +1273,7 @@ givenConstraintsMsg ctxt =
             2 (vcat $ map pprConstraint constraints)
 
 pp_with_type :: OccName -> Type -> SDoc
-pp_with_type occ ty = hang (pprPrefixOcc occ) 2 (dcolon <+> pprType ty)
+pp_with_type occ ty = hang (pprPrefixOcc occ) 2 (of_type <+> pprType ty)
 
 ----------------
 mkIPErr :: ReportErrCtxt -> [Ct] -> TcM ErrMsg
@@ -1507,9 +1507,9 @@ mkEqErr1 ctxt ct   -- Wanted or derived;
                          |  gopt Opt_PrintExplicitCoercions dflags
                          || not (cty1 `pickyEqType` cty2)
                          -> hang (text "When matching" <+> sub_what)
-                               2 (vcat [ ppr cty1 <+> dcolon <+>
+                               2 (vcat [ ppr cty1 <+> of_type <+>
                                          ppr (tcTypeKind cty1)
-                                       , ppr cty2 <+> dcolon <+>
+                                       , ppr cty2 <+> of_type <+>
                                          ppr (tcTypeKind cty2) ])
                        _ -> text "When matching the kind of" <+> quotes (ppr cty1)
               msg2 = case sub_o of
@@ -1661,7 +1661,7 @@ mkTyVarEqErr' dflags ctxt report ct oriented tv1 co1 ty2
                       vcat (map (tyvar_binding . tidyTyCoVarOcc (cec_tidy ctxt))
                                 interesting_tyvars)
 
-             tyvar_binding tv = ppr tv <+> dcolon <+> ppr (tyVarKind tv)
+             tyvar_binding tv = ppr tv <+> of_type <+> ppr (tyVarKind tv)
        ; mkErrorMsgFromCt ctxt ct $
          mconcat [important main_msg, extra2, extra3, report] }
 
@@ -1680,9 +1680,9 @@ mkTyVarEqErr' dflags ctxt report ct oriented tv1 co1 ty2
   | not (k1 `tcEqType` k2)
   = do { let main_msg = addArising (ctOrigin ct) $
                         vcat [ hang (text "Kind mismatch: cannot unify" <+>
-                                     parens (ppr tv1 <+> dcolon <+> ppr (tyVarKind tv1)) <+>
+                                     parens (ppr tv1 <+> of_type <+> ppr (tyVarKind tv1)) <+>
                                      text "with:")
-                                  2 (sep [ppr ty2, dcolon, ppr k2])
+                                  2 (sep [ppr ty2, of_type, ppr k2])
                              , text "Their kinds differ." ]
              cast_msg
                | isTcReflexiveCo co1 = empty
@@ -2525,7 +2525,7 @@ mk_dict_err ctxt@(CEC {cec_encl = implics}) (ct, (matches, unifiers, unsafe_over
                , not (isTypeFamilyTyCon tc)
                = hang (text "GHC can't yet do polykinded")
                     2 (text "Typeable" <+>
-                       parens (ppr ty <+> dcolon <+> ppr (tcTypeKind ty)))
+                       parens (ppr ty <+> of_type <+> ppr (tcTypeKind ty)))
                | otherwise
                = empty
 
@@ -2969,7 +2969,7 @@ relevantBindings want_filtering ctxt ct
            vcat [ ppr ct
                 , pprCtOrigin (ctLocOrigin loc)
                 , ppr ct_tvs
-                , pprWithCommas id [ ppr id <+> dcolon <+> ppr (idType id)
+                , pprWithCommas id [ ppr id <+> of_type <+> ppr (idType id)
                                    | TcIdBndr id _ <- tcl_bndrs lcl_env ]
                 , pprWithCommas id
                     [ ppr id | TcIdBndr_ExpType id _ _ <- tcl_bndrs lcl_env ] ]
@@ -3031,9 +3031,9 @@ relevantBindings want_filtering ctxt ct
                         discards tc_bndrs
         go2 id_name id_type top_lvl
           = do { (tidy_env', tidy_ty) <- zonkTidyTcType tidy_env id_type
-               ; traceTc "relevantBindings 1" (ppr id_name <+> dcolon <+> ppr tidy_ty)
+               ; traceTc "relevantBindings 1" (ppr id_name <+> of_type <+> ppr tidy_ty)
                ; let id_tvs = tyCoVarsOfType tidy_ty
-                     doc = sep [ pprPrefixOcc id_name <+> dcolon <+> ppr tidy_ty
+                     doc = sep [ pprPrefixOcc id_name <+> of_type <+> ppr tidy_ty
                                , nest 2 (parens (text "bound at"
                                     <+> ppr (getSrcLoc id_name)))]
                      new_seen = tvs_seen `unionVarSet` id_tvs

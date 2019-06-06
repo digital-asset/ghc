@@ -977,7 +977,7 @@ chooseInferredQuantifiers inferred_theta tau_tvs qtvs
       = addErrTc (hang (text "Couldn't match" <+> quotes (ppr n1)
                         <+> text "with" <+> quotes (ppr n2))
                      2 (hang (text "both bound by the partial type signature:")
-                           2 (ppr fn_name <+> dcolon <+> ppr hs_ty)))
+                           2 (ppr fn_name <+> of_type <+> ppr hs_ty)))
 
       | otherwise -- Can't happen; by now we know it's a partial sig
       = pprPanic "report_tyvar_tv_err" (ppr sig)
@@ -986,7 +986,7 @@ chooseInferredQuantifiers inferred_theta tau_tvs qtvs
       | PartialSig { psig_name = fn_name, psig_hs_ty = hs_ty } <- sig
       = addErrTc (hang (text "Can't quantify over" <+> quotes (ppr n))
                      2 (hang (text "bound by the partial type signature:")
-                           2 (ppr fn_name <+> dcolon <+> ppr hs_ty)))
+                           2 (ppr fn_name <+> of_type <+> ppr hs_ty)))
       | otherwise -- Can't happen; by now we know it's a partial sig
       = pprPanic "report_mono_sig_tv_err" (ppr sig)
 
@@ -1043,9 +1043,9 @@ mk_impedance_match_msg (MBI { mbi_poly_name = name, mbi_sig = mb_sig })
  = do { (tidy_env1, inf_ty) <- zonkTidyTcType tidy_env  inf_ty
       ; (tidy_env2, sig_ty) <- zonkTidyTcType tidy_env1 sig_ty
       ; let msg = vcat [ text "When checking that the inferred type"
-                       , nest 2 $ ppr name <+> dcolon <+> ppr inf_ty
+                       , nest 2 $ ppr name <+> of_type <+> ppr inf_ty
                        , text "is as general as its" <+> what <+> text "signature"
-                       , nest 2 $ ppr name <+> dcolon <+> ppr sig_ty ]
+                       , nest 2 $ ppr name <+> of_type <+> ppr sig_ty ]
       ; return (tidy_env2, msg) }
   where
     what = case mb_sig of
@@ -1058,7 +1058,7 @@ mk_inf_msg :: Name -> TcType -> TidyEnv -> TcM (TidyEnv, SDoc)
 mk_inf_msg poly_name poly_ty tidy_env
  = do { (tidy_env1, poly_ty) <- zonkTidyTcType tidy_env poly_ty
       ; let msg = vcat [ text "When checking the inferred type"
-                       , nest 2 $ ppr poly_name <+> dcolon <+> ppr poly_ty ]
+                       , nest 2 $ ppr poly_name <+> of_type <+> ppr poly_ty ]
       ; return (tidy_env1, msg) }
 
 
@@ -1077,7 +1077,7 @@ warnMissingSignatures flag msg id
         ; let (env1, tidy_ty) = tidyOpenType env0 (idType id)
         ; addWarnTcM (Reason flag) (env1, mk_msg tidy_ty) }
   where
-    mk_msg ty = sep [ msg, nest 2 $ pprPrefixName (idName id) <+> dcolon <+> ppr ty ]
+    mk_msg ty = sep [ msg, nest 2 $ pprPrefixName (idName id) <+> of_type <+> ppr ty ]
 
 checkOverloadedSig :: Bool -> TcIdSigInst -> TcM ()
 -- Example:
@@ -1370,7 +1370,7 @@ tcLhs sig_fn no_gen (PatBind { pat_lhs = pat, pat_rhs = grhss })
 
         ; let mbis = sig_mbis ++ nosig_mbis
 
-        ; traceTc "tcLhs" (vcat [ ppr id <+> dcolon <+> ppr (idType id)
+        ; traceTc "tcLhs" (vcat [ ppr id <+> of_type <+> ppr (idType id)
                                 | mbi <- mbis, let id = mbi_mono_id mbi ]
                            $$ ppr no_gen)
 

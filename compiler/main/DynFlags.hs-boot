@@ -18,3 +18,4 @@ shouldUseColor           :: DynFlags -> Bool
 shouldUseHexWordLiterals :: DynFlags -> Bool
 hasPprDebug              :: DynFlags -> Bool
 hasNoDebugOutput         :: DynFlags -> Bool
+performNewColonConvention :: DynFlags -> Bool
