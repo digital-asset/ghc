@@ -25,7 +25,7 @@ module Outputable (
         int, intWithCommas, integer, word, float, double, rational, doublePrec,
         parens, cparen, brackets, braces, quotes, quote,
         doubleQuotes, angleBrackets,
-        semi, comma, colon, dcolon, space, equals, dot, vbar,
+        semi, comma, colon, dcolon, of_type, space, equals, dot, vbar,
         arrow, larrow, darrow, arrowt, larrowt, arrowtt, larrowtt,
         lparen, rparen, lbrack, rbrack, lbrace, rbrace, underscore,
         blankLine, forAllLit, kindType, bullet,
@@ -93,7 +93,7 @@ import {-# SOURCE #-}   DynFlags( DynFlags, hasPprDebug, hasNoDebugOutput,
                                   targetPlatform, pprUserLength, pprCols,
                                   useUnicode, useUnicodeSyntax, useStarIsType,
                                   shouldUseColor, unsafeGlobalDynFlags,
-                                  shouldUseHexWordLiterals )
+                                  shouldUseHexWordLiterals, performNewColonConvention )
 import {-# SOURCE #-}   Module( UnitId, Module, ModuleName, moduleName )
 import {-# SOURCE #-}   OccName( OccName )
 
@@ -614,7 +614,7 @@ quotes d =
              ('\'' : _, _)       -> pp_d
              _other              -> Pretty.quotes pp_d
 
-semi, comma, colon, equals, space, dcolon, underscore, dot, vbar :: SDoc
+semi, comma, colon, equals, space, dcolon, of_type, underscore, dot, vbar :: SDoc
 arrow, larrow, darrow, arrowt, larrowt, arrowtt, larrowtt :: SDoc
 lparen, rparen, lbrack, rbrack, lbrace, rbrace, blankLine :: SDoc
 
@@ -641,6 +641,11 @@ lbrack     = docToSDoc $ Pretty.lbrack
 rbrack     = docToSDoc $ Pretty.rbrack
 lbrace     = docToSDoc $ Pretty.lbrace
 rbrace     = docToSDoc $ Pretty.rbrace
+of_type    =
+  sdocWithDynFlags $ \dflags ->
+                       if performNewColonConvention dflags
+                       then colon
+                       else dcolon
 
 forAllLit :: SDoc
 forAllLit = unicodeSyntax (char '∀') (text "forall")

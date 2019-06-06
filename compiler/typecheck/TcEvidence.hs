@@ -906,7 +906,7 @@ pprHsWrapper wrap pp_thing_inside
     -- False <=> appears as body of let or lambda
     help it WpHole             = it
     help it (WpCompose f1 f2)  = help (help it f2) f1
-    help it (WpFun f1 f2 t1 _) = add_parens $ text "\\(x" <> dcolon <> ppr t1 <> text ")." <+>
+    help it (WpFun f1 f2 t1 _) = add_parens $ text "\\(x" <> of_type <> ppr t1 <> text ")." <+>
                                               help (\_ -> it True <+> help (\_ -> text "x") f1 True) f2 False
     help it (WpCast co)   = add_parens $ sep [it False, nest 2 (text "|>"
                                               <+> pprParendCo co)]
@@ -947,7 +947,7 @@ instance Outputable EvBind where
 
 instance Outputable EvTerm where
   ppr (EvExpr e)         = ppr e
-  ppr (EvTypeable ty ev) = ppr ev <+> dcolon <+> text "Typeable" <+> ppr ty
+  ppr (EvTypeable ty ev) = ppr ev <+> of_type <+> text "Typeable" <+> ppr ty
   ppr (EvFun { et_tvs = tvs, et_given = gs, et_binds = bs, et_body = w })
       = hang (text "\\" <+> sep (map pprLamBndr (tvs ++ gs)) <+> arrow)
            2 (ppr bs $$ ppr w)   -- Not very pretty

@@ -158,7 +158,7 @@ pprOptCo :: Coercion -> SDoc
 pprOptCo co = sdocWithDynFlags $ \dflags ->
               if gopt Opt_SuppressCoercions dflags
               then angleBrackets (text "Co:" <> int (coercionSize co))
-              else parens (sep [ppr co, dcolon <+> ppr (coercionType co)])
+              else parens (sep [ppr co, of_type <+> ppr (coercionType co)])
 
 ppr_expr :: OutputableBndr b => (SDoc -> SDoc) -> Expr b -> SDoc
         -- The function adds parens in context that need
@@ -409,7 +409,7 @@ pprTypedLamBinder bind_site debug_on var
       | isTyVar var  -> parens (pprKindedTyVarBndr var)
 
       | otherwise    -> parens (hang (pprIdBndr var)
-                                   2 (vcat [ dcolon <+> pprType (idType var)
+                                   2 (vcat [ of_type <+> pprType (idType var)
                                            , pp_unf]))
   where
     suppress_sigs = gopt Opt_SuppressTypeSignatures
@@ -426,7 +426,7 @@ pprTypedLetBinder binder
     _
       | isTyVar binder                         -> pprKindedTyVarBndr binder
       | gopt Opt_SuppressTypeSignatures dflags -> pprIdBndr binder
-      | otherwise                              -> hang (pprIdBndr binder) 2 (dcolon <+> pprType (idType binder))
+      | otherwise                              -> hang (pprIdBndr binder) 2 (of_type <+> pprType (idType binder))
 
 pprKindedTyVarBndr :: TyVar -> SDoc
 -- Print a type variable binder with its kind (but not if *)
@@ -617,4 +617,3 @@ instance Outputable id => Outputable (Tickish id) where
          _            -> hcat [text "scc<",     ppr cc, char '>']
   ppr (SourceNote span _) =
       hcat [ text "src<", pprUserRealSpan True span, char '>']
-

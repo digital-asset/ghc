@@ -318,7 +318,7 @@ data IfaceCompleteMatch = IfaceCompleteMatch [IfExtName] IfExtName
 
 instance Outputable IfaceCompleteMatch where
   ppr (IfaceCompleteMatch cls ty) = text "COMPLETE" <> colon <+> ppr cls
-                                                    <+> dcolon <+> ppr ty
+                                                    <+> of_type <+> ppr ty
 
 
 
@@ -729,7 +729,7 @@ pprIfaceDecl ss (IfaceData { ifName = tycon, ifCType = ctype,
     pp_cons    = ppr_trim (map show_con cons) :: [SDoc]
     pp_kind
       | isIfaceLiftedTypeKind kind = empty
-      | otherwise = dcolon <+> ppr kind
+      | otherwise = of_type <+> ppr kind
 
     pp_lhs = case parent of
                IfNoParent -> pprIfaceDeclHead context ss tycon binders Nothing
@@ -816,7 +816,7 @@ pprIfaceDecl ss (IfaceSynonym { ifName    = tc
                               , ifResKind = res_kind})
   = hang (text "type" <+> pprIfaceDeclHead [] ss tc binders Nothing <+> equals)
        2 (sep [ pprIfaceForAll tvs, pprIfaceContextArr theta, ppr tau
-              , ppUnless (isIfaceLiftedTypeKind res_kind) (dcolon <+> ppr res_kind) ])
+              , ppUnless (isIfaceLiftedTypeKind res_kind) (of_type <+> ppr res_kind) ])
   where
     (tvs, theta, tau) = splitIfaceSigmaTy mono_ty
 
@@ -877,7 +877,7 @@ pprIfaceDecl _ (IfacePatSyn { ifName = name,
   where
     mk_msg dflags
       = hang (text "pattern" <+> pprPrefixOcc name)
-           2 (dcolon <+> sep [univ_msg
+           2 (of_type <+> sep [univ_msg
                              , pprIfaceContextArr req_ctxt
                              , ppWhen insert_empty_ctxt $ parens empty <+> darrow
                              , ex_msg
@@ -892,14 +892,14 @@ pprIfaceDecl _ (IfacePatSyn { ifName = name,
 
 pprIfaceDecl ss (IfaceId { ifName = var, ifType = ty,
                               ifIdDetails = details, ifIdInfo = info })
-  = vcat [ hang (pprPrefixIfDeclBndr (ss_how_much ss) (occName var) <+> dcolon)
+  = vcat [ hang (pprPrefixIfDeclBndr (ss_how_much ss) (occName var) <+> of_type)
               2 (pprIfaceSigmaType (ss_forall ss) ty)
          , ppShowIface ss (ppr details)
          , ppShowIface ss (ppr info) ]
 
 pprIfaceDecl _ (IfaceAxiom { ifName = name, ifTyCon = tycon
                            , ifAxBranches = branches })
-  = hang (text "axiom" <+> ppr name <+> dcolon)
+  = hang (text "axiom" <+> ppr name <+> of_type)
        2 (vcat $ map (pprAxBranch (ppr tycon)) branches)
 
 pprCType :: Maybe CType -> SDoc
@@ -943,7 +943,7 @@ pprIfaceClassOp ss (IfaceClassOp n ty dm)
               = empty
    pp_sig n ty
      = pprPrefixIfDeclBndr (ss_how_much ss) (occName n)
-     <+> dcolon
+     <+> of_type
      <+> pprIfaceSigmaType ShowForAllWhen ty
 
 instance Outputable IfaceAT where
@@ -975,7 +975,7 @@ pprIfaceDeclHead context ss tc_occ bndrs m_res_kind
     sep [ pprIfaceContextArr context
         , pprPrefixIfDeclBndr (ss_how_much ss) (occName tc_occ)
           <+> pprIfaceTyConBinders (suppressIfaceInvisibles dflags bndrs bndrs)
-        , maybe empty (\res_kind -> dcolon <+> pprIfaceType res_kind) m_res_kind ]
+        , maybe empty (\res_kind -> of_type <+> pprIfaceType res_kind) m_res_kind ]
 
 pprIfaceConDecl :: ShowSub -> Bool
                 -> IfaceTopBndr
@@ -987,7 +987,7 @@ pprIfaceConDecl ss gadt_style tycon tc_binders parent
                  ifConUserTvBinders = user_tvbs,
                  ifConEqSpec = eq_spec, ifConCtxt = ctxt, ifConArgTys = arg_tys,
                  ifConStricts = stricts, ifConFields = fields })
-  | gadt_style = pp_prefix_con <+> dcolon <+> ppr_gadt_ty
+  | gadt_style = pp_prefix_con <+> of_type <+> ppr_gadt_ty
   | otherwise  = ppr_ex_quant pp_h98_con
   where
     pp_h98_con
@@ -1085,7 +1085,7 @@ pprIfaceConDecl ss gadt_style tycon tc_binders parent
     maybe_show_label :: FieldLabel -> (IfaceBang, IfaceType) -> Maybe SDoc
     maybe_show_label lbl bty
       | showSub ss sel = Just (pprPrefixIfDeclBndr how_much occ
-                                <+> dcolon <+> pprFieldArgTy bty)
+                                <+> of_type <+> pprFieldArgTy bty)
       | otherwise      = Nothing
       where
         sel = flSelector lbl
@@ -1261,7 +1261,7 @@ ppr_con_bs con bs = ppr con <+> hsep (map ppr bs)
 
 ppr_bind :: (IfaceLetBndr, IfaceExpr) -> SDoc
 ppr_bind (IfLetBndr b ty info ji, rhs)
-  = sep [hang (ppr b <+> dcolon <+> ppr ty) 2 (ppr ji <+> ppr info),
+  = sep [hang (ppr b <+> of_type <+> ppr ty) 2 (ppr ji <+> ppr info),
          equals <+> pprIfaceExpr noParens rhs]
 
 ------------------

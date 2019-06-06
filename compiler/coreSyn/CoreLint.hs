@@ -1021,7 +1021,7 @@ lintCoreArg fun_ty arg
            -- See Note [Levity polymorphism invariants] in CoreSyn
        ; lintL (not (isTypeLevPoly arg_ty))
            (text "Levity-polymorphic argument:" <+>
-             (ppr arg <+> dcolon <+> parens (ppr arg_ty <+> dcolon <+> ppr (typeKind arg_ty))))
+             (ppr arg <+> of_type <+> parens (ppr arg_ty <+> of_type <+> ppr (typeKind arg_ty))))
           -- check for levity polymorphism first, because otherwise isUnliftedType panics
 
        ; checkL (not (isUnliftedType arg_ty) || exprOkForSpeculation arg)
@@ -1251,7 +1251,7 @@ lintIdBndr top_lvl bind_site id linterF
           -- See Note [Levity polymorphism invariants] in CoreSyn
        ; lintL (isJoinId id || not (isKindLevPoly k))
            (text "Levity-polymorphic binder:" <+>
-                 (ppr id <+> dcolon <+> parens (ppr ty <+> dcolon <+> ppr k)))
+                 (ppr id <+> of_type <+> parens (ppr ty <+> of_type <+> ppr k)))
 
        -- Check that a join-id is a not-top-level let-binding
        ; when (isJoinId id) $
@@ -1261,7 +1261,7 @@ lintIdBndr top_lvl bind_site id linterF
        -- Check that the Id does not have type (t1 ~# t2) or (t1 ~R# t2);
        -- if so, it should be a CoVar, and checked by lintCoVarBndr
        ; lintL (not (isCoVarType ty))
-               (text "Non-CoVar has coercion type" <+> ppr id <+> dcolon <+> ppr ty)
+               (text "Non-CoVar has coercion type" <+> ppr id <+> of_type <+> ppr ty)
 
        ; let id' = setIdType id ty
        ; addInScopeVar id' $ (linterF id') }
@@ -2026,7 +2026,7 @@ lintUnliftedCoVar :: CoVar -> LintM ()
 lintUnliftedCoVar cv
   = when (not (isUnliftedType (coVarKind cv))) $
     failWithL (text "Bad lifted equality:" <+> ppr cv
-                 <+> dcolon <+> ppr (coVarKind cv))
+                 <+> of_type <+> ppr (coVarKind cv))
 
 {-
 ************************************************************************
@@ -2413,8 +2413,8 @@ pp_binders :: [Var] -> SDoc
 pp_binders bs = sep (punctuate comma (map pp_binder bs))
 
 pp_binder :: Var -> SDoc
-pp_binder b | isId b    = hsep [ppr b, dcolon, ppr (idType b)]
-            | otherwise = hsep [ppr b, dcolon, ppr (tyVarKind b)]
+pp_binder b | isId b    = hsep [ppr b, of_type, ppr (idType b)]
+            | otherwise = hsep [ppr b, of_type, ppr (tyVarKind b)]
 
 ------------------------------------------------------
 --      Messages for case expressions
@@ -2502,7 +2502,7 @@ mkLetErr :: TyVar -> CoreExpr -> MsgDoc
 mkLetErr bndr rhs
   = vcat [text "Bad `let' binding:",
           hang (text "Variable:")
-                 4 (ppr bndr <+> dcolon <+> ppr (varType bndr)),
+                 4 (ppr bndr <+> of_type <+> ppr (varType bndr)),
           hang (text "Rhs:")
                  4 (ppr rhs)]
 
@@ -2510,9 +2510,9 @@ mkTyAppMsg :: Type -> Type -> MsgDoc
 mkTyAppMsg ty arg_ty
   = vcat [text "Illegal type application:",
               hang (text "Exp type:")
-                 4 (ppr ty <+> dcolon <+> ppr (typeKind ty)),
+                 4 (ppr ty <+> of_type <+> ppr (typeKind ty)),
               hang (text "Arg type:")
-                 4 (ppr arg_ty <+> dcolon <+> ppr (typeKind arg_ty))]
+                 4 (ppr arg_ty <+> of_type <+> ppr (typeKind arg_ty))]
 
 emptyRec :: CoreExpr -> MsgDoc
 emptyRec e = hang (text "Empty Rec binding:") 2 (ppr e)
@@ -2558,9 +2558,9 @@ mkKindErrMsg :: TyVar -> Type -> MsgDoc
 mkKindErrMsg tyvar arg_ty
   = vcat [text "Kinds don't match in type application:",
           hang (text "Type variable:")
-                 4 (ppr tyvar <+> dcolon <+> ppr (tyVarKind tyvar)),
+                 4 (ppr tyvar <+> of_type <+> ppr (tyVarKind tyvar)),
           hang (text "Arg type:")
-                 4 (ppr arg_ty <+> dcolon <+> ppr (typeKind arg_ty))]
+                 4 (ppr arg_ty <+> of_type <+> ppr (typeKind arg_ty))]
 
 {- Not needed now
 mkArityMsg :: Id -> MsgDoc
@@ -2617,7 +2617,7 @@ mkBadProofIrrelMsg ty co
 mkBadTyVarMsg :: Var -> SDoc
 mkBadTyVarMsg tv
   = text "Non-tyvar used in TyVarTy:"
-      <+> ppr tv <+> dcolon <+> ppr (varType tv)
+      <+> ppr tv <+> of_type <+> ppr (varType tv)
 
 mkBadJoinBindMsg :: Var -> SDoc
 mkBadJoinBindMsg var
@@ -2627,7 +2627,7 @@ mkBadJoinBindMsg var
 mkInvalidJoinPointMsg :: Var -> Type -> SDoc
 mkInvalidJoinPointMsg var ty
   = hang (text "Join point has invalid type:")
-        2 (ppr var <+> dcolon <+> ppr ty)
+        2 (ppr var <+> of_type <+> ppr ty)
 
 mkBadJoinArityMsg :: Var -> Int -> Int -> CoreExpr -> SDoc
 mkBadJoinArityMsg var ar nlams rhs

@@ -29,6 +29,7 @@ module DynFlags (
         glasgowExtsFlags,
         warningGroups, warningHierarchies,
         hasPprDebug, hasNoDebugOutput, hasNoStateHack, hasNoOptCoercion,
+        performNewColonConvention,
         dopt, dopt_set, dopt_unset,
         gopt, gopt_set, gopt_unset, setGeneralFlag', unSetGeneralFlag',
         wopt, wopt_set, wopt_unset,
@@ -1639,6 +1640,10 @@ shouldUseColor dflags = overrideWith (canUseColor dflags) (useColor dflags)
 shouldUseHexWordLiterals :: DynFlags -> Bool
 shouldUseHexWordLiterals dflags =
   Opt_HexWordLiterals `EnumSet.member` generalFlags dflags
+
+-- | Display error messages using the "new colon convention"?
+performNewColonConvention :: DynFlags -> Bool
+performNewColonConvention = xopt LangExt.DamlSyntax
 
 -- | Are we building with @-fPIE@ or @-fPIC@ enabled?
 positionIndependent :: DynFlags -> Bool

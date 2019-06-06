@@ -1210,7 +1210,7 @@ tcFunApp :: Maybe SDoc  -- like "The function `f' is applied to"
 tcFunApp m_herald rn_fun tc_fun fun_sigma rn_args res_ty
   = do { let orig = lexprCtOrigin rn_fun
 
-       ; traceTc "tcFunApp" (ppr rn_fun <+> dcolon <+> ppr fun_sigma $$ ppr rn_args $$ ppr res_ty)
+       ; traceTc "tcFunApp" (ppr rn_fun <+> of_type <+> ppr fun_sigma $$ ppr rn_args $$ ppr res_ty)
        ; (wrap_fun, tc_args, actual_res_ty)
            <- tcArgs rn_fun fun_sigma orig rn_args
                      (m_herald `orElse` mk_app_msg rn_fun rn_args)
@@ -1632,7 +1632,7 @@ tcExprSig expr (CompleteSig { sig_bndr = poly_id, sig_loc = loc })
     do { (tv_prs, theta, tau) <- tcInstType tcInstSkolTyVars poly_id
        ; given <- newEvVars theta
        ; traceTc "tcExprSig: CompleteSig" $
-         vcat [ text "poly_id:" <+> ppr poly_id <+> dcolon <+> ppr (idType poly_id)
+         vcat [ text "poly_id:" <+> ppr poly_id <+> of_type <+> ppr (idType poly_id)
               , text "tv_prs:" <+> ppr tv_prs ]
 
        ; let skol_info = SigSkol ExprSigCtxt (idType poly_id) tv_prs
@@ -1768,7 +1768,7 @@ tcInferId id_name
 
   | otherwise
   = do { (expr, ty) <- tc_infer_id (nameRdrName id_name) id_name
-       ; traceTc "tcInferId" (ppr id_name <+> dcolon <+> ppr ty)
+       ; traceTc "tcInferId" (ppr id_name <+> of_type <+> ppr ty)
        ; return (expr, ty) }
 
 tc_infer_assert :: Name -> TcM (HsExpr GhcTcId, TcSigmaType)
@@ -2614,7 +2614,7 @@ badFieldTypes :: [(FieldLabelString,TcType)] -> SDoc
 badFieldTypes prs
   = hang (text "Record update for insufficiently polymorphic field"
                          <> plural prs <> colon)
-       2 (vcat [ ppr f <+> dcolon <+> ppr ty | (f,ty) <- prs ])
+       2 (vcat [ ppr f <+> of_type <+> ppr ty | (f,ty) <- prs ])
 
 badFieldsUpd
   :: [LHsRecField' (AmbiguousFieldOcc GhcTc) (LHsExpr GhcRn)]
