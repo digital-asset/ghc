@@ -2713,6 +2713,7 @@ aexp    :: { LHsExpr GhcPs }
                             [sLL $1 $> $ Match { m_ext = noExt
                                                , m_ctxt = LambdaExpr
                                                , m_pats = $2:$3
+                                               , m_rhs_sig = Nothing
                                                , m_grhss = unguardedGRHSs $5 }]))
                           [mj AnnLam $1, mu AnnRarrow $4] }
         | 'let' binds 'in' exp          {% ams (sLL $1 $> $ HsLet noExt (snd $ unLoc $2) $4)
@@ -3050,6 +3051,7 @@ alt     :: { LMatch GhcPs (LHsExpr GhcPs) }
            : pat alt_rhs  {%ams (sLL $1 $> (Match { m_ext = noExt
                                                   , m_ctxt = CaseAlt
                                                   , m_pats = [$1]
+                                                  , m_rhs_sig = Nothing
                                                   , m_grhss = snd $ unLoc $2 }))
                                       (fst $ unLoc $2)}
 

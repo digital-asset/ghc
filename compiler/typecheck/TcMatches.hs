@@ -22,7 +22,8 @@ module TcMatches ( tcMatchesFun, tcGRHS, tcGRHSsPat, tcMatchesCase, tcMatchLambd
 import GhcPrelude
 
 import {-# SOURCE #-}   TcExpr( tcSyntaxOp, tcInferSigmaNC, tcInferSigma
-                              , tcCheckId, tcMonoExpr, tcMonoExprNC, tcPolyExpr )
+                              , tcCheckId, tcMonoExpr, tcMonoExprNC, tcPolyExpr
+                              , tcExprSig )
 
 import BasicTypes (LexicalFixity(..))
 import HsSyn
@@ -30,6 +31,7 @@ import TcRnMonad
 import TcEnv
 import TcPat
 import TcMType
+import TcSigs
 import TcType
 import TcBinds
 import TcUnify
@@ -141,7 +143,7 @@ tcMatchLambda herald match_ctxt match res_ty
 tcGRHSsPat :: GRHSs GhcRn (LHsExpr GhcRn) -> TcRhoType
            -> TcM (GRHSs GhcTcId (LHsExpr GhcTcId))
 -- Used for pattern bindings
-tcGRHSsPat grhss res_ty = tcGRHSs match_ctxt grhss (mkCheckExpType res_ty)
+tcGRHSsPat grhss res_ty = tcGRHSs match_ctxt grhss (mkCheckExpType res_ty) Nothing
   where
     match_ctxt = MC { mc_what = PatBindRhs,
                       mc_body = tcBody }
@@ -203,8 +205,9 @@ tcMatches :: (Outputable (body GhcRn)) => TcMatchCtxt body
 
 data TcMatchCtxt body   -- c.f. TcStmtCtxt, also in this module
   = MC { mc_what :: HsMatchContext Name,  -- What kind of thing this is
-         mc_body :: Located (body GhcRn)         -- Type checker for a body of
-                                                -- an alternative
+         mc_body :: Maybe (LHsSigWcType (NoGhcTc GhcRn)) -- Type checker for a body of
+                                                         -- an alternative
+                 -> Located (body GhcRn)
                  -> ExpRhoType
                  -> TcM (Located (body GhcTcId)) }
 
@@ -232,12 +235,13 @@ tcMatch ctxt pat_tys rhs_ty match
   = wrapLocM (tc_match ctxt pat_tys rhs_ty) match
   where
     tc_match ctxt pat_tys rhs_ty
-             match@(Match { m_pats = pats, m_grhss = grhss })
+             match@(Match { m_pats = pats, m_grhss = grhss, m_rhs_sig = msig })
       = add_match_ctxt match $
         do { (pats', grhss') <- tcPats (mc_what ctxt) pats pat_tys $
-                                tcGRHSs ctxt grhss rhs_ty
+                                tcGRHSs ctxt grhss rhs_ty msig
            ; return (Match { m_ext = noExt
                            , m_ctxt = mc_what ctxt, m_pats = pats'
+                           , m_rhs_sig = msig
                            , m_grhss = grhss' }) }
     tc_match  _ _ _ (XMatch _) = panic "tcMatch"
 
@@ -249,7 +253,10 @@ tcMatch ctxt pat_tys rhs_ty match
             _          -> addErrCtxt (pprMatchInCtxt match) thing_inside
 
 -------------
-tcGRHSs :: TcMatchCtxt body -> GRHSs GhcRn (Located (body GhcRn)) -> ExpRhoType
+tcGRHSs :: TcMatchCtxt body
+        -> GRHSs GhcRn (Located (body GhcRn))
+        -> ExpRhoType
+        -> Maybe (LHsSigWcType (NoGhcTc GhcRn))
         -> TcM (GRHSs GhcTcId (Located (body GhcTcId)))
 
 -- Notice that we pass in the full res_ty, so that we get
@@ -258,26 +265,30 @@ tcGRHSs :: TcMatchCtxt body -> GRHSs GhcRn (Located (body GhcRn)) -> ExpRhoType
 -- We used to force it to be a monotype when there was more than one guard
 -- but we don't need to do that any more
 
-tcGRHSs ctxt (GRHSs _ grhss (L l binds)) res_ty
+tcGRHSs ctxt (GRHSs _ grhss (L l binds)) res_ty msig
   = do  { (binds', grhss')
             <- tcLocalBinds binds $
-               mapM (wrapLocM (tcGRHS ctxt res_ty)) grhss
+               mapM (wrapLocM (tcGRHS ctxt res_ty msig)) grhss
 
         ; return (GRHSs noExt grhss' (L l binds')) }
-tcGRHSs _ (XGRHSs _) _ = panic "tcGRHSs"
+tcGRHSs _ (XGRHSs _) _ _ = panic "tcGRHSs"
 
 -------------
-tcGRHS :: TcMatchCtxt body -> ExpRhoType -> GRHS GhcRn (Located (body GhcRn))
+
+tcGRHS :: TcMatchCtxt body
+       -> ExpRhoType
+       -> Maybe (LHsSigWcType (NoGhcTc GhcRn))
+       -> GRHS GhcRn (Located (body GhcRn))
        -> TcM (GRHS GhcTcId (Located (body GhcTcId)))
 
-tcGRHS ctxt res_ty (GRHS _ guards rhs)
+tcGRHS ctxt res_ty msig (GRHS _ guards rhs)
   = do  { (guards', rhs')
             <- tcStmtsAndThen stmt_ctxt tcGuardStmt guards res_ty $
-               mc_body ctxt rhs
+               mc_body ctxt msig rhs
         ; return (GRHS noExt guards' rhs') }
   where
     stmt_ctxt  = PatGuard (mc_what ctxt)
-tcGRHS _ _ (XGRHS _) = panic "tcGRHS"
+tcGRHS _ _ _ (XGRHS _) = panic "tcGRHS"
 
 {-
 ************************************************************************
@@ -316,8 +327,19 @@ tcDoStmts MonadComp (L l stmts) res_ty
 
 tcDoStmts ctxt _ _ = pprPanic "tcDoStmts" (pprStmtContext ctxt)
 
-tcBody :: LHsExpr GhcRn -> ExpRhoType -> TcM (LHsExpr GhcTcId)
-tcBody body res_ty
+tcBody :: Maybe (LHsSigWcType (NoGhcTc GhcRn))
+       -> LHsExpr GhcRn
+       -> ExpRhoType
+       -> TcM (LHsExpr GhcTcId)
+tcBody (Just sig_ty) body res_ty
+  = do  { traceTc "tcBody" (ppr sig_ty <> text "," <> ppr res_ty)
+        ; let loc = getLoc (hsSigWcType sig_ty)
+        ; sig_info <- checkNoErrs $  -- Avoid error cascade
+                      tcUserTypeSig loc sig_ty Nothing
+        ; (body', poly_ty) <- tcExprSig body sig_info
+        ; let loc' = getLoc body'
+        ; (L loc') <$> tcWrapResult (unLoc body) (unLoc body') poly_ty res_ty }
+tcBody Nothing body res_ty
   = do  { traceTc "tcBody" (ppr res_ty)
         ; tcMonoExpr body res_ty
         }
