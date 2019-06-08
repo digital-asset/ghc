@@ -57,7 +57,7 @@ module Lexer (
    activeContext, nextIsEOF,
    getLexState, popLexState, pushLexState,
    ExtBits(..), getBit,
-   damlSyntaxEnabled,
+   damlSyntaxEnabled, scopedTypeVariablesEnabled,
    addWarning,
    lexTokenStream,
    addAnnotation,AddAnn,addAnnsAt,mkParensApiAnn,
@@ -2362,6 +2362,7 @@ data ExtBits
   | MultiWayIfBit
   | GadtSyntaxBit
   | DamlSyntaxBit
+  | ScopedTypeVariablesBit
 
   -- Flags that are updated once parsing starts
   | InRulePragBit
@@ -2375,6 +2376,9 @@ data ExtBits
 
 damlSyntaxEnabled :: ExtsBitmap -> Bool
 damlSyntaxEnabled = xtest DamlSyntaxBit
+
+scopedTypeVariablesEnabled :: ExtsBitmap -> Bool
+scopedTypeVariablesEnabled = xtest ScopedTypeVariablesBit
 
 extension :: (ExtsBitmap -> Bool) -> P Bool
 extension p = P $ \s -> POk s (p $! (pExtsBitmap . options) s)
@@ -2452,6 +2456,7 @@ mkParserFlags' warningFlags extensionFlags thisPackage
       .|. MultiWayIfBit               `xoptBit` LangExt.MultiWayIf
       .|. GadtSyntaxBit               `xoptBit` LangExt.GADTSyntax
       .|. DamlSyntaxBit               `xoptBit` LangExt.DamlSyntax
+      .|. ScopedTypeVariablesBit      `xoptBit` LangExt.ScopedTypeVariables
     optBits =
           HaddockBit        `setBitIf` isHaddock
       .|. RawTokenStreamBit `setBitIf` rawTokStream
