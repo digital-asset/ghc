@@ -23,6 +23,6 @@ updateR r =
     foo = 1
     bar = "quux"
 
-fact (n : Integer)
+fact (n : Integer) : Integer
  | n <= 1    = 1
  | otherwise = n * fact (n - 1)
