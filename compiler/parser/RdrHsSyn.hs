@@ -1196,11 +1196,6 @@ checkValDef :: SDoc
             -> Located (a,GRHSs GhcPs (LHsExpr GhcPs))
             -> P ([AddAnn],HsBind GhcPs)
 
-checkValDef msg _strictness lhs (Just sig) grhss
-        -- x :: ty = rhs  parses as a *pattern* binding
-  = checkPatBind msg (cL (combineLocs lhs sig)
-                        (ExprWithTySig noExt lhs (mkLHsSigWcType sig))) grhss
-
 checkValDef msg strictness lhs msig g@(dL->L l (_,grhss))
   = do  { mb_fun <- isFunLhs lhs
   ; case mb_fun of
