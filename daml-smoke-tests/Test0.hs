@@ -4,7 +4,8 @@
 -- Covers:
 --   Version syntax
 --   New colon convention
---   Record definition/update
+--   Record "with" definition/update
+--   Function return type annotations
 
 daml 1.2
 module Test0 where
