@@ -1,4 +1,5 @@
 {-# LANGUAGE DamlSyntax #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 -- Covers:
 --   Version syntax
@@ -20,3 +21,7 @@ updateR r =
   r with
     foo = 1
     bar = "quux"
+
+fact (n : Integer)
+ | n <= 1    = 1
+ | otherwise = n * fact (n - 1)
