@@ -114,7 +114,6 @@ import Util
 import ApiAnnotation
 import Data.List
 import DynFlags ( WarningFlag(..) )
-import qualified GHC.LanguageExtensions as LangExt
 import Control.Monad
 import Text.ParserCombinators.ReadP as ReadP
 import Data.Char
@@ -1221,16 +1220,14 @@ checkFunBind :: SDoc
              -> P ([AddAnn],HsBind GhcPs)
 checkFunBind msg strictness ann lhs_loc fun is_infix pats msig (dL->L rhs_span grhss)
   = do
-        pState <- getPState
-{-
-        when (isJust msig && not (extopt LangExt.ScopedTypeVariables (options pState))) $ do
+        scopedTypeVariablesInEffect <- extension scopedTypeVariablesEnabled
+        when (isJust msig && not scopedTypeVariablesInEffect) $ do
              let sig = fromJust msig
                  loc = getLoc (hsSigWcType sig)
              parseErrorSDoc loc
                             (text "Unexpected function return-type annotation:"
                           $$ nest 4 (ppr sig)
                           $$ text "Perhaps you meant to use ScopedTypeVariables?")
--}
 
         ps <- checkPatterns msg pats
         let match_span = combineSrcSpans lhs_loc rhs_span
