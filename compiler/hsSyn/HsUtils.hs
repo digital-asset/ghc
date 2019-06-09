@@ -148,6 +148,7 @@ mkSimpleMatch :: HsMatchContext (NameOrRdrName (IdP (GhcPass p)))
 mkSimpleMatch ctxt pats rhs
   = cL loc $
     Match { m_ext = noExt, m_ctxt = ctxt, m_pats = pats
+          , m_rhs_sig = Nothing
           , m_grhss = unguardedGRHSs rhs }
   where
     loc = case pats of
@@ -859,6 +860,7 @@ mkMatch ctxt pats expr lbinds
   = noLoc (Match { m_ext   = noExt
                  , m_ctxt  = ctxt
                  , m_pats  = map paren pats
+                 , m_rhs_sig = Nothing
                  , m_grhss = GRHSs noExt (unguardedRHS noSrcSpan expr) lbinds })
   where
     paren lp@(dL->L l p)

@@ -358,6 +358,7 @@ checkGuardMatches hs_ctx guards@(GRHSs _ grhss _) = do
                   Match { m_ext = noExt
                         , m_ctxt = hs_ctx
                         , m_pats = []
+                        , m_rhs_sig = Nothing
                         , m_grhss = guards }
     checkMatches dflags dsMatchContext [] [match]
 checkGuardMatches _ (XGRHSs _) = panic "checkGuardMatches"

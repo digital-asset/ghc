@@ -114,7 +114,6 @@ import Util
 import ApiAnnotation
 import Data.List
 import DynFlags ( WarningFlag(..) )
-
 import Control.Monad
 import Text.ParserCombinators.ReadP as ReadP
 import Data.Char
@@ -601,6 +600,7 @@ mkPatSynMatchGroup (dL->L loc patsyn_name) (dL->L _ decls) =
            ; match <- case details of
                PrefixCon pats -> return $ Match { m_ext = noExt
                                                 , m_ctxt = ctxt, m_pats = pats
+                                                , m_rhs_sig = Nothing
                                                 , m_grhss = rhs }
                    where
                      ctxt = FunRhs { mc_fun = ln
@@ -610,6 +610,7 @@ mkPatSynMatchGroup (dL->L loc patsyn_name) (dL->L _ decls) =
                InfixCon p1 p2 -> return $ Match { m_ext = noExt
                                                 , m_ctxt = ctxt
                                                 , m_pats = [p1, p2]
+                                                , m_rhs_sig = Nothing
                                                 , m_grhss = rhs }
                    where
                      ctxt = FunRhs { mc_fun = ln
@@ -1194,18 +1195,18 @@ checkValDef :: SDoc
             -> Located (a,GRHSs GhcPs (LHsExpr GhcPs))
             -> P ([AddAnn],HsBind GhcPs)
 
-checkValDef msg _strictness lhs (Just sig) grhss
-        -- x :: ty = rhs  parses as a *pattern* binding
-  = checkPatBind msg (cL (combineLocs lhs sig)
-                        (ExprWithTySig noExt lhs (mkLHsSigWcType sig))) grhss
-
-checkValDef msg strictness lhs Nothing g@(dL->L l (_,grhss))
+checkValDef msg strictness lhs msig g@(dL->L l (_,grhss))
   = do  { mb_fun <- isFunLhs lhs
-        ; case mb_fun of
-            Just (fun, is_infix, pats, ann) ->
-              checkFunBind msg strictness ann (getLoc lhs)
-                           fun is_infix pats (cL l grhss)
-            Nothing -> checkPatBind msg lhs g }
+  ; case mb_fun of
+      Just (fun, is_infix, pats, ann) ->
+        checkFunBind msg strictness ann (getLoc lhs)
+                    fun is_infix pats (fmap mkLHsSigWcType msig) (cL l grhss)
+      Nothing ->
+        case msig of
+          Nothing  -> checkPatBind msg lhs g
+          -- x :: ty = rhs  parses as a *pattern* binding
+          Just sig -> checkPatBind msg (cL (combineLocs lhs sig)
+                        (ExprWithTySig noExt lhs (mkLHsSigWcType sig))) g }
 
 checkFunBind :: SDoc
              -> SrcStrictness
@@ -1214,10 +1215,21 @@ checkFunBind :: SDoc
              -> Located RdrName
              -> LexicalFixity
              -> [LHsExpr GhcPs]
+             -> Maybe (LHsSigWcType GhcPs)
              -> Located (GRHSs GhcPs (LHsExpr GhcPs))
              -> P ([AddAnn],HsBind GhcPs)
-checkFunBind msg strictness ann lhs_loc fun is_infix pats (dL->L rhs_span grhss)
-  = do  ps <- checkPatterns msg pats
+checkFunBind msg strictness ann lhs_loc fun is_infix pats msig (dL->L rhs_span grhss)
+  = do
+        scopedTypeVariablesInEffect <- extension scopedTypeVariablesEnabled
+        when (isJust msig && not scopedTypeVariablesInEffect) $ do
+             let sig = fromJust msig
+                 loc = getLoc (hsSigWcType sig)
+             parseErrorSDoc loc
+                            (text "Unexpected function return-type annotation:"
+                          $$ nest 4 (ppr sig)
+                          $$ text "Perhaps you meant to use ScopedTypeVariables?")
+
+        ps <- checkPatterns msg pats
         let match_span = combineSrcSpans lhs_loc rhs_span
         -- Add back the annotations stripped from any HsPar values in the lhs
         -- mapM_ (\a -> a match_span) ann
@@ -1228,6 +1240,7 @@ checkFunBind msg strictness ann lhs_loc fun is_infix pats (dL->L rhs_span grhss)
                                             , mc_fixity = is_infix
                                             , mc_strictness = strictness }
                                         , m_pats = ps
+                                        , m_rhs_sig = msig
                                         , m_grhss = grhss })])
         -- The span of the match covers the entire equation.
         -- That isn't quite right, but it'll do for now.

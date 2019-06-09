@@ -1,9 +1,11 @@
 {-# LANGUAGE DamlSyntax #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 -- Covers:
 --   Version syntax
 --   New colon convention
---   Record definition/update
+--   Record "with" definition/update
+--   Function return type annotations
 
 daml 1.2
 module Test0 where
@@ -20,3 +22,7 @@ updateR r =
   r with
     foo = 1
     bar = "quux"
+
+fact (n : Integer) : Integer
+ | n <= 1    = 1
+ | otherwise = n * fact (n - 1)

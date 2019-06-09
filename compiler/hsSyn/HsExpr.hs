@@ -1610,6 +1610,7 @@ data Match p body
         m_ctxt :: HsMatchContext (NameOrRdrName (IdP p)),
           -- See note [m_ctxt in Match]
         m_pats :: [LPat p], -- The patterns
+        m_rhs_sig :: Maybe (LHsSigWcType (NoGhcTc p)), -- ^ optional rhs type annotation
         m_grhss :: (GRHSs p body)
   }
   | XMatch (XXMatch p body)
@@ -1747,10 +1748,13 @@ pprPatBind pat (grhss)
 pprMatch :: (OutputableBndrId (GhcPass idR), Outputable body)
          => Match (GhcPass idR) body -> SDoc
 pprMatch match
-  = sep [ sep (herald : map (nest 2 . pprParendLPat appPrec) other_pats)
-        , nest 2 (pprGRHSs ctxt (m_grhss match)) ]
+  = sep $ concat [ [sep (herald : map (nest 2 . pprParendLPat appPrec) other_pats)]
+                 , maybe [] ((:[]) . (of_type <+>) .  ppr) msig
+                 , [nest 2 (pprGRHSs ctxt (m_grhss match)) ]
+                 ]
   where
     ctxt = m_ctxt match
+    msig = m_rhs_sig match
     (herald, other_pats)
         = case ctxt of
             FunRhs {mc_fun=L _ fun, mc_fixity=fixity, mc_strictness=strictness}

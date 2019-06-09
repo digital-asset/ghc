@@ -10,7 +10,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module TcExpr ( tcPolyExpr, tcMonoExpr, tcMonoExprNC,
+module TcExpr ( tcPolyExpr, tcMonoExpr, tcMonoExprNC, tcExprSig,
                 tcInferSigma, tcInferSigmaNC, tcInferRho, tcInferRhoNC,
                 tcSyntaxOp, tcSyntaxOpGen, SyntaxOpType(..), synKnownType,
                 tcCheckId,
@@ -590,7 +590,7 @@ tcExpr (HsMultiIf _ alts) res_ty
              -- Just like TcMatches
              -- Note [Case branches must never infer a non-tau type]
 
-       ; alts' <- mapM (wrapLocM $ tcGRHS match_ctxt res_ty) alts
+       ; alts' <- mapM (wrapLocM $ tcGRHS match_ctxt res_ty Nothing) alts
        ; res_ty <- readExpType res_ty
        ; return (HsMultiIf res_ty alts') }
   where match_ctxt = MC { mc_what = IfAlt, mc_body = tcBody }
