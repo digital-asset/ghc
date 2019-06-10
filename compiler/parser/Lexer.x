@@ -640,6 +640,19 @@ data Token
   | ITrequires
 
   | ITdaml
+  | ITtemplate
+  | ITcan
+  | ITensure
+  | ITsignatory
+  | ITagreement
+  | ITcontroller
+  | ITchoice
+  | ITobserver
+  | ITnonconsuming
+  | ITpreconsuming
+  | ITpostconsuming
+  | ITkey
+  | ITmaintainer
 
   -- Pragmas, see  note [Pragma source text] in BasicTypes
   | ITinline_prag       SourceText InlineSpec RuleMatchInfo
@@ -866,7 +879,20 @@ reservedWordsFM = listToUFM $
                                               xbit RecursiveDoBit),
          ( "proc",           ITproc,          xbit ArrowsBit),
 
-         ( "daml",           ITdaml,          xbit DamlSyntaxBit)
+         ( "daml",           ITdaml,          xbit DamlSyntaxBit),
+         ( "template",       ITtemplate,      xbit DamlSyntaxBit),
+         ( "can",            ITcan,           xbit DamlSyntaxBit),
+         ( "ensure",         ITensure,        xbit DamlSyntaxBit),
+         ( "signatory",      ITsignatory,     xbit DamlSyntaxBit),
+         ( "agreement",      ITagreement,     xbit DamlSyntaxBit),
+         ( "controller",     ITcontroller,    xbit DamlSyntaxBit),
+         ( "choice",         ITchoice,        xbit DamlSyntaxBit),
+         ( "observer",       ITobserver,      xbit DamlSyntaxBit),
+         ( "nonconsuming",   ITnonconsuming,  xbit DamlSyntaxBit),
+         ( "preconsuming",   ITpreconsuming,  xbit DamlSyntaxBit),
+         ( "postconsuming",  ITpostconsuming, xbit DamlSyntaxBit),
+         ( "key",            ITkey,           xbit DamlSyntaxBit),
+         ( "maintainer",     ITmaintainer,    xbit DamlSyntaxBit)
      ]
 
 {-----------------------------------
@@ -1508,6 +1534,8 @@ maybe_layout t = do -- If the alternative layout rule is enabled then
           f ITlet   = pushLexState layout
           f ITwhere = pushLexState layout
           f ITwith  = pushLexState layout
+          f ITcontroller = pushLexState layout
+          f ITcan   = pushLexState layout
           f ITrec   = pushLexState layout
           f ITif    = pushLexState layout_if
           f _       = return ()
