@@ -506,6 +506,19 @@ are the most common patterns, rewritten as regular expressions for clarity:
  'dependency'   { L _ ITdependency }
 
  'daml'         { L _ ITdaml }
+ 'template'     { L _ ITtemplate }
+ 'can'          { L _ ITcan }
+ 'ensure'       { L _ ITensure }
+ 'signatory'    { L _ ITsignatory }
+ 'agreement'    { L _ ITagreement }
+ 'controller'   { L _ ITcontroller }
+ 'choice'       { L _ ITchoice }
+ 'observer'     { L _ ITobserver }
+ 'nonconsuming' { L _ ITnonconsuming }
+ 'preconsuming' { L _ ITpreconsuming }
+ 'postconsuming'{ L _ ITpostconsuming }
+ 'key'          { L _ ITkey }
+ 'maintainer'   { L _ ITmaintainer }
 
  '{-# INLINE'             { L _ (ITinline_prag _ _ _) } -- INLINE or INLINABLE
  '{-# SPECIALISE'         { L _ (ITspec_prag _) }
@@ -1102,12 +1115,19 @@ ops     :: { Located (OrdList (Located RdrName)) }
 
 -- No trailing semicolons, non-empty
 topdecls :: { OrdList (LHsDecl GhcPs) }
-        : topdecls_semi topdecl        { $1 `snocOL` $2 }
+        : topdecls_semi topdeclWithTemplate        { $1 `appOL` $2 }
 
 -- May have trailing semicolons, can be empty
 topdecls_semi :: { OrdList (LHsDecl GhcPs) }
-        : topdecls_semi topdecl semis1 {% ams $2 $3 >> return ($1 `snocOL` $2) }
-        | {- empty -}                  { nilOL }
+        -- FIXME (SM, SF): properly handle the 'ams' location annotation here
+        -- : topdecls_semi topdeclWithTemplate semis1 {% ams $2 $3 >> return ($1 `appOL` $2) }
+        : topdecls_semi topdeclWithTemplate semis1 {% return ($1 `appOL` $2) }
+        | {- empty -}                              { nilOL }
+
+topdeclWithTemplate :: { OrdList (LHsDecl GhcPs) }
+topdeclWithTemplate : topdecl                               { unitOL $1 }
+                      -- Templates: we desugar to multiple decls right in the parser
+                    | template_decl                         { $1 }
 
 topdecl :: { LHsDecl GhcPs }
         : cl_decl                               { sL1 $1 (TyClD noExt (unLoc $1)) }
@@ -1134,6 +1154,136 @@ topdecl :: { LHsDecl GhcPs }
         -- but we treat an arbitrary expression just as if
         -- it had a $(..) wrapped around it
         | infixexp_top                          { sLL $1 $> $ mkSpliceDecl $1 }
+
+-- Templates
+--
+template_decl :: { OrdList (LHsDecl GhcPs) }
+  : 'template' qtycon arecord_with 'where' template_body
+                                                 {% mkTemplateDecl $2 $3 $5 }
+
+template_body :: { Located [Located TemplateBodyDecl] }
+  : '{' template_body_decls '}'                  { sLL $1 $3 (reverse (unLoc $2)) }
+  | vocurly template_body_decls close            { let tbds = reverse (unLoc $2) in
+                                                     L (comb2 $1
+                                                         (last (void $1:map void tbds))
+                                                       ) $ tbds }
+
+template_body_decls :: { Located [Located TemplateBodyDecl] }
+  : template_body_decls ';' template_body_decl   { sLL $1 $> $ $3 : (unLoc $1) }
+  | template_body_decls ';'                      { sLL $1 $> $ unLoc $1 }
+  | template_body_decl                           { sL1 $1 [$1] }
+  | {- empty -}                                  { sL0 [] }
+
+template_body_decl :: { Located TemplateBodyDecl }
+  : ensure_decl                                  { sL1 $1 $ EnsureDecl $1 }
+  | signatory_decl                               { sL1 $1 $ SignatoryDecl $1 }
+  | observer_decl                                { sL1 $1 $ ObserverDecl $1 }
+  | agreement_decl                               { sL1 $1 $ AgreementDecl $1 }
+  | choice_group_decl                            { sL1 $1 $ ChoiceGroupDecl $1 }
+  | let_bindings_decl                            { sL1 $1 $ LetBindingsDecl $1 }
+  | flex_choice_decl                             { sL1 $1 $ FlexChoiceDecl $1 }
+  | key_decl                                     { sL1 $1 $ KeyDecl $1 }
+  | maintainer_decl                              { sL1 $1 $ MaintainerDecl $1 }
+
+let_bindings_decl :: { Located ([AddAnn], Located (HsLocalBinds GhcPs)) }
+  : 'let' binds                 { sLL $1 $> (mj AnnWhere $1 : (fst $ unLoc $2)
+                                             , snd $ unLoc $2) }
+
+choice_group_decl :: { Located (LHsExpr GhcPs , Located [Located ChoiceData]) }
+  : 'controller' party_list 'can' choice_decl_list  { sLL $1 $> (applyConcat $2, $4) }
+
+choice_decl_list :: { Located [Located ChoiceData] }
+  : '{' choice_decls '}'                         { sLL $1 $3 $ reverse (unLoc $2) }
+  | vocurly choice_decls close                   { let cs = reverse (unLoc $2) in
+                                                    L (comb2 $1
+                                                        (last (void $1:map void cs))
+                                                      ) $ cs }
+
+choice_decls :: { Located [Located ChoiceData] }
+ : choice_decls ';' choice_decl                  { sLL $1 $> $ $3 : (unLoc $1) }
+ | choice_decls ';'                              { sLL $1 $> $ unLoc $1 }
+ | choice_decl                                   { sL1 $1 [$1] }
+ | {- empty -}                                   { sL0 [] }
+
+choice_decl :: { Located ChoiceData }
+  : consuming qtycon OF_TYPE btype_ maybe_docprev arecord_with_opt 'do' stmtlist -- note the use of 'btype_'
+    { sL (comb3 $1 $2 $>) $
+            ChoiceData { cdChoiceName = $2
+                       , cdChoiceReturnTy = $4
+                       , cdChoiceFields = $6
+                       , cdChoiceBody = $8
+                       , cdChoiceConsuming = $1
+                       , cdChoiceDoc = $5 }
+    }
+
+flex_choice_decl :: { Located FlexChoiceData }
+  : consuming 'choice' qtycon OF_TYPE btype_ maybe_docprev arecord_with_opt 'controller' party_list flexible_choice_body
+    { sL (comb3 $1 $2 $>) $
+        FlexChoiceData (applyConcat $9)
+            ChoiceData { cdChoiceName = $3
+                       , cdChoiceReturnTy = $5
+                       , cdChoiceFields = $7
+                       , cdChoiceBody = $10
+                       , cdChoiceConsuming = $1
+                       , cdChoiceDoc = $6 }
+    }
+
+flexible_choice_body :: { Located ([AddAnn],[LStmt GhcPs (LHsExpr GhcPs)]) }
+  : 'do' stmtlist                                { sLL $1 $2 $ unLoc $2 }
+
+consuming :: { Located (Maybe String) }
+ : 'preconsuming'                                { sL1 $1 Nothing }
+ | 'nonconsuming'                                { sL1 $1 (Just "nonconsuming") }
+ | 'postconsuming'                               { sL1 $1 (Just "postconsuming") }
+ | {- empty -}                                   { sL0 Nothing }
+
+-- This production is only used by choice_decl.
+arecord_with_opt :: { Maybe (LHsType GhcPs)}
+  : arecord_with                                 { Just $1 }
+  -- We want choices without arguments to desugar to records without
+  -- fields rather than a variant with one case.
+  | {- empty -}                                  { Just $ noLoc $ HsRecTy noExt [] }
+
+ensure_decl :: { LHsExpr GhcPs }
+  : 'ensure' exp                                 { sLL $1 $> $ unLoc $2 }
+
+signatory_decl :: { LHsExpr GhcPs }
+  : 'signatory' parties                          { sLL $1 $> $ unLoc (applyConcat $2) }
+
+observer_decl :: { LHsExpr GhcPs }
+  : 'observer' parties                           { sLL $1 $> $ unLoc (applyConcat $2) }
+
+agreement_decl :: { LHsExpr GhcPs }
+  : 'agreement' exp                              { sLL $1 $> $ unLoc $2 }
+
+key_decl :: { Located KeyData }
+    -- We use `infixexp` rather than `exp` here because we need to
+    -- exclude the case `infixexp OF_TYPE sigtype`
+  : 'key' infixexp OF_TYPE btype                 { sLL $1 $> $ KeyData { kdKeyExpr = $2, kdKeyTy = $4 } }
+
+maintainer_decl :: { LHsExpr GhcPs }
+  : 'maintainer' parties                         { sLL $1 $> $ unLoc (applyConcat $2) }
+
+party_list :: { Located [LHsExpr GhcPs] }
+  : '{' parties '}'                              { sLL $1 $> (unLoc $2) }
+  | vocurly parties close                        { let ps = reverse (unLoc $2) in
+                                                    L (comb2 $1
+                                                        (last (void $1:map void ps))
+                                                      ) $ ps }
+parties :: { Located [LHsExpr GhcPs] }
+  : parties ',' exp                              { sLL $1 $> $ applyToParties $3 : (unLoc $1) }
+  | parties ','                                  { sLL $1 $> $ unLoc $1 }
+  | exp                                          { sL1 $1 [applyToParties $1] }
+
+btype_ :: { LHsType GhcPs } -- Like 'btype' but excludes @arecord_with@
+      : tyapps_                                  {%  mergeOps (unLoc $1) }
+
+tyapps_ :: { Located [Located TyEl] } -- NB: This list is reversed
+      : tyapp_                                   { sL1 $1 [$1] }
+      | tyapps_ tyapp_                           { sLL $1 $> $ $2 : (unLoc $1) }
+
+tyapp_ :: { Located TyEl }
+      : atype_                                   { sL1 $1 $ TyElOpd (unLoc $1) }
 
 -- Type classes
 --
@@ -3524,6 +3674,16 @@ varid :: { Located RdrName }
         | 'forall'         { sL1 $1 $! mkUnqual varName (fsLit "forall") }
         | 'family'         { sL1 $1 $! mkUnqual varName (fsLit "family") }
         | 'role'           { sL1 $1 $! mkUnqual varName (fsLit "role") }
+        | 'ensure'         { sL1 $1 $! mkUnqual varName (fsLit "ensure") }
+        | 'signatory'      { sL1 $1 $! mkUnqual varName (fsLit "signatory") }
+        | 'agreement'      { sL1 $1 $! mkUnqual varName (fsLit "agreement") }
+        | 'observer'       { sL1 $1 $! mkUnqual varName (fsLit "observer") }
+        | 'nonconsuming'   { sL1 $1 $! mkUnqual varName (fsLit "nonconsuming") }
+        | 'preconsuming'   { sL1 $1 $! mkUnqual varName (fsLit "preconsuming") }
+        | 'postconsuming'  { sL1 $1 $! mkUnqual varName (fsLit "postconsuming") }
+        | 'choice'         { sL1 $1 $! mkUnqual varName (fsLit "choice") }
+        | 'key'            { sL1 $1 $! mkUnqual varName (fsLit "key") }
+        | 'maintainer'     { sL1 $1 $! mkUnqual varName (fsLit "maintainer") }
         -- If this changes relative to tyvarid, update 'checkRuleTyVarBndrNames' in RdrHsSyn.hs
         -- See Note [Parsing explicit foralls in Rules]
 

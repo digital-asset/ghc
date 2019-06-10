@@ -9,6 +9,8 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE MagicHash #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module   RdrHsSyn (
         mkHsOpApp,
@@ -32,6 +34,15 @@ module   RdrHsSyn (
         cvBindsAndSigs,
         cvTopDecls,
         placeHolderPunRhs,
+
+        -- DAML Template Syntax
+        ChoiceData(..),
+        FlexChoiceData(..),
+        KeyData(..),
+        TemplateBodyDecl(..),
+        mkTemplateDecl,
+        applyToParties,
+        applyConcat,
 
         -- Stuff to do with Foreign declarations
         mkImport,
@@ -93,7 +104,7 @@ import CoAxiom          ( Role, fsFromRole )
 import RdrName
 import Name
 import BasicTypes
-import TcEvidence       ( idHsWrapper )
+import TcEvidence       ( idHsWrapper, HsWrapper(WpHole) )
 import Lexer
 import Lexeme           ( isLexCon )
 import Type             ( TyThing(..), funTyCon )
@@ -105,7 +116,7 @@ import ForeignCall
 import PrelNames        ( allNameStrings )
 import SrcLoc
 import Unique           ( hasKey )
-import OrdList          ( OrdList, fromOL )
+import OrdList          ( OrdList, fromOL, toOL )
 import Bag              ( emptyBag, consBag )
 import Outputable
 import FastString
@@ -119,6 +130,8 @@ import Text.ParserCombinators.ReadP as ReadP
 import Data.Char
 import qualified Data.Monoid as Monoid
 import Data.Data       ( dataTypeOf, fromConstr, dataTypeConstrs )
+import Bag
+import Module
 
 #include "HsVersions.h"
 
@@ -568,6 +581,52 @@ data constructors). These functions are where the actual job of parsing is
 done.
 
 -}
+
+splitCon :: [LHsType GhcPs]
+      -> P ( Located RdrName         -- constructor name
+           , HsConDeclDetails GhcPs  -- constructor field information
+           , Maybe LHsDocString      -- docstring to go on the constructor
+           )
+-- See Note [Parsing data constructors is hard]
+-- This gets given a "type" that should look like
+--      C Int Bool
+-- or   C { x::Int, y::Bool }
+-- and returns the pieces
+splitCon apps
+ = split apps' []
+ where
+   oneDoc = [ () | L _ (HsDocTy{}) <- apps ] `lengthIs` 1
+   ty = foldl1 mkHsAppTy (reverse apps)
+
+   -- the trailing doc, if any, can be extracted first
+   (apps', trailing_doc)
+     = case apps of
+         L _ (HsDocTy _ t ds) : ts | oneDoc -> (t : ts, Just ds)
+         ts -> (ts, Nothing)
+
+   -- A comment on the constructor is handled a bit differently - it doesn't
+   -- remain an 'HsDocTy', but gets lifted out and returned as the third
+   -- element of the tuple.
+   split [ L _ (HsDocTy _ con con_doc) ] ts = do
+     (data_con, con_details, con_doc') <- split [con] ts
+     return (data_con, con_details, con_doc' `mplus` Just con_doc)
+   split [ L l (HsTyVar _ _ (L _ tc)) ] ts =
+     case tyConToDataCon l tc of
+      Left (loc, msg) -> addFatalError loc msg
+      Right data_con -> return (data_con, mk_rest ts, trailing_doc)
+   split [ L l (HsTupleTy _ HsBoxedOrConstraintTuple ts) ] []
+     = return ( L l (getRdrName (tupleDataCon Boxed (length ts)))
+              , PrefixCon ts
+              , trailing_doc
+              )
+   split [ L l _ ] _ = addFatalError l (text msg <+> ppr ty)
+     where msg = "Cannot parse data constructor in a data/newtype declaration:"
+   split (u : us) ts = split us (u : ts)
+   split _ _ = panic "RdrHsSyn:splitCon"
+
+   mk_rest [L _ (HsDocTy _ t@(L _ HsRecTy{}) _)] = mk_rest [t]
+   mk_rest [L l (HsRecTy _ flds)] = RecCon (L l flds)
+   mk_rest ts                     = PrefixCon ts
 
 -- | Reinterpret a type constructor, including type operators, as a data
 --   constructor.
@@ -2047,6 +2106,604 @@ mkInlinePragma src (inl, match_info) mb_act
                         case inl of
                           NoInline -> NeverActive
                           _other   -> AlwaysActive
+
+------------------------------------------------------------------------------
+-- DAML Template Syntax
+
+addFatalError :: SrcSpan -> SDoc -> P a
+addFatalError loc msg = parseErrorSDoc loc msg
+
+data ChoiceData = ChoiceData {
+    cdChoiceName :: Located RdrName
+  , cdChoiceFields :: Maybe (LHsType GhcPs)
+  , cdChoiceReturnTy :: LHsType GhcPs
+  , cdChoiceBody :: Located ([AddAnn],[LStmt GhcPs (LHsExpr GhcPs)])
+  , cdChoiceConsuming :: Located (Maybe String)
+  , cdChoiceDoc :: Maybe LHsDocString
+  }
+
+data KeyData = KeyData {
+    kdKeyExpr :: LHsExpr GhcPs
+  , kdKeyTy :: LHsType GhcPs
+  }
+
+data FlexChoiceData = FlexChoiceData (LHsExpr GhcPs) ChoiceData
+
+data TemplateBodyDecl
+  = EnsureDecl (LHsExpr GhcPs)
+  | SignatoryDecl (LHsExpr GhcPs)
+  | ObserverDecl (LHsExpr GhcPs)
+  | AgreementDecl (LHsExpr GhcPs)
+  | ChoiceGroupDecl (Located (LHsExpr GhcPs, Located [Located ChoiceData]))
+  | LetBindingsDecl (Located ([AddAnn], LHsLocalBinds GhcPs))
+  | FlexChoiceDecl (Located FlexChoiceData)
+  | KeyDecl (Located KeyData)
+  | MaintainerDecl (LHsExpr GhcPs)
+
+data TemplateBodyDecls = TemplateBodyDecls {
+      tbdEnsures :: [LHsExpr GhcPs]
+    , tbdSignatories :: [LHsExpr GhcPs]
+    , tbdObservers :: [LHsExpr GhcPs]
+    , tbdAgreements :: [LHsExpr GhcPs]
+    , tbdControlledChoiceGroups :: [Located (LHsExpr GhcPs, Located [Located ChoiceData])]
+    , tbdLetBindings :: [LHsLocalBinds GhcPs]
+    , tbdFlexChoices :: [Located FlexChoiceData]
+    , tbdKeys :: [Located KeyData]
+    , tbdMaintainers :: [LHsExpr GhcPs]
+    }
+
+instance Semigroup TemplateBodyDecls where
+  (<>) x y = TemplateBodyDecls {
+      tbdEnsures = tbdEnsures x Monoid.<> tbdEnsures y
+    , tbdSignatories = tbdSignatories x Monoid.<> tbdSignatories y
+    , tbdObservers = tbdObservers x Monoid.<> tbdObservers y
+    , tbdAgreements = tbdAgreements x Monoid.<> tbdAgreements y
+    , tbdControlledChoiceGroups = tbdControlledChoiceGroups x Monoid.<> tbdControlledChoiceGroups y
+    , tbdLetBindings = tbdLetBindings x Monoid.<> tbdLetBindings y
+    , tbdFlexChoices = tbdFlexChoices x Monoid.<> tbdFlexChoices y
+    , tbdKeys = tbdKeys x Monoid.<> tbdKeys y
+    , tbdMaintainers = tbdMaintainers x Monoid.<> tbdMaintainers y
+    }
+
+instance Monoid TemplateBodyDecls where
+  mempty = TemplateBodyDecls [] [] [] [] [] [] [] [] []
+
+templateBodyDeclToDecls :: Located TemplateBodyDecl -> TemplateBodyDecls
+templateBodyDeclToDecls (L _ decl) = case decl of
+  EnsureDecl e                 -> TemplateBodyDecls [e] [] [] [] [] [] [] [] []
+  SignatoryDecl s              -> TemplateBodyDecls [] [s] [] [] [] [] [] [] []
+  ObserverDecl o               -> TemplateBodyDecls [] [] [o] [] [] [] [] [] []
+  AgreementDecl a              -> TemplateBodyDecls [] [] [] [a] [] [] [] [] []
+  ChoiceGroupDecl g            -> TemplateBodyDecls [] [] [] [] [g] [] [] [] []
+  LetBindingsDecl (L _ (_, b)) -> TemplateBodyDecls [] [] [] [] [] [b] [] [] []
+  FlexChoiceDecl f             -> TemplateBodyDecls [] [] [] [] [] [] [f] [] []
+  KeyDecl k                    -> TemplateBodyDecls [] [] [] [] [] [] [] [k] []
+  MaintainerDecl m             -> TemplateBodyDecls [] [] [] [] [] [] [] [] [m]
+
+-- | Classify a list of template body declarations.
+extractTemplateBodyDecls :: [Located TemplateBodyDecl] -> TemplateBodyDecls
+extractTemplateBodyDecls = foldMap templateBodyDeclToDecls
+
+-- | Utility for calculating 'DA.Internal.Desugar' names referenced
+-- during desugaring.
+qualifyDesugar :: OccName -> RdrName
+qualifyDesugar = mkRdrQual $ mkModuleName "DA.Internal.Desugar"
+
+-- | Calculates the application of a 'toParties' function to an
+-- expression (invoked from Parser.y).
+applyToParties :: LHsExpr GhcPs -> LHsExpr GhcPs
+applyToParties p@(L loc _) =
+  L loc $ HsApp noExt
+    (L loc $ HsVar noExt $ L loc $ qualifyDesugar $  mkVarOcc "toParties")
+    (L loc (HsPar noExt p)) -- Add parens (see https://github.com/digital-asset/daml/issues/5).
+
+-- | Calculate the application of 'concat' to a list of expressions
+-- (invoked from Parser.y).
+applyConcat :: Located [LHsExpr GhcPs] -> LHsExpr GhcPs
+applyConcat (L loc ps) =
+  L loc $ HsApp noExt
+    (L loc $ HsVar noExt $ L loc $ qualifyDesugar $ mkVarOcc "concat")
+    (L loc $ ExplicitList noExt Nothing ps)
+
+-- | Utility for constructing patterns of the form 'arg@T'.
+asPatPrefixCon :: String -> Located RdrName -> Pat GhcPs
+asPatPrefixCon varName conName =
+  XPat (noLoc $ AsPat noExt
+    (noLoc $ mkRdrUnqual (mkVarOcc varName))
+    (noLoc $ XPat (noLoc $ ConPatIn conName $ PrefixCon [])))
+
+-- | Utility for constructing patterns of the form 'arg@T{..}'.
+asPatRecWild :: String -> Located RdrName -> Pat GhcPs
+asPatRecWild varName conName =
+  XPat (noLoc $ AsPat noExt
+    (noLoc $ mkRdrUnqual (mkVarOcc varName))
+    (noLoc $ XPat (noLoc $ ConPatIn conName $
+      RecCon $ HsRecFields { rec_flds = [], rec_dotdot = Just 0 })))
+
+-- | Utility function for constructing patterns of the form 'arg@X'
+-- where 'X' is either a record wildcard pattern or a prefix
+-- constructor pattern depending on whether a non-empty record field
+-- list is provided.
+argPatOfChoice :: Located RdrName -> Maybe (LHsType GhcPs) -> Pat GhcPs
+argPatOfChoice choiceConName Nothing = asPatPrefixCon "arg" choiceConName
+argPatOfChoice choiceConName (Just (L _ (HsRecTy _ []))) = asPatPrefixCon "arg" choiceConName
+argPatOfChoice choiceConName _ = asPatRecWild "arg" choiceConName
+
+-- | Utility for constructing a match context.
+matchContext :: Located RdrName -> HsMatchContext RdrName
+matchContext tag = FunRhs
+             { mc_fun = tag
+             , mc_fixity = Prefix
+             , mc_strictness = NoSrcStrict }
+
+-- | Utility for constructing a match with a single right-hand-side.
+matchWithBinds
+  :: HsMatchContext RdrName
+  -> [Pat GhcPs]
+  -> SrcSpan
+  -> LHsExpr GhcPs
+  -> Maybe (LHsLocalBinds GhcPs)
+  -> Match GhcPs (LHsExpr GhcPs)
+matchWithBinds ctxt args loc body binds =
+  Match { m_ext = noExt
+        , m_ctxt = ctxt
+        , m_rhs_sig = Nothing
+        , m_pats = fmap noLoc args
+        , m_grhss = GRHSs { grhssExt = noExt
+                          , grhssGRHSs = [L loc $ GRHS noExt [] body]
+                          , grhssLocalBinds =
+                            case binds of
+                              Just binds' -> binds'
+                              Nothing -> noLoc $ emptyLocalBinds
+                          }
+        }
+
+-- | Utility for constructing a match group with a single alternate.
+matchGroup
+   :: SrcSpan
+   -> Match GhcPs (LHsExpr GhcPs)
+   -> MatchGroup GhcPs (LHsExpr GhcPs)
+matchGroup loc m = MG { mg_ext = noExt
+                      , mg_alts = L loc $ [L loc $ m]
+                      , mg_origin = FromSource
+                      }
+
+-- | Utility for constructing a function binding.
+funBind
+  :: SrcSpan
+  -> Located RdrName
+  -> MatchGroup GhcPs (LHsExpr GhcPs)
+  -> P (Maybe (LHsBind GhcPs))
+funBind loc tag mg =
+  return $ Just $ L loc $
+    FunBind { fun_ext = noExt
+            , fun_id = tag
+            , fun_matches = mg
+            , fun_co_fn = WpHole
+            , fun_tick = []
+            }
+
+-- | Put all your cats in a bag.
+bagOfCatMaybes :: [Maybe a] -> Bag a
+bagOfCatMaybes = listToBag . catMaybes
+
+-- | Utility for constructing a class instance declaration.
+classInstDecl :: HsType GhcPs -> LHsBinds GhcPs -> ClsInstDecl GhcPs
+classInstDecl tyApps funBinds =
+  ClsInstDecl { cid_ext = noExt
+              , cid_poly_ty = HsIB {
+                    hsib_ext = noExt
+                  , hsib_body = noLoc $ tyApps
+                  }
+              , cid_binds = funBinds
+              , cid_sigs = []
+              , cid_tyfam_insts = []
+              , cid_datafam_insts = []
+              , cid_overlap_mode  = Nothing
+              }
+
+-- | Utility for constructing an instance declaration.
+instDecl :: ClsInstDecl GhcPs -> P ([LHsDecl GhcPs])
+instDecl cid = do
+  return $ [noLoc $ InstD noExt $
+            ClsInstD { cid_d_ext = noExt
+                     , cid_inst = cid
+                     }
+           ]
+
+-- | Construct an 'ensure', 'signatory', 'observer', 'agreement',
+-- 'key'.
+mkTemplateFunBindDecl ::
+     String                      -- function name
+  -> Located RdrName             -- data ctor 'T'
+  -> Maybe (LHsExpr GhcPs)       -- function body
+  -> Maybe (LHsLocalBinds GhcPs) -- local binds
+  -> P (Maybe (LHsBind GhcPs))   -- function binding
+mkTemplateFunBindDecl _ _ Nothing _ = return Nothing
+mkTemplateFunBindDecl fname con_name (Just body) binds = do
+  let tag = noLoc $ mkRdrUnqual (mkVarOcc fname)
+      this = asPatRecWild "this" con_name
+      loc = getLoc body
+      ctx = matchContext tag
+      match = matchWithBinds ctx [this] loc body binds
+      match_group = matchGroup loc match
+  funBind loc tag match_group
+
+-- | Construct a 'maintainer' function binding. Note for future
+-- refactoring : this only differs from 'mkTemplateFunBindDecl' in the
+-- generated function's argument ('key' vs. 'this').
+mkMaintainerFunBindDecl ::
+     String                      -- function name
+  -> Located RdrName             -- data ctor 'T'
+  -> Maybe (LHsExpr GhcPs)       -- function body
+  -> Maybe (LHsLocalBinds GhcPs) -- local binds
+  -> P (Maybe (LHsBind GhcPs))   -- function binding
+mkMaintainerFunBindDecl _ _ Nothing _ = return Nothing
+mkMaintainerFunBindDecl fname _con_name (Just body) binds = do
+  let tag = noLoc $ mkRdrUnqual (mkVarOcc fname)
+      key = XPat (noLoc $ VarPat noExt $ noLoc $ mkRdrUnqual (mkVarOcc "key"))
+      loc = getLoc body
+      ctx = matchContext tag
+      match = matchWithBinds ctx [key] loc body binds
+      match_group = matchGroup loc match
+  funBind loc tag match_group
+
+-- [Controlled choice groups - Old syntax] This data structure is a
+-- tiny backwards compatibility hack for 'controller' function
+-- bindings.
+data ArgPattern = ArgWildcardPat | ArgAsPat
+
+-- | Construct a 'controller' function binding.
+mkTemplateControllerFunBindDecl
+  :: Located RdrName             -- data ctor 'T'
+  -> Maybe (LHsExpr GhcPs)       -- function body
+  -> Located RdrName             -- data ctor 'S'
+  -> Maybe (LHsType GhcPs)       -- record fields
+  -> ArgPattern                  -- 'arg@S{..}' or '_'?
+  -> Maybe (LHsLocalBinds GhcPs) -- local binds
+  -> P (Maybe (LHsBind GhcPs))   -- function binding
+mkTemplateControllerFunBindDecl _ Nothing _  _ _ _ = return Nothing
+mkTemplateControllerFunBindDecl
+  conName (Just body) choiceConName mbChoiceFields argPatType binds = do
+  let tag = noLoc $ mkRdrUnqual (mkVarOcc "choiceController")
+      this = asPatRecWild "this" conName
+      loc = getLoc body
+      arg = case argPatType of
+               -- See note [Controlled choice groups - Old syntax]
+               ArgWildcardPat -> WildPat noExt
+               ArgAsPat -> argPatOfChoice choiceConName mbChoiceFields
+      ctx = matchContext tag
+      match = matchWithBinds ctx [this, arg] loc body binds
+      match_group = matchGroup loc match
+  funBind loc tag match_group
+
+-- | Construct a 'consuming' function binding.  This will only return
+-- @Just@ a function if the provied argument is 'Just style'
+-- indicating a choice is "postconsuming" or "nonconsuming".
+mkTemplateConsumingFunBindDecl
+  :: Located (Maybe String)
+  -> P (Maybe (LHsBind GhcPs))
+mkTemplateConsumingFunBindDecl (L loc consuming) =
+  case consuming of
+    Nothing -> return Nothing
+    Just style -> do
+      let tag = noLoc $ mkRdrUnqual (mkVarOcc "consuming")
+          ctx = matchContext tag
+          body = L loc $ HsVar noExt $ L loc $ qualifyDesugar $ mkVarOcc style
+          match = matchWithBinds ctx [] loc body Nothing
+          match_group = matchGroup loc match
+      funBind loc tag match_group
+
+-- | Construct a 'choice' function binding.
+mkTemplateChoiceFunBindDecl ::
+     Located RdrName                        -- data ctor 'T'
+  -> Located RdrName                        -- data ctor 'S'
+  -> Maybe (LHsType GhcPs)                  -- maybe record fields
+  -> Located ([AddAnn], [ExprLStmt GhcPs])  -- body is a @do@ stmt list
+  -> Maybe (LHsLocalBinds GhcPs)            -- local binds
+  -> P (Maybe (LHsBind GhcPs))              -- function binding
+mkTemplateChoiceFunBindDecl
+  conName choiceConName mbChoiceFields body@(L loc (_ann, stmts)) binds = do
+  let tag = noLoc $ mkRdrUnqual (mkVarOcc "choice")
+      this = asPatRecWild "this" conName
+      self = XPat (noLoc $ VarPat noExt $ noLoc $ mkRdrUnqual (mkVarOcc "self"))
+      arg = argPatOfChoice choiceConName mbChoiceFields
+      do_ = L loc $ HsDo noExt DoExpr (L loc stmts)
+      ctx = matchContext tag
+      match = matchWithBinds ctx [this, self, arg] loc do_ binds
+      match_group = matchGroup loc match
+  funBind (combineLocs choiceConName body) tag match_group
+
+-- | Construct a @data X = X{...} deriving (Eq, Show)@
+mkTemplateTypeDecl ::
+     SrcSpan -- the span to associate with
+  -> Located RdrName         -- template 'T' (or choice 'S')
+  -> (Located RdrName
+     , HsConDeclDetails GhcPs
+     , Maybe LHsDocString)  -- result of 'splitCon'
+  -> P ([LHsDecl GhcPs])      -- the resulting @data@ declaration
+mkTemplateTypeDecl
+  loc lname@(L nloc _name) (conName, conDetails, conDoc) = do
+  -- NOTE (SM, SF): We assume that the program does not have any
+  -- BangPatterns on the fields here. Otherwise, "re-jigging" with
+  -- 'nudgeHsSrcBangs' would be required.
+  let conDecl = L nloc $ ConDeclH98
+        { con_ext    = noExt
+        , con_name   = conName
+        , con_forall = noLoc False
+        , con_ex_tvs = []
+        , con_mb_cxt = Nothing
+        , con_args   = conDetails
+        , con_doc    = conDoc
+        }
+  let eqName = L nloc $ qualifyDesugar $ mkClsOcc "Eq"
+      eqTyCl = mkLHsSigType $ L nloc $ HsTyVar noExt NotPromoted eqName
+  let showName = L nloc $ qualifyDesugar $ mkClsOcc "Show"
+      showTyCl = mkLHsSigType $ L nloc $ HsTyVar noExt NotPromoted showName
+  let derivingClause = L nloc $ HsDerivingClause
+        { deriv_clause_ext = NoExt
+        , deriv_clause_strategy = Nothing
+        , deriv_clause_tys = L nloc [eqTyCl, showTyCl]
+        }
+  let dataDefn = HsDataDefn
+        { dd_ext     = noExt
+        , dd_ND      = DataType
+        , dd_cType   = Nothing
+        , dd_ctxt    = L nloc []
+        , dd_cons    = [conDecl]
+        , dd_kindSig = Nothing
+        , dd_derivs  = L nloc [derivingClause]
+        }
+  let dataDecl = DataDecl
+        { tcdDExt     = noExt
+        , tcdLName    = lname
+        , tcdTyVars   = mkHsQTvs []
+        , tcdFixity   = Prefix
+        , tcdDataDefn = dataDefn
+        }
+  return [L loc $ TyClD noExt dataDecl]
+
+-- | Construct an @instance Template T@.
+mkTemplateTemplateInstDecl ::
+     LHsType GhcPs               -- data 'T'
+  -> Located RdrName             -- ctor 'T'
+  -> Maybe (LHsExpr GhcPs)       -- ensure
+  -> Maybe (LHsExpr GhcPs)       -- signatory
+  -> Maybe (LHsExpr GhcPs)       -- observer
+  -> Maybe (LHsExpr GhcPs)       -- agreement
+  -> Maybe (LHsLocalBinds GhcPs) -- binds
+  -> P [LHsDecl GhcPs]         -- resulting declaration
+mkTemplateTemplateInstDecl dataName conName ens sig obs agr binds = do
+{ -- Function bindings.
+    mbEnsureDecl <- mkTemplateFunBindDecl "ensure" conName ens binds
+  ; mbSignatoryDecl <- mkTemplateFunBindDecl "signatory" conName sig binds
+  ; mbObserverDecl <- mkTemplateFunBindDecl "observer" conName obs binds
+  ; mbAgreementDecl<- mkTemplateFunBindDecl "agreement" conName agr binds
+  -- Class instance declaration.
+  ; let funBinds = bagOfCatMaybes
+          [mbEnsureDecl, mbSignatoryDecl, mbObserverDecl, mbAgreementDecl]
+        className = noLoc $ HsTyVar noExt NotPromoted
+                    $ noLoc $ qualifyDesugar $ mkClsOcc "Template"
+        class_inst_decl = classInstDecl (HsAppTy noExt className dataName) funBinds
+  -- Instance declaration.
+  ; instDecl class_inst_decl
+}
+
+-- | Construct an @instance Choice T S R@.
+mkTemplateChoiceInstDecl
+  :: LHsType GhcPs   -- data 'T'
+  -> LHsType GhcPs   -- data 'S'
+  -> Located RdrName -- ctor 'T'
+  -> Located RdrName -- ctor 'S'
+  -> LHsExpr GhcPs   -- (list of) controllers
+  -> ChoiceData      -- choice 'S' (with result type 'R')
+  -> ArgPattern      -- 'arg@S{..}' or '_'?
+  -> Maybe (LHsLocalBinds GhcPs) -- local binds
+  -> P ([LHsDecl GhcPs])  -- resulting declaration
+mkTemplateChoiceInstDecl
+  dataName choiceName conName
+    choiceConName controllers (ChoiceData{..}) argPatType binds = do
+{ -- Function bindings.
+  ; mbChoiceControllerDecl <-
+      mkTemplateControllerFunBindDecl
+        conName (Just controllers) choiceConName cdChoiceFields argPatType binds
+  ; mbChoiceChoiceDecl <-
+      mkTemplateChoiceFunBindDecl
+        conName choiceConName cdChoiceFields cdChoiceBody binds
+  ; mbChoiceConsumingDecl <- mkTemplateConsumingFunBindDecl cdChoiceConsuming
+  -- Class instance declaration.
+  ; let funBinds = bagOfCatMaybes
+          [mbChoiceControllerDecl, mbChoiceChoiceDecl, mbChoiceConsumingDecl]
+        choiceClassName = noLoc $
+          HsTyVar noExt NotPromoted $ noLoc $ qualifyDesugar $ mkClsOcc "Choice"
+        tyApps =
+          HsAppTy noExt
+          (noLoc $ HsAppTy noExt
+            (noLoc $ HsAppTy noExt choiceClassName dataName)
+            choiceName)
+          cdChoiceReturnTy
+        class_inst_decl = classInstDecl tyApps funBinds
+  -- Instance declaration.
+  ; instDecl class_inst_decl
+}
+
+-- | Construct an @instance TemplateKey C K@.
+mkTemplateKeyInstDecl
+  :: LHsType GhcPs   -- data 'C'
+  -> Located RdrName -- ctor 'C'
+  -> Maybe (Located KeyData) -- key expr and type
+  -> Maybe (LHsExpr GhcPs) -- (list of) maintainers
+  -> Maybe (LHsLocalBinds GhcPs) -- binds
+  -> P ([LHsDecl GhcPs]) -- resulting declaration
+mkTemplateKeyInstDecl _ _ Nothing _ _ = return []
+mkTemplateKeyInstDecl _ _ _ Nothing _ = return []
+mkTemplateKeyInstDecl dataName conName (Just (L _ KeyData{..})) maintainers binds = do
+{ -- Function bindings.
+  ; mbKeyDecl <- mkTemplateFunBindDecl "key" conName (Just kdKeyExpr) binds
+  ; mbMaintainerDecl <- mkMaintainerFunBindDecl "maintainer" conName maintainers binds
+  -- Class instance declaration.
+  ; let funBinds = bagOfCatMaybes [mbKeyDecl, mbMaintainerDecl]
+        className = noLoc $ HsTyVar noExt NotPromoted
+                    $ noLoc $ qualifyDesugar $ mkClsOcc "TemplateKey"
+        tyApps =
+          HsAppTy noExt
+            (noLoc $ HsAppTy noExt className dataName)
+            kdKeyTy
+        class_inst_decl = classInstDecl tyApps funBinds
+  -- Instance declaration.
+  ; instDecl class_inst_decl
+}
+
+-- | Contruct a @data S = S {...}@ and @instance Choice T S R@ for a
+-- single choice 'S'.
+mkTemplateChoiceDecls
+  :: LHsType GhcPs -- data 'T'
+  -> Located RdrName -- ctor 'T'
+  -> LHsExpr GhcPs -- (list of) controllers
+  -> Located ChoiceData -- choice 'S' (with result type 'R')
+  -> ArgPattern -- 'arg@S{..}' or '_'?
+  -> Maybe (LHsLocalBinds GhcPs) -- local binds
+  -> P ([LHsDecl GhcPs]) -- resulting declarations
+mkTemplateChoiceDecls
+  dataName conName controllers (L _ (choice@ChoiceData{..})) argPatType binds = do
+{
+  -- Calculate data constructor info from the choice name and (maybe)
+  -- record type.
+    let lname@(L nloc _name) = cdChoiceName
+        choiceName = L nloc (HsTyVar noExt NotPromoted lname)
+  ; choiceConInfo@(choiceConName, _, _) <-
+      case cdChoiceFields of
+        Nothing -> splitCon [choiceName]
+        Just fields -> splitCon [fields, choiceName]
+  ; dataDecl <- mkTemplateTypeDecl
+                  (combineLocs cdChoiceName
+                     (last (void cdChoiceReturnTy :
+                            (map void (maybeToList cdChoiceFields)))))
+                  cdChoiceName choiceConInfo
+  ; templateInstDecl <- mkTemplateChoiceInstDecl dataName choiceName
+                           conName choiceConName controllers choice argPatType binds
+  -- Prepend the choice documentation, if any, as a 'DocNext'.
+  ; mbDocDecl <- pure $ case cdChoiceDoc of
+                   Nothing -> []
+                   Just (L loc str) ->
+                     [L loc (DocD noExt (DocCommentNext str))]
+
+  ; return $ mbDocDecl ++ dataDecl ++ templateInstDecl
+}
+
+-- | Contruct a @data S = S {...}@ and @instance Choice T S R@ for all
+-- choices of choice groups.
+mkTemplateChoiceGroupDecls ::
+       LHsType GhcPs                   -- data 'T'
+    -> Located RdrName                 -- ctor 'T'
+    -> [Located (LHsExpr GhcPs, Located [Located ChoiceData])] -- choice groups
+    -> Maybe (LHsLocalBinds GhcPs)     -- binds
+    -> P ([LHsDecl GhcPs])             -- resulting declarations
+mkTemplateChoiceGroupDecls dataName conName cgs binds = do
+{
+  foldM f [] cgs -- for each choice group
+} where {
+    f :: [LHsDecl GhcPs]
+      -> Located (LHsExpr GhcPs, Located [Located ChoiceData])
+      -> P ([LHsDecl GhcPs])
+  ; f acc (L _ (controllers, (L _ choice_decls))) =  do { -- for each choice
+        decls <- foldM (g controllers) [] choice_decls
+      ; return (acc ++ decls)
+    } where {
+        g :: LHsExpr GhcPs
+          -> [LHsDecl GhcPs]
+          -> Located ChoiceData
+          -> P ([LHsDecl GhcPs])
+      ; g controllers acc choice_decl = do {    -- harvest decls
+          decls <- mkTemplateChoiceDecls dataName conName
+                                  controllers choice_decl ArgWildcardPat binds
+        ; return (acc ++ decls)
+      }
+   }
+}
+
+-- | Contruct a @data S = S {...}@ and @instance Choice T S R@ for all
+-- choices with flexible controllers.
+mkTemplateFlexChoiceDecls ::
+       LHsType GhcPs                   -- data 'T'
+    -> Located RdrName                 -- ctor 'T'
+    -> [Located FlexChoiceData]        -- flexible choices
+    -> Maybe (LHsLocalBinds GhcPs)     -- binds
+    -> P ([LHsDecl GhcPs])             -- resulting declarations
+mkTemplateFlexChoiceDecls dataName conName flxs binds = do
+{
+  foldM f [] flxs
+} where {
+    f :: [LHsDecl GhcPs] -> Located FlexChoiceData -> P ([LHsDecl GhcPs])
+  ; f acc (L loc (FlexChoiceData controllers choice_decl)) = do {
+      decls <- mkTemplateChoiceDecls dataName conName
+                               controllers (L loc choice_decl) ArgAsPat binds
+    ; return (acc ++ decls)
+  }
+}
+
+-- | Validate @template@ multiplicity constraints.
+checkTemplateDeclConstraints
+  :: SrcSpan                   -- loc of 'T' in @template T@
+  -> [LHsExpr GhcPs]           -- ensure
+  -> [LHsExpr GhcPs]           -- agreement
+  -> [LHsLocalBinds GhcPs]     -- binds
+  -> [Located KeyData]         -- key
+  -> [LHsExpr GhcPs]           -- maintainer
+  -> P ()
+checkTemplateDeclConstraints nloc ens agr bns kys mts
+  | length ens > 1 = addFatalError nloc (text "Multiple 'ensure' declarations")
+  | length agr > 1 = addFatalError nloc (text "Multiple 'agreement' declarations")
+  | length kys > 1 = addFatalError nloc (text "Multiple 'key' declarations")
+  | length bns > 1 = addFatalError nloc (text "Multiple 'let' block declarations")
+  | length mts >= 1 && null kys = addFatalError nloc (text "Missing 'key' declaration")
+  | length kys == 1 && null mts = addFatalError nloc (text "Missing 'maintainer' declaration")
+  | otherwise      = return ()
+
+-- | Desugar a @template@ declaration into a list of decls (this is
+-- called from 'Parser.y').
+mkTemplateDecl
+  :: Located RdrName -- The template name
+  -> LHsType GhcPs -- The template's record type
+  -> Located [Located TemplateBodyDecl]  -- Template declarations
+  -> P (OrdList (LHsDecl GhcPs)) -- Desugared declarations
+mkTemplateDecl lname@(L nloc _name) fields (L _ decls) = do
+  let dataName = L nloc (HsTyVar noExt NotPromoted lname)
+      TemplateBodyDecls {..} = extractTemplateBodyDecls decls
+      tbdSignatories' = mergeDecls tbdSignatories
+      tbdObservers' = Just $ allTemplateObservers (mergeDecls tbdObservers) $ map (fst . unLoc) tbdControlledChoiceGroups
+      tbdMaintainers' = mergeDecls tbdMaintainers
+  checkTemplateDeclConstraints nloc tbdEnsures tbdAgreements tbdLetBindings tbdKeys tbdMaintainers
+  let (tbdEnsures', tbdAgreements', tbdLetBindings', tbdKeys') =
+        (listToMaybe tbdEnsures, listToMaybe tbdAgreements, listToMaybe tbdLetBindings, listToMaybe tbdKeys)
+  -- Calculate 'T' data constructor info from 'T' and the record type
+  -- denoted by 'fields'.
+  ci@(conName, _, _) <- splitCon [fields, dataName]
+  dataDecl <- mkTemplateTypeDecl (combineLocs lname fields) lname ci
+  templateInstDecl <- mkTemplateTemplateInstDecl dataName conName tbdEnsures' tbdSignatories' tbdObservers' tbdAgreements' tbdLetBindings'
+  choiceGroupDecls <- mkTemplateChoiceGroupDecls dataName conName tbdControlledChoiceGroups tbdLetBindings'
+  flexChoiceDecls <- mkTemplateFlexChoiceDecls dataName conName tbdFlexChoices tbdLetBindings'
+  templateKeyInstDecl <- mkTemplateKeyInstDecl dataName conName tbdKeys' tbdMaintainers' tbdLetBindings'
+  return $ toOL $ dataDecl ++ templateInstDecl ++ choiceGroupDecls ++ flexChoiceDecls ++ templateKeyInstDecl
+  where
+    -- | We support multiple 'signatory', 'observer' and 'maintainer'
+    -- declarations in a template.
+    mergeDecls :: [LHsExpr GhcPs] -> Maybe (LHsExpr GhcPs)
+    mergeDecls xs
+      | null xs = Nothing
+      | otherwise = Just $ applyConcat $ noLoc xs -- Concat them.
+
+    -- | Calculate an expression for the full list of a contract's
+    -- observers.
+    allTemplateObservers
+      :: Maybe (LHsExpr GhcPs) -- Explicit (list of) observers.
+      -> [LHsExpr GhcPs] -- Contract controllers (list of lists).
+      -> LHsExpr GhcPs -- Union (list) of observers and controllers.
+    allTemplateObservers obs controllers =
+      let app = applyConcat (L noSrcSpan $ maybeToList obs ++ controllers)
+      in case obs of
+           Nothing -> app
+           Just (L loc _) -> L loc (unLoc app)
 
 -----------------------------------------------------------------------------
 -- utilities for foreign declarations
