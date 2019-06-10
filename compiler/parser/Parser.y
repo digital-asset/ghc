@@ -1002,17 +1002,39 @@ importdecls_semi
         | {- empty -}           { [] }
 
 importdecl :: { LImportDecl GhcPs }
-        : 'import' maybe_src maybe_safe optqualified maybe_pkg modid maybeas maybeimpspec
-                {% ams (cL (comb4 $1 $6 (snd $7) $8) $
-                  ImportDecl { ideclExt = noExt
-                             , ideclSourceSrc = snd $ fst $2
-                             , ideclName = $6, ideclPkgQual = snd $5
-                             , ideclSource = snd $2, ideclSafe = snd $3
-                             , ideclQualified = snd $4, ideclImplicit = False
-                             , ideclAs = unLoc (snd $7)
-                             , ideclHiding = unLoc $8 })
-                   ((mj AnnImport $1 : (fst $ fst $2) ++ fst $3 ++ fst $4
-                                    ++ fst $5 ++ fst $7)) }
+        : 'import' maybe_src maybe_safe optqualified maybe_pkg modid optqualified maybeas maybeimpspec
+                {% do
+                      -- Note : [Poor man's 'ImportQualifiedPost']
+                      -- -----------------------------------------
+                      -- Knowing we are downhill from the official
+                      -- implementation of 'ImportQualifiedPost'
+                      -- (https://gitlab.haskell.org/ghc/ghc/merge_requests/853)
+                      -- in the interests of saving time and effort, I'm
+                      -- playing fast and loose here. Specifically, I'm
+                      -- skipping adding the extension and its
+                      -- associated warning
+                      -- 'prepositive-qualified-module' and I'm not
+                      -- tracking which syntax was used in the parse
+                      -- tree for printing purposes. I am making it an
+                      -- error though if 'qualified' appears in both
+                      -- prepostive and postpositive positions.
+                      let preQual = snd (unLoc $4)
+                          postQual = snd (unLoc $7)
+                          qualAnn = (fst . unLoc) $ if postQual then $7 else $4
+                      when (preQual && postQual) $
+                        parseErrorSDoc (getLoc $7) $ vcat [
+                          text "'qualified' found in both pre- and post-qualified postions"
+                        ]
+                      ams (cL (comb4 $1 $6 (snd $8) $9) $
+                        ImportDecl { ideclExt = noExt
+                                   , ideclSourceSrc = snd $ fst $2
+                                   , ideclName = $6, ideclPkgQual = snd $5
+                                   , ideclSource = snd $2, ideclSafe = snd $3
+                                   , ideclQualified = preQual || postQual, ideclImplicit = False
+                                   , ideclAs = unLoc (snd $8)
+                                   , ideclHiding = unLoc $9 })
+                        ((mj AnnImport $1 : (fst $ fst $2) ++ fst $3 ++ qualAnn
+                                        ++ fst $5 ++ fst $8)) }
 
 maybe_src :: { (([AddAnn],SourceText),IsBootInterface) }
         : '{-# SOURCE' '#-}'        { (([mo $1,mc $2],getSOURCE_PRAGs $1)
@@ -1033,9 +1055,9 @@ maybe_pkg :: { ([AddAnn],Maybe StringLiteral) }
                              text "character in package name"] }
         | {- empty -}                           { ([],Nothing) }
 
-optqualified :: { ([AddAnn],Bool) }
-        : 'qualified'                           { ([mj AnnQualified $1],True)  }
-        | {- empty -}                           { ([],False) }
+optqualified :: { Located ([AddAnn],Bool) }
+        : 'qualified'                           { sL1 $1 $ ([mj AnnQualified $1],True)  }
+        | {- empty -}                           { noLoc ([],False) }
 
 maybeas :: { ([AddAnn],Located (Maybe (Located ModuleName))) }
         : 'as' modid                           { ([mj AnnAs $1]
