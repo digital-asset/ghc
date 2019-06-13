@@ -2288,6 +2288,29 @@ funBind loc tag mg =
 bagOfCatMaybes :: [Maybe a] -> Bag a
 bagOfCatMaybes = listToBag . catMaybes
 
+-- | Utility for constructing a class declaration.
+classDecl :: String -> LHsBinds GhcPs -> TyClDecl GhcPs
+classDecl templateName bodyDecls =
+  let mkSig :: String -> HsType GhcPs -> Sig GhcPs
+      mkSig methodName ty =
+        let fullMethodName = methodName ++ templateName in
+        ClassOpSig noExt False [noLoc $ mkRdrUnqual $ mkVarOcc fullMethodName] $
+          HsIB noExt $ noLoc ty
+      sigs = map (noLoc . uncurry mkSig) []
+  in
+  ClassDecl { tcdCExt = noExt
+            , tcdCtxt = noLoc []
+            , tcdLName = noLoc $ mkRdrUnqual $ mkVarOcc templateName
+            , tcdTyVars = HsQTvs noExt [] -- TODO(RJR): include tyvars for generic templates
+            , tcdFixity = Prefix
+            , tcdFDs = []
+            , tcdSigs = sigs
+            , tcdMeths = emptyBag
+            , tcdATs = []
+            , tcdATDefs = []
+            , tcdDocs = []
+            }
+
 -- | Utility for constructing a class instance declaration.
 classInstDecl :: HsType GhcPs -> LHsBinds GhcPs -> ClsInstDecl GhcPs
 classInstDecl tyApps funBinds =
@@ -2463,6 +2486,21 @@ mkTemplateTypeDecl
         , tcdDataDefn = dataDefn
         }
   return [L loc $ TyClD noExt dataDecl]
+
+-- | Construct a @class Template TInstance@.
+mkTemplateInstanceClassDecl ::
+     LHsType GhcPs               -- data 'T'
+  -> Located RdrName             -- ctor 'T'
+  -> Maybe (LHsExpr GhcPs)       -- ensure
+  -> Maybe (LHsExpr GhcPs)       -- signatory
+  -> Maybe (LHsExpr GhcPs)       -- observer
+  -> Maybe (LHsExpr GhcPs)       -- agreement
+  -> Maybe (LHsLocalBinds GhcPs) -- binds
+  -> P [LHsDecl GhcPs]         -- resulting declaration
+mkTemplateInstanceClassDecl dataName conName ens sig obs agr binds = do
+{
+  return $ [noLoc $ TyClD noExt $ classDecl "hello" emptyBag]
+}
 
 -- | Construct an @instance Template T@.
 mkTemplateTemplateInstDecl ::
