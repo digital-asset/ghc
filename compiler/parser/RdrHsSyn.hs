@@ -2291,16 +2291,24 @@ bagOfCatMaybes = listToBag . catMaybes
 -- | Utility for constructing a class declaration.
 classDecl :: String -> LHsBinds GhcPs -> TyClDecl GhcPs
 classDecl templateName bodyDecls =
-  let mkSig :: String -> HsType GhcPs -> Sig GhcPs
+  let fullClassName = noLoc $ mkRdrUnqual $ mkVarOcc $ templateName ++ "Instance"
+      mkSig :: String -> LHsType GhcPs -> LSig GhcPs
       mkSig methodName ty =
-        let fullMethodName = methodName ++ templateName in
-        ClassOpSig noExt False [noLoc $ mkRdrUnqual $ mkVarOcc fullMethodName] $
-          HsIB noExt $ noLoc ty
-      sigs = map (noLoc . uncurry mkSig) []
+        let fullMethodName = noLoc $ mkRdrUnqual $ mkVarOcc $ methodName ++ templateName in
+        noLoc $ ClassOpSig noExt False [fullMethodName] (HsIB noExt ty)
+      mkFunTy :: LHsType GhcPs -> LHsType GhcPs -> LHsType GhcPs
+      mkFunTy funTy argTy = noLoc $ HsFunTy noExt funTy argTy
+      mkTypeName :: String -> LHsType GhcPs
+      mkTypeName tyName = noLoc $ HsTyVar NoExt NotPromoted (noLoc $ mkRdrUnqual $ mkTyVarOcc tyName)
+      mkListTy :: LHsType GhcPs -> LHsType GhcPs
+      mkListTy elemTy = noLoc $ HsListTy noExt elemTy
+      sigs = map (uncurry mkSig) [
+          ("signatory", mkFunTy (mkTypeName templateName) (mkListTy $ mkTypeName "Party"))
+        ]
   in
   ClassDecl { tcdCExt = noExt
             , tcdCtxt = noLoc []
-            , tcdLName = noLoc $ mkRdrUnqual $ mkVarOcc templateName
+            , tcdLName = fullClassName
             , tcdTyVars = HsQTvs noExt [] -- TODO(RJR): include tyvars for generic templates
             , tcdFixity = Prefix
             , tcdFDs = []
@@ -2499,7 +2507,8 @@ mkTemplateInstanceClassDecl ::
   -> P [LHsDecl GhcPs]         -- resulting declaration
 mkTemplateInstanceClassDecl dataName conName ens sig obs agr binds = do
 {
-  return $ [noLoc $ TyClD noExt $ classDecl "hello" emptyBag]
+    let className = occNameString $ rdrNameOcc $ unLoc conName
+  ; return $ [noLoc $ TyClD noExt $ classDecl className emptyBag]
 }
 
 -- | Construct an @instance Template T@.
@@ -2719,11 +2728,12 @@ mkTemplateDecl lname@(L nloc _name) fields (L _ decls) = do
   -- denoted by 'fields'.
   ci@(conName, _, _) <- splitCon [fields, dataName]
   dataDecl <- mkTemplateTypeDecl (combineLocs lname fields) lname ci
+  templateInstClassDecl <- mkTemplateInstanceClassDecl dataName conName tbdEnsures' tbdSignatories' tbdObservers' tbdAgreements' tbdLetBindings'
   templateInstDecl <- mkTemplateTemplateInstDecl dataName conName tbdEnsures' tbdSignatories' tbdObservers' tbdAgreements' tbdLetBindings'
   choiceGroupDecls <- mkTemplateChoiceGroupDecls dataName conName tbdControlledChoiceGroups tbdLetBindings'
   flexChoiceDecls <- mkTemplateFlexChoiceDecls dataName conName tbdFlexChoices tbdLetBindings'
   templateKeyInstDecl <- mkTemplateKeyInstDecl dataName conName tbdKeys' tbdMaintainers' tbdLetBindings'
-  return $ toOL $ dataDecl ++ templateInstDecl ++ choiceGroupDecls ++ flexChoiceDecls ++ templateKeyInstDecl
+  return $ toOL $ dataDecl ++ templateInstClassDecl ++ templateInstDecl ++ choiceGroupDecls ++ flexChoiceDecls ++ templateKeyInstDecl
   where
     -- | We support multiple 'signatory', 'observer' and 'maintainer'
     -- declarations in a template.
