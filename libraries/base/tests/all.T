@@ -20,7 +20,7 @@ test('tempfiles', normal, compile_and_run, [''])
 test('fixed', normal, compile_and_run, [''])
 test('quotOverflow', normal, compile_and_run, [''])
 test('assert', exit_code(1), compile_and_run, ['-fno-ignore-asserts'])
-test('CPUTime001', normal, compile_and_run, [''])
+test('CPUTime001', fragile(16224), compile_and_run, [''])
 test('readLitChar',   normal, compile_and_run, [''])
 test('unicode001',
      when(platform('i386-unknown-openbsd'), expect_fail),
@@ -231,5 +231,5 @@ test('T3474',
 test('T14425', normal, compile_and_run, [''])
 test('T10412', normal, compile_and_run, [''])
 test('T13896', normal, compile_and_run, [''])
-test('T13167', normal, compile_and_run, [''])
+test('T13167', fragile_for(16536, ['threaded2']), compile_and_run, [''])
 test('T15349', [exit_code(1), expect_broken_for(15349, 'ghci')], compile_and_run, [''])
