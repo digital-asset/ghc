@@ -2270,6 +2270,21 @@ matchGroup loc m = MG { mg_ext = noExt
                       }
 
 -- | Utility for constructing a function binding.
+funBind'
+  :: SrcSpan
+  -> Located RdrName
+  -> MatchGroup GhcPs (LHsExpr GhcPs)
+  -> LHsBind GhcPs
+funBind' loc tag mg =
+  L loc $
+    FunBind { fun_ext = noExt
+            , fun_id = tag
+            , fun_matches = mg
+            , fun_co_fn = WpHole
+            , fun_tick = []
+            }
+
+-- | Utility for constructing a function binding.
 funBind
   :: SrcSpan
   -> Located RdrName
@@ -2299,11 +2314,20 @@ classDecl templateName bodyDecls =
       mkFunTy :: LHsType GhcPs -> LHsType GhcPs -> LHsType GhcPs
       mkFunTy funTy argTy = noLoc $ HsFunTy noExt funTy argTy
       mkTypeName :: String -> LHsType GhcPs
-      mkTypeName tyName = noLoc $ HsTyVar NoExt NotPromoted (noLoc $ mkRdrUnqual $ mkTyVarOcc tyName)
+      mkTypeName tyName = noLoc $ HsTyVar NoExt NotPromoted (noLoc $ mkRdrUnqual $ mkTcOcc tyName)
       mkListTy :: LHsType GhcPs -> LHsType GhcPs
       mkListTy elemTy = noLoc $ HsListTy noExt elemTy
+      mkAppTy ty1 ty2 = noLoc $ HsAppTy noExt ty1 ty2
+      templateType = mkTypeName templateName
+      unitType = noLoc $ HsTupleTy noExt HsBoxedOrConstraintTuple []
       sigs = map (uncurry mkSig) [
-          ("signatory", mkFunTy (mkTypeName templateName) (mkListTy $ mkTypeName "Party"))
+          ("signatory", mkFunTy templateType (mkListTy $ mkTypeName "Party"))
+        , ("observer",  mkFunTy templateType (mkListTy $ mkTypeName "Party"))
+        , ("ensure",    mkFunTy templateType (mkTypeName "Bool"))
+        , ("agreement", mkFunTy templateType (mkTypeName "Text"))
+        , ("create",    mkFunTy templateType (mkAppTy (mkTypeName "Update") $ noLoc $ HsParTy noExt (mkAppTy (mkTypeName "ContractId") templateType)))
+        , ("fetch",     mkFunTy (mkAppTy (mkTypeName "ContractId") templateType) (mkAppTy (mkTypeName "Update") templateType))
+        , ("archive",   mkFunTy (mkAppTy (mkTypeName "ContractId") templateType) (mkAppTy (mkTypeName "Update") unitType))
         ]
   in
   ClassDecl { tcdCExt = noExt
@@ -2313,7 +2337,7 @@ classDecl templateName bodyDecls =
             , tcdFixity = Prefix
             , tcdFDs = []
             , tcdSigs = sigs
-            , tcdMeths = emptyBag
+            , tcdMeths = bodyDecls
             , tcdATs = []
             , tcdATDefs = []
             , tcdDocs = []
@@ -2342,6 +2366,26 @@ instDecl cid = do
                      , cid_inst = cid
                      }
            ]
+
+-- | Construct an 'ensure', 'signatory', 'observer', 'agreement',
+-- 'key'.
+mkTemplateMethod ::
+     String                      -- method name
+  -> Located RdrName             -- template data ctor 'T'
+  -> Bool                        -- does the method has a "this" argument?
+  -> LHsExpr GhcPs               -- function body
+  -> Maybe (LHsLocalBinds GhcPs) -- local binds
+  -> LHsBind GhcPs               -- function binding
+mkTemplateMethod methodName conName thisArg body binds = do
+  let templateName = occNameString $ rdrNameOcc $ unLoc conName
+      fullMethodName = noLoc $ mkRdrUnqual $ mkVarOcc $ methodName ++ templateName
+      ctx = matchContext fullMethodName
+      this = asPatRecWild "this" conName
+      args = if thisArg then [this] else []
+      loc = getLoc body
+      match = matchWithBinds ctx args loc body binds
+      match_group = matchGroup loc match
+  funBind' loc fullMethodName match_group
 
 -- | Construct an 'ensure', 'signatory', 'observer', 'agreement',
 -- 'key'.
@@ -2504,11 +2548,25 @@ mkTemplateInstanceClassDecl ::
   -> Maybe (LHsExpr GhcPs)       -- observer
   -> Maybe (LHsExpr GhcPs)       -- agreement
   -> Maybe (LHsLocalBinds GhcPs) -- binds
-  -> P [LHsDecl GhcPs]         -- resulting declaration
+  -> P [LHsDecl GhcPs]           -- resulting declaration
 mkTemplateInstanceClassDecl dataName conName ens sig obs agr binds = do
 {
     let className = occNameString $ rdrNameOcc $ unLoc conName
-  ; return $ [noLoc $ TyClD noExt $ classDecl className emptyBag]
+        mkMethod :: String -> Bool -> LHsExpr GhcPs -> LHsBind GhcPs
+        mkMethod methodName thisArg methodBody =
+          mkTemplateMethod methodName conName thisArg methodBody binds
+        mkVar :: String -> LHsExpr GhcPs = noLoc . HsVar noExt . noLoc . mkRdrUnqual . mkVarOcc
+        emptyList :: LHsExpr GhcPs = mkVar "[]"
+        compilerMagic :: LHsExpr GhcPs = mkVar "undefined"
+        methods = map (uncurry3 mkMethod) [
+            ("signatory", True,  fromMaybe emptyList sig)
+          , ("observer",  True,  fromMaybe emptyList obs)
+          , ("ensure",    True,  fromMaybe (mkVar "True") ens)
+          , ("agreement", True,  fromMaybe (mkVar "\"\"") agr)
+          , ("create",    False, compilerMagic)
+          , ("fetch",     False, compilerMagic)
+          ]
+  ; return $ [noLoc $ TyClD noExt $ classDecl className $ listToBag methods]
 }
 
 -- | Construct an @instance Template T@.
