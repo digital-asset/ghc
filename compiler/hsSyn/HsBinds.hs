@@ -743,7 +743,7 @@ ppr_monobind (FunBind { fun_id = fun,
                         fun_tick = ticks })
   = pprTicks empty (if null ticks then empty
                     else text "-- ticks = " <> ppr ticks)
-    $$  whenPprDebug (pprBndr LetBind (unLoc fun))
+    $$  pprBndr LetBind (unLoc fun)
     $$  pprFunBind  matches
     $$  whenPprDebug (ppr wrap)
 ppr_monobind (PatSynBind _ psb) = ppr psb
