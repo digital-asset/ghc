@@ -2306,11 +2306,9 @@ mkRdrName = mkRdrUnqual . mkVarOcc
 bagOfCatMaybes :: [Maybe a] -> Bag a
 bagOfCatMaybes = listToBag . catMaybes
 
--- | Utility for constructing a class declaration.
-classDecl :: String -> LHsBinds GhcPs -> TyClDecl GhcPs
-classDecl templateName bodyDecls =
-  let fullClassName = noLoc $ mkRdrName $ templateName ++ "Instance"
-      mkSig :: String -> LHsType GhcPs -> LSig GhcPs
+mkTemplateClassInstanceSigs :: String -> [LSig GhcPs]
+mkTemplateClassInstanceSigs templateName =
+  let mkSig :: String -> LHsType GhcPs -> LSig GhcPs
       mkSig methodName ty =
         let fullMethodName = noLoc $ mkRdrName $ methodName ++ templateName in
         noLoc $ ClassOpSig noExt False [fullMethodName] (HsIB noExt ty)
@@ -2323,7 +2321,7 @@ classDecl templateName bodyDecls =
       mkAppTy ty1 ty2 = noLoc $ HsAppTy noExt ty1 ty2
       templateType = mkTypeName templateName
       unitType = noLoc $ HsTupleTy noExt HsBoxedOrConstraintTuple []
-      sigs = map (uncurry mkSig) [
+  in  map (uncurry mkSig) [
           ("signatory", mkFunTy templateType (mkListTy $ mkTypeName "Party"))
         , ("observer",  mkFunTy templateType (mkListTy $ mkTypeName "Party"))
         , ("ensure",    mkFunTy templateType (mkTypeName "Bool"))
@@ -2332,15 +2330,18 @@ classDecl templateName bodyDecls =
         , ("fetch",     mkFunTy (mkAppTy (mkTypeName "ContractId") templateType) (mkAppTy (mkTypeName "Update") templateType))
         , ("archive",   mkFunTy (mkAppTy (mkTypeName "ContractId") templateType) (mkAppTy (mkTypeName "Update") unitType))
         ]
-  in
+
+-- | Utility for constructing a class declaration.
+classDecl :: Located RdrName -> [LSig GhcPs] -> LHsBinds GhcPs -> TyClDecl GhcPs
+classDecl className sigs methods =
   ClassDecl { tcdCExt = noExt
             , tcdCtxt = noLoc []
-            , tcdLName = fullClassName
+            , tcdLName = className
             , tcdTyVars = HsQTvs noExt [] -- TODO(RJR): include tyvars for generic templates
             , tcdFixity = Prefix
             , tcdFDs = []
             , tcdSigs = sigs
-            , tcdMeths = bodyDecls
+            , tcdMeths = methods
             , tcdATs = []
             , tcdATDefs = []
             , tcdDocs = []
@@ -2386,13 +2387,37 @@ mkTemplateMethod methodName conName thisArg body binds = do
       args = if thisArg then [this] else []
   mkTemplateClassMethod fullMethodName args body binds
 
+mkTemplateChoiceSigs :: String -> ChoiceData -> [LSig GhcPs]
+mkTemplateChoiceSigs templateName ChoiceData{..} =
+  let capitalize s = case s of h:t -> toUpper h : t; [] -> []
+      choiceName = capitalize $ occNameString $ rdrNameOcc $ unLoc cdChoiceName
+      choiceType = mkTypeName choiceName
+      templateType = mkTypeName templateName
+      mkFunTy :: LHsType GhcPs -> LHsType GhcPs -> LHsType GhcPs
+      mkFunTy funTy argTy = noLoc $ HsFunTy noExt funTy argTy
+      mkTypeName :: String -> LHsType GhcPs
+      mkTypeName tyName = noLoc $ HsTyVar NoExt NotPromoted $ noLoc $ mkRdrUnqual $ mkTcOcc tyName
+      mkListTy :: LHsType GhcPs -> LHsType GhcPs
+      mkListTy elemTy = noLoc $ HsListTy noExt elemTy
+      mkAppTy ty1 ty2 = noLoc $ HsAppTy noExt ty1 ty2
+      mkSig :: String -> LHsType GhcPs -> LSig GhcPs
+      mkSig methodName ty =
+        let fullMethodName = noLoc $ mkRdrName $ methodName ++ templateName ++ choiceName in
+        noLoc $ ClassOpSig noExt False [fullMethodName] (HsIB noExt ty)
+  in  map (uncurry mkSig) [
+          ("consumption", fmap (unLoc . mkTypeName . fromMaybe "PreConsuming") cdChoiceConsuming)
+        , ("controller", mkFunTy templateType (mkFunTy choiceType (mkListTy $ mkTypeName "Party")))
+        , ("action", mkFunTy (mkAppTy (mkTypeName "ContractId") templateType) (mkFunTy templateType (mkFunTy choiceType (mkAppTy (mkTypeName "Update") cdChoiceReturnTy))))
+        , ("exercise", mkFunTy (mkAppTy (mkTypeName "ContractId") templateType) (mkFunTy choiceType (mkAppTy (mkTypeName "Update") cdChoiceReturnTy)))
+        ]
+
 mkTemplateChoiceMethods ::
      Located RdrName             -- template data ctor 'T'
   -> ChoiceData                  -- choice data
   -> Maybe (LHsExpr GhcPs)       -- choice controller
   -> Maybe (LHsLocalBinds GhcPs) -- local binds
   -> [LHsBind GhcPs]             -- function binding
-mkTemplateChoiceMethods conName choice mbController binds = do
+mkTemplateChoiceMethods conName choice mbController binds =
   let templateName = occNameString $ rdrNameOcc $ unLoc conName
       ChoiceData{..} = choice
       capitalize s = case s of h:t -> toUpper h : t; [] -> []
@@ -2406,12 +2431,12 @@ mkTemplateChoiceMethods conName choice mbController binds = do
       mkMethod methodName args body =
         mkTemplateClassMethod (mkFullMethodName methodName) args body binds
       mkVar :: String -> HsExpr GhcPs = HsVar noExt . noLoc . mkRdrUnqual . mkVarOcc
-  map (uncurry3 mkMethod) [
-      ("consumption", [], fmap (mkVar . fromMaybe "PreConsuming") cdChoiceConsuming)
-    , ("controller", [], controller)
-    , ("action", [self, this, arg], noLoc $ HsApp noExt (noLoc $ mkVar "pure") (noLoc $ mkVar "()"))
-    , ("exercise", [], noLoc $ mkVar "undefined")
-    ]
+  in  map (uncurry3 mkMethod) [
+          ("consumption", [], fmap (mkVar . fromMaybe "PreConsuming") cdChoiceConsuming)
+        , ("controller", [], controller)
+        , ("action", [self, this, arg], noLoc $ HsApp noExt (noLoc $ mkVar "pure") (noLoc $ mkVar "()"))
+        , ("exercise", [], noLoc $ mkVar "undefined")
+        ]
 
 mkTemplateClassMethod ::
      String                      -- method name
@@ -2579,6 +2604,29 @@ mkTemplateTypeDecl
         }
   return [L loc $ TyClD noExt dataDecl]
 
+mkTemplateClassInstanceMethods ::
+     Located RdrName             -- ctor 'T'
+  -> Maybe (LHsExpr GhcPs)       -- ensure
+  -> Maybe (LHsExpr GhcPs)       -- signatory
+  -> Maybe (LHsExpr GhcPs)       -- observer
+  -> Maybe (LHsExpr GhcPs)       -- agreement
+  -> Maybe (LHsLocalBinds GhcPs) -- binds
+  -> [LHsBind GhcPs]             -- method declarations
+mkTemplateClassInstanceMethods conName ens sig obs agr binds =
+  let mkMethod :: String -> Bool -> LHsExpr GhcPs -> LHsBind GhcPs
+      mkMethod methodName thisArg methodBody = mkTemplateMethod methodName conName thisArg methodBody binds
+      mkVar :: String -> LHsExpr GhcPs = noLoc . HsVar noExt . noLoc . mkRdrUnqual . mkVarOcc
+      emptyList :: LHsExpr GhcPs = mkVar "[]"
+      compilerMagic :: LHsExpr GhcPs = mkVar "undefined"
+  in  map (uncurry3 mkMethod) [
+          ("signatory", True,  fromMaybe emptyList sig)
+        , ("observer",  True,  fromMaybe emptyList obs)
+        , ("ensure",    True,  fromMaybe (mkVar "True") ens)
+        , ("agreement", True,  fromMaybe (mkVar "\"\"") agr)
+        , ("create",    False, compilerMagic)
+        , ("fetch",     False, compilerMagic)
+        ]
+
 -- | Construct a @class Template TInstance@.
 mkTemplateInstanceClassDecl ::
      LHsType GhcPs               -- data 'T'
@@ -2591,24 +2639,14 @@ mkTemplateInstanceClassDecl ::
   -> P [LHsDecl GhcPs]           -- resulting declaration
 mkTemplateInstanceClassDecl dataName conName ens sig obs agr binds = do
 {
-    let className = occNameString $ rdrNameOcc $ unLoc conName
-        mkMethod :: String -> Bool -> LHsExpr GhcPs -> LHsBind GhcPs
-        mkMethod methodName thisArg methodBody =
-          mkTemplateMethod methodName conName thisArg methodBody binds
-        mkVar :: String -> LHsExpr GhcPs = noLoc . HsVar noExt . noLoc . mkRdrUnqual . mkVarOcc
-        emptyList :: LHsExpr GhcPs = mkVar "[]"
-        compilerMagic :: LHsExpr GhcPs = mkVar "undefined"
-        templateMethods = map (uncurry3 mkMethod) [
-            ("signatory", True,  fromMaybe emptyList sig)
-          , ("observer",  True,  fromMaybe emptyList obs)
-          , ("ensure",    True,  fromMaybe (mkVar "True") ens)
-          , ("agreement", True,  fromMaybe (mkVar "\"\"") agr)
-          , ("create",    False, compilerMagic)
-          , ("fetch",     False, compilerMagic)
-          ]
+    let templateName = occNameString $ rdrNameOcc $ unLoc conName
+        className = L (getLoc dataName) $ mkRdrName $ templateName ++ "Instance"
+        choiceSigs = mkTemplateChoiceSigs templateName archiveChoiceData
+        sigs = mkTemplateClassInstanceSigs templateName ++ choiceSigs
         choiceMethods = mkTemplateChoiceMethods conName archiveChoiceData Nothing binds
-        allMethods = listToBag $ templateMethods ++ choiceMethods
-  ; return [noLoc $ TyClD noExt $ classDecl className allMethods]
+        templateMethods = mkTemplateClassInstanceMethods conName ens sig obs agr binds
+        methods = listToBag $ templateMethods ++ choiceMethods
+  ; return [noLoc $ TyClD noExt $ classDecl className sigs methods]
 }
   where
     unitType = noLoc $ HsTupleTy noExt HsBoxedOrConstraintTuple []
