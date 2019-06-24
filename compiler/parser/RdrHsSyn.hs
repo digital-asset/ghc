@@ -2389,24 +2389,28 @@ mkTemplateMethod methodName conName thisArg body binds = do
 mkTemplateChoiceMethods ::
      Located RdrName             -- template data ctor 'T'
   -> ChoiceData                  -- choice data
-  -- -> LHsExpr GhcPs               -- function body
+  -> Maybe (LHsExpr GhcPs)       -- choice controller
   -> Maybe (LHsLocalBinds GhcPs) -- local binds
   -> [LHsBind GhcPs]             -- function binding
-mkTemplateChoiceMethods conName choice binds = do
+mkTemplateChoiceMethods conName choice mbController binds = do
   let templateName = occNameString $ rdrNameOcc $ unLoc conName
       ChoiceData{..} = choice
       capitalize s = case s of h:t -> toUpper h : t; [] -> []
       choiceName = capitalize $ occNameString $ rdrNameOcc $ unLoc cdChoiceName
-      -- TODO: self = XPat noExt $ noLoc $ mkRdrUnqual $ mkVarOcc "self"
+      self = XPat $ noLoc $ VarPat noExt $ noLoc $ mkRdrName "self"
       this = asPatRecWild "this" conName
-      arg  = asPatRecWild "arg" cdChoiceName -- TODO use argPatOfChoice
+      arg  = argPatOfChoice (noLoc $ mkRdrUnqual $ mkDataOcc choiceName) cdChoiceFields
+      defaultController = noLoc $ HsApp noExt (noLoc $ mkVar $ "signatory" ++ templateName) (noLoc $ mkVar "this")
+      controller = fromMaybe defaultController mbController
       mkFullMethodName methodName = methodName ++ templateName ++ choiceName
       mkMethod methodName args body =
         mkTemplateClassMethod (mkFullMethodName methodName) args body binds
       mkVar :: String -> HsExpr GhcPs = HsVar noExt . noLoc . mkRdrUnqual . mkVarOcc
   map (uncurry3 mkMethod) [
       ("consumption", [], fmap (mkVar . fromMaybe "PreConsuming") cdChoiceConsuming)
-    , ("action", [this, arg], noLoc $ HsApp noExt (noLoc $ mkVar "pure") (noLoc $ mkVar "()"))
+    , ("controller", [], controller)
+    , ("action", [self, this, arg], noLoc $ HsApp noExt (noLoc $ mkVar "pure") (noLoc $ mkVar "()"))
+    , ("exercise", [], noLoc $ mkVar "undefined")
     ]
 
 mkTemplateClassMethod ::
@@ -2602,7 +2606,7 @@ mkTemplateInstanceClassDecl dataName conName ens sig obs agr binds = do
           , ("create",    False, compilerMagic)
           , ("fetch",     False, compilerMagic)
           ]
-        choiceMethods = mkTemplateChoiceMethods conName archiveChoiceData binds
+        choiceMethods = mkTemplateChoiceMethods conName archiveChoiceData Nothing binds
         allMethods = listToBag $ templateMethods ++ choiceMethods
   ; return [noLoc $ TyClD noExt $ classDecl className allMethods]
 }
