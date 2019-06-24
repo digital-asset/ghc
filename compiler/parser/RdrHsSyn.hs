@@ -2405,7 +2405,7 @@ mkTemplateChoiceSigs templateName ChoiceData{..} =
         let fullMethodName = noLoc $ mkRdrName $ methodName ++ templateName ++ choiceName in
         noLoc $ ClassOpSig noExt False [fullMethodName] (HsIB noExt ty)
   in  map (uncurry mkSig) [
-          ("consumption", fmap (unLoc . mkTypeName . fromMaybe "PreConsuming") cdChoiceConsuming)
+          ("consumption", mkAppTy (fmap (unLoc . mkTypeName . fromMaybe "PreConsuming") cdChoiceConsuming) templateType)
         , ("controller", mkFunTy templateType (mkFunTy choiceType (mkListTy $ mkTypeName "Party")))
         , ("action", mkFunTy (mkAppTy (mkTypeName "ContractId") templateType) (mkFunTy templateType (mkFunTy choiceType (mkAppTy (mkTypeName "Update") cdChoiceReturnTy))))
         , ("exercise", mkFunTy (mkAppTy (mkTypeName "ContractId") templateType) (mkFunTy choiceType (mkAppTy (mkTypeName "Update") cdChoiceReturnTy)))
