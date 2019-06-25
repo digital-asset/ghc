@@ -2755,18 +2755,11 @@ mkTemplateKeyInstDecl dataName conName (Just (L _ KeyData{..})) maintainers bind
   ; instDecl class_inst_decl
 }
 
--- | Contruct a @data S = S {...}@ and @instance Choice T S R@ for a
--- single choice 'S'.
-{-mkTemplateChoiceDecls
-  :: LHsType GhcPs -- data 'T'
-  -> Located RdrName -- ctor 'T'
-  -> LHsExpr GhcPs -- (list of) controllers
-  -> Located ChoiceData -- choice 'S' (with result type 'R')
-  -> ArgPattern -- 'arg@S{..}' or '_'?
-  -> Maybe (LHsLocalBinds GhcPs) -- local binds
-  -> P ([LHsDecl GhcPs]) -- resulting declarations
+-- | Contruct a @data S = S {...}@ for a single choice 'S'.
 mkTemplateChoiceDecls
-  dataName conName controllers (L _ (choice@ChoiceData{..})) argPatType binds = do
+  :: ChoiceData          -- choice 'S'
+  -> P ([LHsDecl GhcPs]) -- resulting declarations
+mkTemplateChoiceDecls ChoiceData{..} = do
 {
   -- Calculate data constructor info from the choice name and (maybe)
   -- record type.
@@ -2781,16 +2774,16 @@ mkTemplateChoiceDecls
                      (last (void cdChoiceReturnTy :
                             (map void (maybeToList cdChoiceFields)))))
                   cdChoiceName choiceConInfo
-  ; templateInstDecl <- mkTemplateChoiceInstDecl dataName choiceName
-                           conName choiceConName controllers choice argPatType binds
+  -- ; templateInstDecl <- mkTemplateChoiceInstDecl dataName choiceName
+                           -- conName choiceConName controllers choice argPatType binds
   -- Prepend the choice documentation, if any, as a 'DocNext'.
   ; mbDocDecl <- pure $ case cdChoiceDoc of
                    Nothing -> []
                    Just (L loc str) ->
                      [L loc (DocD noExt (DocCommentNext str))]
 
-  ; return $ mbDocDecl ++ dataDecl ++ templateInstDecl
-}-}
+  ; return $ mbDocDecl ++ dataDecl
+}
 
 -- | Contruct a @data S = S {...}@ and @instance Choice T S R@ for all
 -- choices of choice groups.
@@ -2882,12 +2875,13 @@ mkTemplateDecl lname@(L nloc _name) fields (L _ decls) = do
   -- denoted by 'fields'.
   ci@(conName, _, _) <- splitCon [fields, dataName]
   dataDecl <- mkTemplateTypeDecl (combineLocs lname fields) lname ci
+  choiceDataDecls <- concat <$> traverse mkTemplateChoiceDecls (map fst choices)
   templateInstClassDecl <- mkTemplateInstanceClassDecl dataName conName tbdEnsures' tbdSignatories' tbdObservers' tbdAgreements' tbdLetBindings' choices
-  templateInstDecl <- mkTemplateTemplateInstDecl dataName conName tbdEnsures' tbdSignatories' tbdObservers' tbdAgreements' tbdLetBindings'
+  -- templateInstDecl <- mkTemplateTemplateInstDecl dataName conName tbdEnsures' tbdSignatories' tbdObservers' tbdAgreements' tbdLetBindings'
   -- choiceGroupDecls <- mkTemplateChoiceGroupDecls dataName conName tbdControlledChoiceGroups tbdLetBindings'
   -- flexChoiceDecls <- mkTemplateFlexChoiceDecls dataName conName tbdFlexChoices tbdLetBindings'
-  templateKeyInstDecl <- mkTemplateKeyInstDecl dataName conName tbdKeys' tbdMaintainers' tbdLetBindings'
-  return $ toOL $ dataDecl ++ templateInstClassDecl ++ templateInstDecl ++ templateKeyInstDecl
+  -- templateKeyInstDecl <- mkTemplateKeyInstDecl dataName conName tbdKeys' tbdMaintainers' tbdLetBindings'
+  return $ toOL $ dataDecl ++ choiceDataDecls ++ templateInstClassDecl
   where
     -- | We support multiple 'signatory', 'observer' and 'maintainer'
     -- declarations in a template.
