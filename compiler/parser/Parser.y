@@ -1205,18 +1205,18 @@ choice_decls :: { Located [Located ChoiceData] }
  | {- empty -}                                   { sL0 [] }
 
 choice_decl :: { Located ChoiceData }
-  : consuming qtycon OF_TYPE btype_ maybe_docprev arecord_with_opt 'do' stmtlist -- note the use of 'btype_'
+  : consuming qtycon OF_TYPE btype_ maybe_docprev arecord_with_opt exp -- note the use of 'btype_'
     { sL (comb3 $1 $2 $>) $
             ChoiceData { cdChoiceName = $2
                        , cdChoiceReturnTy = $4
                        , cdChoiceFields = $6
-                       , cdChoiceBody = $8
+                       , cdChoiceBody = $7
                        , cdChoiceConsuming = $1
                        , cdChoiceDoc = $5 }
     }
 
 flex_choice_decl :: { Located FlexChoiceData }
-  : consuming 'choice' qtycon OF_TYPE btype_ maybe_docprev arecord_with_opt 'controller' party_list flexible_choice_body
+  : consuming 'choice' qtycon OF_TYPE btype_ maybe_docprev arecord_with_opt 'controller' party_list exp
     { sL (comb3 $1 $2 $>) $
         FlexChoiceData (applyConcat $9)
             ChoiceData { cdChoiceName = $3
@@ -1227,8 +1227,8 @@ flex_choice_decl :: { Located FlexChoiceData }
                        , cdChoiceDoc = $6 }
     }
 
-flexible_choice_body :: { Located ([AddAnn],[LStmt GhcPs (LHsExpr GhcPs)]) }
-  : 'do' stmtlist                                { sLL $1 $2 $ unLoc $2 }
+-- flexible_choice_body :: { Located ([AddAnn],[LStmt GhcPs (LHsExpr GhcPs)]) }
+--  : 'do' stmtlist                                { sLL $1 $2 $ unLoc $2 }
 
 consuming :: { Located (Maybe String) }
  : 'preconsuming'                                { sL1 $1 Nothing }
