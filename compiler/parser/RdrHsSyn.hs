@@ -2400,6 +2400,7 @@ mkTemplateChoiceSigs templateName ChoiceData{..} =
       mkListTy :: LHsType GhcPs -> LHsType GhcPs
       mkListTy elemTy = noLoc $ HsListTy noExt elemTy
       mkAppTy ty1 ty2 = noLoc $ HsAppTy noExt ty1 ty2
+      mkParTy :: LHsType GhcPs -> LHsType GhcPs = noLoc . HsParTy noExt
       mkSig :: String -> LHsType GhcPs -> LSig GhcPs
       mkSig methodName ty =
         let fullMethodName = noLoc $ mkRdrName $ methodName ++ templateName ++ choiceName in
@@ -2407,17 +2408,17 @@ mkTemplateChoiceSigs templateName ChoiceData{..} =
   in  map (uncurry mkSig) [
           ("consumption", mkAppTy (fmap (unLoc . mkTypeName . fromMaybe "PreConsuming") cdChoiceConsuming) templateType)
         , ("controller", mkFunTy templateType (mkFunTy choiceType (mkListTy $ mkTypeName "Party")))
-        , ("action", mkFunTy (mkAppTy (mkTypeName "ContractId") templateType) (mkFunTy templateType (mkFunTy choiceType (mkAppTy (mkTypeName "Update") cdChoiceReturnTy))))
-        , ("exercise", mkFunTy (mkAppTy (mkTypeName "ContractId") templateType) (mkFunTy choiceType (mkAppTy (mkTypeName "Update") cdChoiceReturnTy)))
+        , ("action", mkFunTy (mkAppTy (mkTypeName "ContractId") templateType) (mkFunTy templateType (mkFunTy choiceType (mkAppTy (mkTypeName "Update") (mkParTy cdChoiceReturnTy)))))
+        , ("exercise", mkFunTy (mkAppTy (mkTypeName "ContractId") templateType) (mkFunTy choiceType (mkAppTy (mkTypeName "Update") (mkParTy cdChoiceReturnTy))))
         ]
 
 mkTemplateChoiceMethods ::
      Located RdrName             -- template data ctor 'T'
-  -> ChoiceData                  -- choice data
-  -> Maybe (LHsExpr GhcPs)       -- choice controller
   -> Maybe (LHsLocalBinds GhcPs) -- local binds
+  -> ChoiceData                  -- choice data
+  -> LHsExpr GhcPs               -- choice controller
   -> [LHsBind GhcPs]             -- function binding
-mkTemplateChoiceMethods conName choice mbController binds =
+mkTemplateChoiceMethods conName binds choice controller =
   let templateName = occNameString $ rdrNameOcc $ unLoc conName
       ChoiceData{..} = choice
       capitalize s = case s of h:t -> toUpper h : t; [] -> []
@@ -2425,8 +2426,6 @@ mkTemplateChoiceMethods conName choice mbController binds =
       self = XPat $ noLoc $ VarPat noExt $ noLoc $ mkRdrName "self"
       this = asPatRecWild "this" conName
       arg  = argPatOfChoice (noLoc $ mkRdrUnqual $ mkDataOcc choiceName) cdChoiceFields
-      defaultController = noLoc $ HsApp noExt (noLoc $ mkVar $ "signatory" ++ templateName) (noLoc $ mkVar "this")
-      controller = fromMaybe defaultController mbController
       mkFullMethodName methodName = methodName ++ templateName ++ choiceName
       mkMethod methodName args body =
         mkTemplateClassMethod (mkFullMethodName methodName) args body binds
@@ -2636,23 +2635,26 @@ mkTemplateInstanceClassDecl ::
   -> Maybe (LHsExpr GhcPs)       -- observer
   -> Maybe (LHsExpr GhcPs)       -- agreement
   -> Maybe (LHsLocalBinds GhcPs) -- binds
+  -> [(ChoiceData, LHsExpr GhcPs)] -- data and controller for each choice
   -> P [LHsDecl GhcPs]           -- resulting declaration
-mkTemplateInstanceClassDecl dataName conName ens sig obs agr binds = do
+mkTemplateInstanceClassDecl dataName conName ens sig obs agr binds choices = do
 {
-    let templateName = occNameString $ rdrNameOcc $ unLoc conName
-        className = L (getLoc dataName) $ mkRdrName $ templateName ++ "Instance"
-        choiceSigs = mkTemplateChoiceSigs templateName archiveChoiceData
-        sigs = mkTemplateClassInstanceSigs templateName ++ choiceSigs
-        choiceMethods = mkTemplateChoiceMethods conName archiveChoiceData Nothing binds
+    let className = L (getLoc dataName) $ mkRdrName $ templateName ++ "Instance"
+        choiceData = (archiveChoiceData, archiveController) : choices
+        choiceSigs = concatMap (mkTemplateChoiceSigs templateName) (map fst choiceData)
+        choiceMethods = concatMap (uncurry $ mkTemplateChoiceMethods conName binds) choiceData
         templateMethods = mkTemplateClassInstanceMethods conName ens sig obs agr binds
+        sigs = mkTemplateClassInstanceSigs templateName ++ choiceSigs
         methods = listToBag $ templateMethods ++ choiceMethods
   ; return [noLoc $ TyClD noExt $ classDecl className sigs methods]
 }
   where
     mkVar :: String -> LHsExpr GhcPs
     mkVar = noLoc . HsVar noExt . noLoc . mkRdrUnqual . mkVarOcc
+    templateName = occNameString $ rdrNameOcc $ unLoc conName
     unitType = noLoc $ HsTupleTy noExt HsBoxedOrConstraintTuple []
     pureUnit = noLoc $ HsApp noExt (mkVar "pure") (mkVar "()")
+    archiveController = noLoc $ HsApp noExt (mkVar $ "signatory" ++ templateName) (mkVar "this")
     archiveChoiceData = ChoiceData {
         cdChoiceName = noLoc $ mkRdrName "archive"
       , cdChoiceFields = Nothing
@@ -2872,14 +2874,15 @@ mkTemplateDecl lname@(L nloc _name) fields (L _ decls) = do
       tbdSignatories' = mergeDecls tbdSignatories
       tbdObservers' = Just $ allTemplateObservers (mergeDecls tbdObservers) $ map (fst . unLoc) tbdControlledChoiceGroups
       tbdMaintainers' = mergeDecls tbdMaintainers
-  checkTemplateDeclConstraints nloc tbdEnsures tbdAgreements tbdLetBindings tbdKeys tbdMaintainers
-  let (tbdEnsures', tbdAgreements', tbdLetBindings', tbdKeys') =
+      choices = map (\(L _ (FlexChoiceData controller choiceData)) -> (choiceData, controller)) tbdFlexChoices
+      (tbdEnsures', tbdAgreements', tbdLetBindings', tbdKeys') =
         (listToMaybe tbdEnsures, listToMaybe tbdAgreements, listToMaybe tbdLetBindings, listToMaybe tbdKeys)
+  checkTemplateDeclConstraints nloc tbdEnsures tbdAgreements tbdLetBindings tbdKeys tbdMaintainers
   -- Calculate 'T' data constructor info from 'T' and the record type
   -- denoted by 'fields'.
   ci@(conName, _, _) <- splitCon [fields, dataName]
   dataDecl <- mkTemplateTypeDecl (combineLocs lname fields) lname ci
-  templateInstClassDecl <- mkTemplateInstanceClassDecl dataName conName tbdEnsures' tbdSignatories' tbdObservers' tbdAgreements' tbdLetBindings'
+  templateInstClassDecl <- mkTemplateInstanceClassDecl dataName conName tbdEnsures' tbdSignatories' tbdObservers' tbdAgreements' tbdLetBindings' choices
   templateInstDecl <- mkTemplateTemplateInstDecl dataName conName tbdEnsures' tbdSignatories' tbdObservers' tbdAgreements' tbdLetBindings'
   -- choiceGroupDecls <- mkTemplateChoiceGroupDecls dataName conName tbdControlledChoiceGroups tbdLetBindings'
   -- flexChoiceDecls <- mkTemplateFlexChoiceDecls dataName conName tbdFlexChoices tbdLetBindings'
