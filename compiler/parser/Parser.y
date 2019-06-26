@@ -1205,7 +1205,7 @@ choice_decls :: { Located [Located ChoiceData] }
  | {- empty -}                                   { sL0 [] }
 
 choice_decl :: { Located ChoiceData }
-  : consuming qtycon OF_TYPE btype_ maybe_docprev arecord_with_opt exp -- note the use of 'btype_'
+  : consuming qtycon OF_TYPE btype_ maybe_docprev arecord_with_opt doexp -- note the use of 'btype_'
     { sL (comb3 $1 $2 $>) $
             ChoiceData { cdChoiceName = $2
                        , cdChoiceReturnTy = $4
@@ -1216,7 +1216,7 @@ choice_decl :: { Located ChoiceData }
     }
 
 flex_choice_decl :: { Located FlexChoiceData }
-  : consuming 'choice' qtycon OF_TYPE btype_ maybe_docprev arecord_with_opt 'controller' party_list exp
+  : consuming 'choice' qtycon OF_TYPE btype_ maybe_docprev arecord_with_opt 'controller' party_list doexp
     { sL (comb3 $1 $2 $>) $
         FlexChoiceData (applyConcat $9)
             ChoiceData { cdChoiceName = $3
@@ -2910,9 +2910,7 @@ aexp    :: { LHsExpr GhcPs }
                                                    FromSource (snd $ unLoc $4)))
                                                (mj AnnCase $1:mj AnnOf $3
                                                   :(fst $ unLoc $4)) }
-        | 'do' stmtlist              {% ams (cL (comb2 $1 $2)
-                                               (mkHsDo DoExpr (snd $ unLoc $2)))
-                                               (mj AnnDo $1:(fst $ unLoc $2)) }
+        | doexp                 { $1 }
         | 'mdo' stmtlist            {% ams (cL (comb2 $1 $2)
                                               (mkHsDo MDoExpr (snd $ unLoc $2)))
                                            (mj AnnMdo $1:(fst $ unLoc $2)) }
@@ -2924,6 +2922,11 @@ aexp    :: { LHsExpr GhcPs }
                                [mj AnnProc $1,mu AnnRarrow $3] }
 
         | aexp1                 { $1 }
+
+doexp   :: { LHsExpr GhcPs }
+        :  'do' stmtlist        {% ams (cL (comb2 $1 $2)
+                                         (mkHsDo DoExpr (snd $ unLoc $2)))
+                                         (mj AnnDo $1:(fst $ unLoc $2)) }
 
 aexp1   :: { LHsExpr GhcPs }
         : aexp1 '{' fbinds '}' {% do { r <- mkRecConstrOrUpdate $1 (comb2 $2 $4)
