@@ -2375,22 +2375,6 @@ instDecl cid = do
                      }
            ]
 
--- | Construct an 'ensure', 'signatory', 'observer', 'agreement',
--- 'key'.
-mkTemplateMethod ::
-     String                      -- method name
-  -> Located RdrName             -- template data ctor 'T'
-  -> Bool                        -- does the method has a "this" argument?
-  -> LHsExpr GhcPs               -- function body
-  -> Maybe (LHsLocalBinds GhcPs) -- local binds
-  -> LHsBind GhcPs               -- function binding
-mkTemplateMethod methodName conName thisArg body binds = do
-  let templateName = occNameString $ rdrNameOcc $ unLoc conName
-      fullMethodName = methodName ++ templateName
-      this = asPatRecWild "this" conName
-      args = if thisArg then [this] else []
-  mkTemplateClassMethod fullMethodName args body binds
-
 mkTemplateChoiceSigs :: String -> ChoiceData -> [LSig GhcPs]
 mkTemplateChoiceSigs templateName ChoiceData{..} =
   let capitalize s = case s of h:t -> toUpper h : t; [] -> []
@@ -2614,18 +2598,28 @@ mkTemplateClassInstanceMethods ::
   -> Maybe (LHsLocalBinds GhcPs) -- binds
   -> [LHsBind GhcPs]             -- method declarations
 mkTemplateClassInstanceMethods conName ens sig obs agr binds =
-  let mkMethod :: String -> Bool -> LHsExpr GhcPs -> LHsBind GhcPs
-      mkMethod methodName thisArg methodBody = mkTemplateMethod methodName conName thisArg methodBody binds
+  let mkMethod :: String -> [Pat GhcPs] -> LHsExpr GhcPs -> LHsBind GhcPs
+      mkMethod methodName args methodBody =
+        mkTemplateClassMethod (methodName ++ templateName) args methodBody binds
+      templateName = occNameString $ rdrNameOcc $ unLoc conName
+      this = asPatRecWild "this" conName
+      cid = XPat $ noLoc $ VarPat noExt $ noLoc $ mkRdrName "cid"
       mkVar :: String -> LHsExpr GhcPs = noLoc . HsVar noExt . noLoc . mkRdrUnqual . mkVarOcc
+      mkApp :: LHsExpr GhcPs -> LHsExpr GhcPs -> LHsExpr GhcPs
+      mkApp e1 e2 = noLoc $ HsApp noExt e1 e2
       emptyList :: LHsExpr GhcPs = mkVar "[]"
       compilerMagic :: LHsExpr GhcPs = mkVar "undefined"
+      archiveBody = mkApp (mkApp (mkVar $ "exercise" ++ templateName ++ "Archive")
+                            (mkVar "cid"))
+                          (mkVar "Archive")
   in  map (uncurry3 mkMethod) [
-          ("signatory", True,  fromMaybe emptyList sig)
-        , ("observer",  True,  fromMaybe emptyList obs)
-        , ("ensure",    True,  fromMaybe (mkVar "True") ens)
-        , ("agreement", True,  fromMaybe (mkVar "\"\"") agr)
-        , ("create",    False, compilerMagic)
-        , ("fetch",     False, compilerMagic)
+          ("signatory", [this], fromMaybe emptyList sig)
+        , ("observer",  [this], fromMaybe emptyList obs)
+        , ("ensure",    [this], fromMaybe (mkVar "True") ens)
+        , ("agreement", [this], fromMaybe (mkVar "\"\"") agr)
+        , ("create",    [],     compilerMagic)
+        , ("fetch",     [],     compilerMagic)
+        , ("archive",   [cid],  archiveBody)
         ]
 
 -- | Construct a @class Template TInstance@.
@@ -2676,7 +2670,7 @@ mkTemplateInstanceMethods templateName =
         in  mkTemplateClassMethod methodName [] bodyName Nothing
       mkVar :: String -> LHsExpr GhcPs
       mkVar = noLoc . HsVar noExt . noLoc . mkRdrUnqual . mkVarOcc
-  in  map mkMethod ["signatory", "observer", "ensure", "agreement", "create", "fetch"]
+  in  map mkMethod ["signatory", "observer", "ensure", "agreement", "create", "fetch", "archive"]
 
 -- | Construct an @instance TInstance where@.
 mkTemplateInstanceDecls :: SrcSpan -> String -> P [LHsDecl GhcPs]
