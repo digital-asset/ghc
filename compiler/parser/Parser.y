@@ -1158,7 +1158,7 @@ topdecl :: { LHsDecl GhcPs }
 --
 template_decl :: { OrdList (LHsDecl GhcPs) }
   : 'template' qtycon arecord_with 'where' template_body
-                                                 {% mkTemplateDecl $2 $3 $5 }
+                                                 {% mkTemplateDecls $2 $3 $5 }
 
 template_body :: { Located [Located TemplateBodyDecl] }
   : '{' template_body_decls '}'                  { sLL $1 $3 (reverse (unLoc $2)) }

@@ -40,7 +40,7 @@ module   RdrHsSyn (
         FlexChoiceData(..),
         KeyData(..),
         TemplateBodyDecl(..),
-        mkTemplateDecl,
+        mkTemplateDecls,
         mkTemplateTemplateInstDecl,
         applyToParties,
         applyConcat,
@@ -2868,27 +2868,27 @@ choiceGroupsToFlexChoices = concatMap distributeController
 
 -- | Desugar a @template@ declaration into a list of decls (this is
 -- called from 'Parser.y').
-mkTemplateDecl
+mkTemplateDecls
   :: Located RdrName -- The template name
   -> LHsType GhcPs -- The template's record type
   -> Located [Located TemplateBodyDecl]  -- Template declarations
   -> P (OrdList (LHsDecl GhcPs)) -- Desugared declarations
-mkTemplateDecl lname@(L nloc _name) fields (L _ decls) = do
-  let dataName = L nloc (HsTyVar noExt NotPromoted lname)
-      TemplateBodyDecls {..} = extractTemplateBodyDecls decls
-      tbdSignatories' = mergeDecls tbdSignatories
-      tbdObservers' = Just $ allTemplateObservers (mergeDecls tbdObservers) $ map (fst . unLoc) tbdControlledChoiceGroups
-      tbdMaintainers' = mergeDecls tbdMaintainers
-      choices = choiceGroupsToFlexChoices tbdControlledChoiceGroups ++ map unLoc tbdFlexChoices
-      (tbdEnsures', tbdAgreements', tbdLetBindings', tbdKeys') =
-        (listToMaybe tbdEnsures, listToMaybe tbdAgreements, listToMaybe tbdLetBindings, listToMaybe tbdKeys)
+mkTemplateDecls lname@(L nloc _name) fields (L _ decls)
+  | TemplateBodyDecls {..} <- extractTemplateBodyDecls decls = do
   checkTemplateDeclConstraints nloc tbdEnsures tbdAgreements tbdLetBindings tbdKeys tbdMaintainers
+  let dataName = L nloc (HsTyVar noExt NotPromoted lname)
+      signatories = mergeDecls tbdSignatories
+      observers = Just $ allTemplateObservers (mergeDecls tbdObservers) $ map (fst . unLoc) tbdControlledChoiceGroups
+      (ensures, agreements, letBindings, keys) =
+        (listToMaybe tbdEnsures, listToMaybe tbdAgreements, listToMaybe tbdLetBindings, listToMaybe tbdKeys)
+      maintainers = mergeDecls tbdMaintainers
+      choices = choiceGroupsToFlexChoices tbdControlledChoiceGroups ++ map unLoc tbdFlexChoices
   -- Calculate 'T' data constructor info from 'T' and the record type
   -- denoted by 'fields'.
   ci@(conName, _, _) <- splitCon [fields, dataName]
   dataDecl <- mkTemplateTypeDecl (combineLocs lname fields) lname ci
   choiceDataDecls <- concat <$> traverse mkTemplateChoiceDecls (map fcdChoiceData choices)
-  templateInstClassDecl <- mkTemplateInstanceClassDecl dataName conName tbdEnsures' tbdSignatories' tbdObservers' tbdAgreements' tbdLetBindings' choices
+  templateInstClassDecl <- mkTemplateInstanceClassDecl dataName conName ensures signatories observers agreements letBindings choices
   -- templateInstDecl <- mkTemplateTemplateInstDecl dataName conName tbdEnsures' tbdSignatories' tbdObservers' tbdAgreements' tbdLetBindings'
   -- choiceGroupDecls <- mkTemplateChoiceGroupDecls dataName conName tbdControlledChoiceGroups tbdLetBindings'
   -- flexChoiceDecls <- mkTemplateFlexChoiceDecls dataName conName tbdFlexChoices tbdLetBindings'
