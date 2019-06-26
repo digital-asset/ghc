@@ -2335,12 +2335,13 @@ mkTemplateClassInstanceSigs templateName =
         ]
 
 -- | Utility for constructing a class declaration.
+-- TODO(RJR): Pass in type variables and context for generic templates.
 classDecl :: Located RdrName -> [LSig GhcPs] -> LHsBinds GhcPs -> TyClDecl GhcPs
 classDecl className sigs methods =
   ClassDecl { tcdCExt = noExt
             , tcdCtxt = noLoc []
             , tcdLName = className
-            , tcdTyVars = HsQTvs noExt [] -- TODO(RJR): include tyvars for generic templates
+            , tcdTyVars = HsQTvs noExt []
             , tcdFixity = Prefix
             , tcdFDs = []
             , tcdSigs = sigs
@@ -2665,6 +2666,32 @@ mkTemplateInstanceClassDecl dataName conName ens sig obs agr binds choices = do
       , cdChoiceDoc = Nothing
       }
 
+mkTemplateInstanceMethods ::
+     String            -- template name
+  -> [LHsBind GhcPs]   -- method declarations
+mkTemplateInstanceMethods templateName =
+  let mkMethod :: String -> LHsBind GhcPs
+      mkMethod methodName =
+        let bodyName = mkVar $ methodName ++ templateName
+        in  mkTemplateClassMethod methodName [] bodyName Nothing
+      mkVar :: String -> LHsExpr GhcPs
+      mkVar = noLoc . HsVar noExt . noLoc . mkRdrUnqual . mkVarOcc
+  in  map mkMethod ["signatory", "observer", "ensure", "agreement", "create", "fetch"]
+
+-- | Construct an @instance TInstance where@.
+mkTemplateInstanceDecls :: SrcSpan -> String -> P [LHsDecl GhcPs]
+mkTemplateInstanceDecls loc templateName = do
+  let mkTypeName :: String -> LHsType GhcPs
+      mkTypeName tyName = noLoc $ HsTyVar NoExt NotPromoted (noLoc $ mkRdrUnqual $ mkTcOcc tyName)
+      mkAppTy ty1 ty2 = noLoc $ HsAppTy noExt ty1 ty2
+      instType = mkTypeName $ templateName ++ "Instance"
+      templateType = mkAppTy (mkTypeName "Template") (mkTypeName templateName)
+      templateInstQualType = HsQualTy noExt (noLoc [instType]) templateType
+      instanceMethods = listToBag $ mkTemplateInstanceMethods templateName
+  baseInstance <- instDecl $ classInstDecl (unLoc instType) emptyBag
+  templateInstance <- instDecl $ classInstDecl templateInstQualType instanceMethods
+  return $ baseInstance ++ templateInstance
+
 -- | Construct an @instance Template T@.
 mkTemplateTemplateInstDecl ::
      LHsType GhcPs               -- data 'T'
@@ -2873,7 +2900,7 @@ mkTemplateDecls
   -> LHsType GhcPs -- The template's record type
   -> Located [Located TemplateBodyDecl]  -- Template declarations
   -> P (OrdList (LHsDecl GhcPs)) -- Desugared declarations
-mkTemplateDecls lname@(L nloc _name) fields (L _ decls)
+mkTemplateDecls lname@(L nloc name) fields (L _ decls)
   | TemplateBodyDecls {..} <- extractTemplateBodyDecls decls = do
   checkTemplateDeclConstraints nloc tbdEnsures tbdAgreements tbdLetBindings tbdKeys tbdMaintainers
   let dataName = L nloc (HsTyVar noExt NotPromoted lname)
@@ -2889,11 +2916,12 @@ mkTemplateDecls lname@(L nloc _name) fields (L _ decls)
   dataDecl <- mkTemplateTypeDecl (combineLocs lname fields) lname ci
   choiceDataDecls <- concat <$> traverse mkTemplateChoiceDecls (map fcdChoiceData choices)
   templateInstClassDecl <- mkTemplateInstanceClassDecl dataName conName ensures signatories observers agreements letBindings choices
+  templateInstanceDecls <- mkTemplateInstanceDecls nloc (occNameString $ rdrNameOcc name)
   -- templateInstDecl <- mkTemplateTemplateInstDecl dataName conName tbdEnsures' tbdSignatories' tbdObservers' tbdAgreements' tbdLetBindings'
   -- choiceGroupDecls <- mkTemplateChoiceGroupDecls dataName conName tbdControlledChoiceGroups tbdLetBindings'
   -- flexChoiceDecls <- mkTemplateFlexChoiceDecls dataName conName tbdFlexChoices tbdLetBindings'
   -- templateKeyInstDecl <- mkTemplateKeyInstDecl dataName conName tbdKeys' tbdMaintainers' tbdLetBindings'
-  return $ toOL $ dataDecl ++ choiceDataDecls ++ templateInstClassDecl
+  return $ toOL $ dataDecl ++ choiceDataDecls ++ templateInstClassDecl ++ templateInstanceDecls
   where
     -- | We support multiple 'signatory', 'observer' and 'maintainer'
     -- declarations in a template.
