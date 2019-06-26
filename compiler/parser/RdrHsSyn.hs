@@ -2128,7 +2128,10 @@ data KeyData = KeyData {
   , kdKeyTy :: LHsType GhcPs
   }
 
-data FlexChoiceData = FlexChoiceData (LHsExpr GhcPs) ChoiceData
+data FlexChoiceData = FlexChoiceData {
+    fcdControllers :: LHsExpr GhcPs
+  , fcdChoiceData  :: ChoiceData
+  }
 
 data TemplateBodyDecl
   = EnsureDecl (LHsExpr GhcPs)
@@ -2415,12 +2418,10 @@ mkTemplateChoiceSigs templateName ChoiceData{..} =
 mkTemplateChoiceMethods ::
      Located RdrName             -- template data ctor 'T'
   -> Maybe (LHsLocalBinds GhcPs) -- local binds
-  -> ChoiceData                  -- choice data
-  -> LHsExpr GhcPs               -- choice controller
+  -> FlexChoiceData              -- choice data and controllers
   -> [LHsBind GhcPs]             -- function binding
-mkTemplateChoiceMethods conName binds choice controller =
+mkTemplateChoiceMethods conName binds (FlexChoiceData controllers ChoiceData{..}) =
   let templateName = occNameString $ rdrNameOcc $ unLoc conName
-      ChoiceData{..} = choice
       capitalize s = case s of h:t -> toUpper h : t; [] -> []
       choiceName = capitalize $ occNameString $ rdrNameOcc $ unLoc cdChoiceName
       self = XPat $ noLoc $ VarPat noExt $ noLoc $ mkRdrName "self"
@@ -2432,7 +2433,7 @@ mkTemplateChoiceMethods conName binds choice controller =
       mkVar :: String -> HsExpr GhcPs = HsVar noExt . noLoc . mkRdrUnqual . mkVarOcc
   in  map (uncurry3 mkMethod) [
           ("consumption", [], fmap (mkVar . fromMaybe "PreConsuming") cdChoiceConsuming)
-        , ("controller", [], controller)
+        , ("controller", [], controllers)
         , ("action", [self, this, arg], cdChoiceBody)
         , ("exercise", [], noLoc $ mkVar "undefined")
         ]
@@ -2635,14 +2636,14 @@ mkTemplateInstanceClassDecl ::
   -> Maybe (LHsExpr GhcPs)       -- observer
   -> Maybe (LHsExpr GhcPs)       -- agreement
   -> Maybe (LHsLocalBinds GhcPs) -- binds
-  -> [(ChoiceData, LHsExpr GhcPs)] -- data and controller for each choice
+  -> [FlexChoiceData]            -- data and controllers for each choice
   -> P [LHsDecl GhcPs]           -- resulting declaration
 mkTemplateInstanceClassDecl dataName conName ens sig obs agr binds choices = do
 {
     let className = L (getLoc dataName) $ mkRdrName $ templateName ++ "Instance"
-        choiceData = (archiveChoiceData, archiveController) : choices
-        choiceSigs = concatMap (mkTemplateChoiceSigs templateName) (map fst choiceData)
-        choiceMethods = concatMap (uncurry $ mkTemplateChoiceMethods conName binds) choiceData
+        allChoices = FlexChoiceData archiveControllers archiveChoiceData : choices
+        choiceSigs = concatMap (mkTemplateChoiceSigs templateName) (map fcdChoiceData allChoices)
+        choiceMethods = concatMap (mkTemplateChoiceMethods conName binds) allChoices
         templateMethods = mkTemplateClassInstanceMethods conName ens sig obs agr binds
         sigs = mkTemplateClassInstanceSigs templateName ++ choiceSigs
         methods = listToBag $ templateMethods ++ choiceMethods
@@ -2654,7 +2655,7 @@ mkTemplateInstanceClassDecl dataName conName ens sig obs agr binds choices = do
     templateName = occNameString $ rdrNameOcc $ unLoc conName
     unitType = noLoc $ HsTupleTy noExt HsBoxedOrConstraintTuple []
     pureUnit = noLoc $ HsApp noExt (mkVar "pure") (mkVar "()")
-    archiveController = noLoc $ HsApp noExt (mkVar $ "signatory" ++ templateName) (mkVar "this")
+    archiveControllers = noLoc $ HsApp noExt (mkVar $ "signatory" ++ templateName) (mkVar "this")
     archiveChoiceData = ChoiceData {
         cdChoiceName = noLoc $ mkRdrName "archive"
       , cdChoiceFields = Nothing
@@ -2854,6 +2855,17 @@ checkTemplateDeclConstraints nloc ens agr bns kys mts
   | length kys == 1 && null mts = addFatalError nloc (text "Missing 'maintainer' declaration")
   | otherwise      = return ()
 
+-- | Convert controlled choice groups to a list of individual choices with controllers
+-- so they can be handled uniformly.
+-- Note that controllers in choice groups must be added as observers of the template
+-- before we can treat them the same as flexible choices.
+choiceGroupsToFlexChoices
+  :: [Located (LHsExpr GhcPs, Located [Located ChoiceData])]
+  -> [FlexChoiceData]
+choiceGroupsToFlexChoices = concatMap distributeController
+  where
+    distributeController (L _ (controller, L _ choices)) = map (FlexChoiceData controller . unLoc) choices
+
 -- | Desugar a @template@ declaration into a list of decls (this is
 -- called from 'Parser.y').
 mkTemplateDecl
@@ -2867,7 +2879,7 @@ mkTemplateDecl lname@(L nloc _name) fields (L _ decls) = do
       tbdSignatories' = mergeDecls tbdSignatories
       tbdObservers' = Just $ allTemplateObservers (mergeDecls tbdObservers) $ map (fst . unLoc) tbdControlledChoiceGroups
       tbdMaintainers' = mergeDecls tbdMaintainers
-      choices = map (\(L _ (FlexChoiceData controller choiceData)) -> (choiceData, controller)) tbdFlexChoices
+      choices = choiceGroupsToFlexChoices tbdControlledChoiceGroups ++ map unLoc tbdFlexChoices
       (tbdEnsures', tbdAgreements', tbdLetBindings', tbdKeys') =
         (listToMaybe tbdEnsures, listToMaybe tbdAgreements, listToMaybe tbdLetBindings, listToMaybe tbdKeys)
   checkTemplateDeclConstraints nloc tbdEnsures tbdAgreements tbdLetBindings tbdKeys tbdMaintainers
@@ -2875,7 +2887,7 @@ mkTemplateDecl lname@(L nloc _name) fields (L _ decls) = do
   -- denoted by 'fields'.
   ci@(conName, _, _) <- splitCon [fields, dataName]
   dataDecl <- mkTemplateTypeDecl (combineLocs lname fields) lname ci
-  choiceDataDecls <- concat <$> traverse mkTemplateChoiceDecls (map fst choices)
+  choiceDataDecls <- concat <$> traverse mkTemplateChoiceDecls (map fcdChoiceData choices)
   templateInstClassDecl <- mkTemplateInstanceClassDecl dataName conName tbdEnsures' tbdSignatories' tbdObservers' tbdAgreements' tbdLetBindings' choices
   -- templateInstDecl <- mkTemplateTemplateInstDecl dataName conName tbdEnsures' tbdSignatories' tbdObservers' tbdAgreements' tbdLetBindings'
   -- choiceGroupDecls <- mkTemplateChoiceGroupDecls dataName conName tbdControlledChoiceGroups tbdLetBindings'
