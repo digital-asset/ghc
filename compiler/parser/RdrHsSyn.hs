@@ -2631,34 +2631,19 @@ mkTemplateInstanceClassDecl ::
   -> Maybe (LHsExpr GhcPs)       -- observer
   -> Maybe (LHsExpr GhcPs)       -- agreement
   -> Maybe (LHsLocalBinds GhcPs) -- binds
-  -> [FlexChoiceData]            -- data and controllers for each choice
+  -> [FlexChoiceData]            -- data and controllers for each choice (including Archive)
   -> P [LHsDecl GhcPs]           -- resulting declaration
 mkTemplateInstanceClassDecl dataName conName ens sig obs agr binds choices = do
 {
-    let className = L (getLoc dataName) $ mkRdrName $ templateName ++ "Instance"
-        allChoices = FlexChoiceData archiveControllers archiveChoiceData : choices
-        choiceSigs = concatMap (mkTemplateChoiceSigs templateName) (map fcdChoiceData allChoices)
-        choiceMethods = concatMap (mkTemplateChoiceMethods conName binds) allChoices
+    let templateName = occNameString $ rdrNameOcc $ unLoc conName
+        className = L (getLoc dataName) $ mkRdrName $ templateName ++ "Instance"
+        choiceSigs = concatMap (mkTemplateChoiceSigs templateName) (map fcdChoiceData choices)
+        choiceMethods = concatMap (mkTemplateChoiceMethods conName binds) choices
         templateMethods = mkTemplateClassInstanceMethods conName ens sig obs agr binds
         sigs = mkTemplateClassInstanceSigs templateName ++ choiceSigs
         methods = listToBag $ templateMethods ++ choiceMethods
   ; return [noLoc $ TyClD noExt $ classDecl className sigs methods]
 }
-  where
-    mkVar :: String -> LHsExpr GhcPs
-    mkVar = noLoc . HsVar noExt . noLoc . mkRdrUnqual . mkVarOcc
-    templateName = occNameString $ rdrNameOcc $ unLoc conName
-    unitType = noLoc $ HsTupleTy noExt HsBoxedOrConstraintTuple []
-    pureUnit = noLoc $ HsApp noExt (mkVar "pure") (mkVar "()")
-    archiveControllers = noLoc $ HsApp noExt (mkVar $ "signatory" ++ templateName) (mkVar "this")
-    archiveChoiceData = ChoiceData {
-        cdChoiceName = noLoc $ mkRdrName "archive"
-      , cdChoiceFields = Nothing
-      , cdChoiceReturnTy = unitType
-      , cdChoiceBody = pureUnit
-      , cdChoiceConsuming = noLoc $ Just "Preconsuming"
-      , cdChoiceDoc = Nothing
-      }
 
 mkTemplateInstanceMethods ::
      String            -- template name
@@ -2685,6 +2670,21 @@ mkTemplateInstanceDecls loc templateName = do
   baseInstance <- instDecl $ classInstDecl (unLoc instType) emptyBag
   templateInstance <- instDecl $ classInstDecl templateInstQualType instanceMethods
   return $ baseInstance ++ templateInstance
+
+mkChoiceInstanceDecls :: String -> ChoiceData -> P [LHsDecl GhcPs]
+mkChoiceInstanceDecls templateName ChoiceData{..} =
+  let mkTypeName :: String -> LHsType GhcPs
+      mkTypeName tyName = noLoc $ HsTyVar NoExt NotPromoted (noLoc $ mkRdrUnqual $ mkTcOcc tyName)
+      mkAppTy :: LHsType GhcPs -> LHsType GhcPs -> LHsType GhcPs
+      mkAppTy ty1 ty2 = noLoc $ HsAppTy noExt ty1 ty2
+      choiceType = noLoc $ HsTyVar noExt NotPromoted cdChoiceName
+      returnType = noLoc $ HsParTy noExt cdChoiceReturnTy
+      instanceType = mkTypeName "Choice" `mkAppTy` mkTypeName templateName `mkAppTy` choiceType `mkAppTy` returnType
+      mkVar :: String -> LHsExpr GhcPs
+      mkVar = noLoc . HsVar noExt . noLoc . mkRdrUnqual . mkVarOcc
+      exerciseMethodBody = mkVar $ "exercise" ++ templateName ++ occNameString (rdrNameOcc (unLoc cdChoiceName))
+      exerciseMethod = mkTemplateClassMethod "exercise" [] exerciseMethodBody Nothing
+  in instDecl $ classInstDecl (unLoc instanceType) $ listToBag [exerciseMethod]
 
 -- | Construct an @instance Template T@.
 mkTemplateTemplateInstDecl ::
@@ -2780,7 +2780,7 @@ mkTemplateKeyInstDecl dataName conName (Just (L _ KeyData{..})) maintainers bind
 -- | Contruct a @data S = S {...}@ for a single choice 'S'.
 mkTemplateChoiceDecls
   :: ChoiceData          -- choice 'S'
-  -> P ([LHsDecl GhcPs]) -- resulting declarations
+  -> P [LHsDecl GhcPs]   -- resulting declarations
 mkTemplateChoiceDecls ChoiceData{..} = do
 {
   -- Calculate data constructor info from the choice name and (maybe)
@@ -2904,18 +2904,20 @@ mkTemplateDecls lname@(L nloc name) fields (L _ decls)
         (listToMaybe tbdEnsures, listToMaybe tbdAgreements, listToMaybe tbdLetBindings, listToMaybe tbdKeys)
       maintainers = mergeDecls tbdMaintainers
       choices = choiceGroupsToFlexChoices tbdControlledChoiceGroups ++ map unLoc tbdFlexChoices
+      choicesWithArchive = archiveChoiceData : choices
   -- Calculate 'T' data constructor info from 'T' and the record type
   -- denoted by 'fields'.
   ci@(conName, _, _) <- splitCon [fields, dataName]
   dataDecl <- mkTemplateTypeDecl (combineLocs lname fields) lname ci
-  choiceDataDecls <- concat <$> traverse mkTemplateChoiceDecls (map fcdChoiceData choices)
-  templateInstClassDecl <- mkTemplateInstanceClassDecl dataName conName ensures signatories observers agreements letBindings choices
-  templateInstanceDecls <- mkTemplateInstanceDecls nloc (occNameString $ rdrNameOcc name)
+  choiceDataDecls <- concat <$> traverse mkTemplateChoiceDecls (map fcdChoiceData choices) -- no Archive as data type is common across templates
+  templateInstClassDecl <- mkTemplateInstanceClassDecl dataName conName ensures signatories observers agreements letBindings choicesWithArchive
+  templateInstanceDecls <- mkTemplateInstanceDecls nloc templateName
+  choiceInstanceDecls <- concat <$> traverse (mkChoiceInstanceDecls templateName) (map fcdChoiceData choicesWithArchive)
   -- templateInstDecl <- mkTemplateTemplateInstDecl dataName conName tbdEnsures' tbdSignatories' tbdObservers' tbdAgreements' tbdLetBindings'
   -- choiceGroupDecls <- mkTemplateChoiceGroupDecls dataName conName tbdControlledChoiceGroups tbdLetBindings'
   -- flexChoiceDecls <- mkTemplateFlexChoiceDecls dataName conName tbdFlexChoices tbdLetBindings'
   -- templateKeyInstDecl <- mkTemplateKeyInstDecl dataName conName tbdKeys' tbdMaintainers' tbdLetBindings'
-  return $ toOL $ dataDecl ++ choiceDataDecls ++ templateInstClassDecl ++ templateInstanceDecls
+  return $ toOL $ dataDecl ++ choiceDataDecls ++ templateInstClassDecl ++ templateInstanceDecls ++ choiceInstanceDecls
   where
     -- | We support multiple 'signatory', 'observer' and 'maintainer'
     -- declarations in a template.
@@ -2935,6 +2937,23 @@ mkTemplateDecls lname@(L nloc name) fields (L _ decls)
       in case obs of
            Nothing -> app
            Just (L loc _) -> L loc (unLoc app)
+
+    templateName = occNameString $ rdrNameOcc name
+    archiveChoiceData = FlexChoiceData
+      { fcdControllers = noLoc $ HsApp noExt (mkVar $ "signatory" ++ templateName) (mkVar "this")
+      , fcdChoiceData = ChoiceData {
+            cdChoiceName = noLoc $ mkRdrName "Archive"
+          , cdChoiceFields = Nothing
+          , cdChoiceReturnTy = unitType
+          , cdChoiceBody = pureUnit
+          , cdChoiceConsuming = noLoc $ Just "Preconsuming"
+          , cdChoiceDoc = Nothing
+          }
+      }
+    unitType = noLoc $ HsTupleTy noExt HsBoxedOrConstraintTuple []
+    pureUnit = noLoc $ HsApp noExt (mkVar "pure") (mkVar "()")
+    mkVar :: String -> LHsExpr GhcPs
+    mkVar = noLoc . HsVar noExt . noLoc . mkRdrUnqual . mkVarOcc
 
 -----------------------------------------------------------------------------
 -- utilities for foreign declarations
