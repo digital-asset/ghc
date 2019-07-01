@@ -2412,12 +2412,12 @@ mkTemplateChoiceMethods conName binds (FlexChoiceData controllers ChoiceData{..}
       self = XPat $ noLoc $ VarPat noExt $ noLoc $ mkRdrName "self"
       this = asPatRecWild "this" conName
       arg  = argPatOfChoice (noLoc $ mkRdrUnqual $ mkDataOcc choiceName) cdChoiceFields
-      mkFullMethodName methodName = methodName ++ templateName ++ choiceName
       mkMethod methodName args body =
-        mkTemplateClassMethod (mkFullMethodName methodName) args body binds
+        mkTemplateClassMethod (methodName ++ templateName ++ choiceName) args body binds
       mkVar :: OccName -> HsExpr GhcPs = HsVar noExt . noLoc . mkRdrUnqual
+      consuming = fmap (mkVar . mkDataOcc . fromMaybe "PreConsuming") cdChoiceConsuming
   in  map (uncurry3 mkMethod) [
-          ("consumption", [], fmap (mkVar . mkDataOcc . fromMaybe "PreConsuming") cdChoiceConsuming)
+          ("consumption", [], consuming)
         , ("controller", [], controllers)
         , ("action", [self, this, arg], cdChoiceBody)
         , ("exercise", [], noLoc $ mkVar $ mkVarOcc "undefined")
@@ -2947,7 +2947,7 @@ mkTemplateDecls lname@(L nloc name) fields (L _ decls)
           , cdChoiceFields = Nothing
           , cdChoiceReturnTy = unitType
           , cdChoiceBody = pureUnit
-          , cdChoiceConsuming = noLoc $ Just "Preconsuming"
+          , cdChoiceConsuming = noLoc $ Just "PreConsuming"
           , cdChoiceDoc = Nothing
           }
       }
