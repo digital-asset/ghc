@@ -2415,12 +2415,12 @@ mkTemplateChoiceMethods conName binds (FlexChoiceData controllers ChoiceData{..}
       mkFullMethodName methodName = methodName ++ templateName ++ choiceName
       mkMethod methodName args body =
         mkTemplateClassMethod (mkFullMethodName methodName) args body binds
-      mkVar :: String -> HsExpr GhcPs = HsVar noExt . noLoc . mkRdrUnqual . mkVarOcc
+      mkVar :: OccName -> HsExpr GhcPs = HsVar noExt . noLoc . mkRdrUnqual
   in  map (uncurry3 mkMethod) [
-          ("consumption", [], fmap (mkVar . fromMaybe "PreConsuming") cdChoiceConsuming)
+          ("consumption", [], fmap (mkVar . mkDataOcc . fromMaybe "PreConsuming") cdChoiceConsuming)
         , ("controller", [], controllers)
         , ("action", [self, this, arg], cdChoiceBody)
-        , ("exercise", [], noLoc $ mkVar "undefined")
+        , ("exercise", [], noLoc $ mkVar $ mkVarOcc "undefined")
         ]
 
 mkTemplateClassMethod ::
@@ -2611,7 +2611,7 @@ mkTemplateClassInstanceMethods conName ens sig obs agr binds =
       compilerMagic :: LHsExpr GhcPs = mkVar "undefined"
       archiveBody = mkApp (mkApp (mkVar $ "exercise" ++ templateName ++ "Archive")
                             (mkVar "cid"))
-                          (mkVar "Archive")
+                          (noLoc . HsVar noExt . noLoc . mkRdrUnqual $ mkDataOcc "Archive")
   in  map (uncurry3 mkMethod) [
           ("signatory", [this], fromMaybe emptyList sig)
         , ("observer",  [this], fromMaybe emptyList obs)
@@ -2636,7 +2636,7 @@ mkTemplateInstanceClassDecl ::
 mkTemplateInstanceClassDecl dataName conName ens sig obs agr binds choices = do
 {
     let templateName = occNameString $ rdrNameOcc $ unLoc conName
-        className = L (getLoc dataName) $ mkRdrName $ templateName ++ "Instance"
+        className = L (getLoc dataName) $ mkRdrUnqual $ mkClsOcc $ templateName ++ "Instance"
         choiceSigs = concatMap (mkTemplateChoiceSigs templateName) (map fcdChoiceData choices)
         choiceMethods = concatMap (mkTemplateChoiceMethods conName binds) choices
         templateMethods = mkTemplateClassInstanceMethods conName ens sig obs agr binds
@@ -2657,14 +2657,15 @@ mkTemplateInstanceMethods templateName =
       mkVar = noLoc . HsVar noExt . noLoc . mkRdrUnqual . mkVarOcc
   in  map mkMethod ["signatory", "observer", "ensure", "agreement", "create", "fetch", "archive"]
 
--- | Construct an @instance TInstance where@.
+-- | Construct an @instance TInstance where@
+-- and an @instance TInstance => Template T where ...@
 mkTemplateInstanceDecls :: SrcSpan -> String -> P [LHsDecl GhcPs]
 mkTemplateInstanceDecls loc templateName = do
-  let mkTypeName :: String -> LHsType GhcPs
-      mkTypeName tyName = noLoc $ HsTyVar NoExt NotPromoted (noLoc $ mkRdrUnqual $ mkTcOcc tyName)
+  let mkTypeName :: OccName -> LHsType GhcPs
+      mkTypeName = noLoc . HsTyVar NoExt NotPromoted . noLoc . mkRdrUnqual
       mkAppTy ty1 ty2 = noLoc $ HsAppTy noExt ty1 ty2
-      instType = mkTypeName $ templateName ++ "Instance"
-      templateType = mkAppTy (mkTypeName "Template") (mkTypeName templateName)
+      instType = mkTypeName $ mkClsOcc $ templateName ++ "Instance"
+      templateType = mkAppTy (mkTypeName $ mkTcOcc "Template") (mkTypeName $ mkTcOcc templateName)
       templateInstQualType = HsQualTy noExt (noLoc [instType]) templateType
       instanceMethods = listToBag $ mkTemplateInstanceMethods templateName
   baseInstance <- instDecl $ classInstDecl (unLoc instType) emptyBag
@@ -2942,7 +2943,7 @@ mkTemplateDecls lname@(L nloc name) fields (L _ decls)
     archiveChoiceData = FlexChoiceData
       { fcdControllers = noLoc $ HsApp noExt (mkVar $ "signatory" ++ templateName) (mkVar "this")
       , fcdChoiceData = ChoiceData {
-            cdChoiceName = noLoc $ mkRdrName "Archive"
+            cdChoiceName = noLoc $ mkRdrUnqual $ mkTcOcc "Archive"
           , cdChoiceFields = Nothing
           , cdChoiceReturnTy = unitType
           , cdChoiceBody = pureUnit
