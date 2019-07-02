@@ -2418,7 +2418,7 @@ mkTemplateChoiceMethods conName binds (FlexChoiceData controllers ChoiceData{..}
       consuming = fmap (mkVar . mkDataOcc . fromMaybe "PreConsuming") cdChoiceConsuming
   in  map (uncurry3 mkMethod) [
           ("consumption", [], consuming)
-        , ("controller", [], controllers)
+        , ("controller", [this, arg], controllers)
         , ("action", [self, this, arg], cdChoiceBody)
         , ("exercise", [], noLoc $ mkVar $ mkVarOcc "undefined")
         ]
