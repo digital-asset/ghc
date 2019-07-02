@@ -2952,7 +2952,7 @@ mkTemplateDecls lname@(L nloc name) fields (L _ decls)
           }
       }
     unitType = noLoc $ HsTupleTy noExt HsBoxedOrConstraintTuple []
-    pureUnit = noLoc $ HsApp noExt (mkVar "pure") (mkVar "()")
+    pureUnit = noLoc $ HsApp noExt (mkVar "pure") (noLoc $ ExplicitTuple noExt [] Boxed)
     mkVar :: String -> LHsExpr GhcPs
     mkVar = noLoc . HsVar noExt . noLoc . mkRdrUnqual . mkVarOcc
 
