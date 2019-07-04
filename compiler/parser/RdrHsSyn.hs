@@ -2611,19 +2611,20 @@ mkTemplateClassInstanceMethods conName ens sig obs agr binds =
       templateName = occNameString $ rdrNameOcc $ unLoc conName
       this = asPatRecWild "this" conName
       cid = XPat $ noLoc $ VarPat noExt $ noLoc $ mkRdrName "cid"
-      mkVar :: String -> LHsExpr GhcPs = noLoc . HsVar noExt . noLoc . mkRdrUnqual . mkVarOcc
+      mkVar :: OccName -> LHsExpr GhcPs = noLoc . HsVar noExt . noLoc . mkRdrUnqual
       mkApp :: LHsExpr GhcPs -> LHsExpr GhcPs -> LHsExpr GhcPs
       mkApp e1 e2 = noLoc $ HsApp noExt e1 e2
-      emptyList :: LHsExpr GhcPs = mkVar "[]"
-      compilerMagic :: LHsExpr GhcPs = mkVar "undefined"
-      archiveBody = mkApp (mkApp (mkVar $ "exercise" ++ templateName ++ "Archive")
-                            (mkVar "cid"))
-                          (noLoc . HsVar noExt . noLoc . mkRdrUnqual $ mkDataOcc "Archive")
+      emptyList :: LHsExpr GhcPs = noLoc $ ExplicitList noExt Nothing []
+      emptyString :: LHsExpr GhcPs = noLoc $ HsLit noExt $ HsString NoSourceText $ fsLit ""
+      compilerMagic :: LHsExpr GhcPs = mkVar $ mkVarOcc "undefined"
+      archiveBody = mkApp (mkApp (mkVar $ mkVarOcc $ "exercise" ++ templateName ++ "Archive")
+                            (mkVar $ mkVarOcc "cid"))
+                          (mkVar $ mkDataOcc "Archive")
   in  map (uncurry3 mkMethod) [
           ("signatory", [this], fromMaybe emptyList sig)
         , ("observer",  [this], fromMaybe emptyList obs)
-        , ("ensure",    [this], fromMaybe (mkVar "True") ens)
-        , ("agreement", [this], fromMaybe (mkVar "\"\"") agr)
+        , ("ensure",    [this], fromMaybe (mkVar $ mkDataOcc "True") ens)
+        , ("agreement", [this], fromMaybe emptyString agr)
         , ("create",    [],     compilerMagic)
         , ("fetch",     [],     compilerMagic)
         , ("archive",   [cid],  archiveBody)
