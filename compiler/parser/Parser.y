@@ -1230,10 +1230,10 @@ flex_choice_decl :: { Located FlexChoiceData }
 -- flexible_choice_body :: { Located ([AddAnn],[LStmt GhcPs (LHsExpr GhcPs)]) }
 --  : 'do' stmtlist                                { sLL $1 $2 $ unLoc $2 }
 
-consuming :: { Located (Maybe String) }
- : 'preconsuming'                                { sL1 $1 Nothing }
- | 'nonconsuming'                                { sL1 $1 (Just "nonconsuming") }
- | 'postconsuming'                               { sL1 $1 (Just "postconsuming") }
+consuming :: { Located (Maybe ChoiceConsuming) }
+ : 'preconsuming'                                { sL1 $1 (Just PreConsuming)  }
+ | 'nonconsuming'                                { sL1 $1 (Just NonConsuming)  }
+ | 'postconsuming'                               { sL1 $1 (Just PostConsuming) }
  | {- empty -}                                   { sL0 Nothing }
 
 -- This production is only used by choice_decl.

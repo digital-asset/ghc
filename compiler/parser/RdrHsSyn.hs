@@ -37,6 +37,7 @@ module   RdrHsSyn (
 
         -- DAML Template Syntax
         ChoiceData(..),
+        ChoiceConsuming(..),
         FlexChoiceData(..),
         KeyData(..),
         TemplateBodyDecl(..),
@@ -2119,9 +2120,12 @@ data ChoiceData = ChoiceData {
   , cdChoiceFields :: Maybe (LHsType GhcPs)
   , cdChoiceReturnTy :: LHsType GhcPs
   , cdChoiceBody :: LHsExpr GhcPs
-  , cdChoiceConsuming :: Located (Maybe String)
+  , cdChoiceConsuming :: Located (Maybe ChoiceConsuming)
   , cdChoiceDoc :: Maybe LHsDocString
   }
+
+data ChoiceConsuming = PreConsuming | PostConsuming | NonConsuming
+  deriving Show -- for creating type/data names from these constructors
 
 data FlexChoiceData = FlexChoiceData {
     fcdControllers :: LHsExpr GhcPs
@@ -2389,10 +2393,13 @@ mkTemplateChoiceSigs templateName ChoiceData{..} =
       templateType = mkTypeName templateName
       mkFunTy :: LHsType GhcPs -> LHsType GhcPs -> LHsType GhcPs
       mkFunTy funTy argTy = noLoc $ HsFunTy noExt funTy argTy
+      mkTypeNameNoLoc :: String -> HsType GhcPs
+      mkTypeNameNoLoc = HsTyVar NoExt NotPromoted . noLoc . mkRdrUnqual . mkTcOcc
       mkTypeName :: String -> LHsType GhcPs
-      mkTypeName tyName = noLoc $ HsTyVar NoExt NotPromoted $ noLoc $ mkRdrUnqual $ mkTcOcc tyName
+      mkTypeName = noLoc . mkTypeNameNoLoc
       mkListTy :: LHsType GhcPs -> LHsType GhcPs
       mkListTy elemTy = noLoc $ HsListTy noExt elemTy
+      mkAppTy :: LHsType GhcPs -> LHsType GhcPs -> LHsType GhcPs
       mkAppTy ty1 ty2 = noLoc $ HsAppTy noExt ty1 ty2
       mkParTy :: LHsType GhcPs -> LHsType GhcPs = noLoc . HsParTy noExt
       mkSig :: String -> LHsType GhcPs -> LSig GhcPs
@@ -2400,7 +2407,7 @@ mkTemplateChoiceSigs templateName ChoiceData{..} =
         let fullMethodName = noLoc $ mkRdrName $ methodName ++ templateName ++ choiceName in
         noLoc $ ClassOpSig noExt False [fullMethodName] (HsIB noExt ty)
   in  map (uncurry mkSig) [
-          ("consumption", mkAppTy (fmap (unLoc . mkTypeName . fromMaybe "PreConsuming") cdChoiceConsuming) templateType)
+          ("consumption", mkAppTy (mkTypeNameNoLoc . show . fromMaybe PreConsuming <$> cdChoiceConsuming) templateType)
         , ("controller", mkFunTy templateType (mkFunTy choiceType (mkListTy $ mkTypeName "Party")))
         , ("action", mkFunTy (mkAppTy (mkTypeName "ContractId") templateType) (mkFunTy templateType (mkFunTy choiceType (mkAppTy (mkTypeName "Update") (mkParTy cdChoiceReturnTy)))))
         , ("exercise", mkFunTy (mkAppTy (mkTypeName "ContractId") templateType) (mkFunTy choiceType (mkAppTy (mkTypeName "Update") (mkParTy cdChoiceReturnTy))))
@@ -2422,7 +2429,7 @@ mkTemplateChoiceMethods conName binds (CombinedChoiceData controllers ChoiceData
       mkMethod methodName args body =
         mkTemplateClassMethod (methodName ++ templateName ++ choiceName) args body binds
       mkVar :: OccName -> HsExpr GhcPs = HsVar noExt . noLoc . mkRdrUnqual
-      consuming = fmap (mkVar . mkDataOcc . fromMaybe "PreConsuming") cdChoiceConsuming
+      consuming = mkVar . mkDataOcc . show . fromMaybe PreConsuming <$> cdChoiceConsuming
   in  map (uncurry3 mkMethod) [
           ("consumption", [], consuming)
         , ("controller", [this, controllerArg], controllers)
@@ -2960,7 +2967,7 @@ mkTemplateDecls lname@(L nloc name) fields (L _ decls)
           , cdChoiceFields = Nothing
           , cdChoiceReturnTy = unitType
           , cdChoiceBody = pureUnit
-          , cdChoiceConsuming = noLoc $ Just "PreConsuming"
+          , cdChoiceConsuming = noLoc $ Just PreConsuming
           , cdChoiceDoc = Nothing
           }
       , ccdFlexible = False
