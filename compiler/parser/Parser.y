@@ -1184,7 +1184,7 @@ template_body_decl :: { Located TemplateBodyDecl }
   | key_decl                                     { sL1 $1 $ KeyDecl $1 }
   | maintainer_decl                              { sL1 $1 $ MaintainerDecl $1 }
 
-let_bindings_decl :: { Located ([AddAnn], Located (HsLocalBinds GhcPs)) }
+let_bindings_decl :: { Located ([AddAnn], LHsLocalBinds GhcPs) }
   : 'let' binds                 { sLL $1 $> (mj AnnWhere $1 : (fst $ unLoc $2)
                                              , snd $ unLoc $2) }
 
