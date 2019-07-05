@@ -2423,16 +2423,19 @@ mkTemplateChoiceMethods conName binds (CombinedChoiceData controllers ChoiceData
       this = asPatRecWild "this" conName
       arg  = argPatOfChoice (noLoc $ mkRdrUnqual $ mkDataOcc choiceName) cdChoiceFields
       controllerArg = if flexible then arg else WildPat noExt
-      mkMethod methodName args body =
-        mkTemplateClassMethod (methodName ++ templateName ++ choiceName) args body (Just binds)
+      mkMethod :: String -> [Pat GhcPs] -> Bool -> LHsExpr GhcPs -> LHsBind GhcPs
+      mkMethod methodName args includeBindings body =
+        mkTemplateClassMethod (methodName ++ templateName ++ choiceName) args body $
+          -- General rule: only include template bindings for methods with `this` in scope
+          if includeBindings then Just binds else Nothing
       mkVar :: OccName -> HsExpr GhcPs = HsVar noExt . noLoc . mkRdrUnqual
       consuming = mkVar . mkDataOcc . show . fromMaybe PreConsuming <$> cdChoiceConsuming
-  in  map (uncurry3 mkMethod) [
-          ("consumption", [], consuming)
-        , ("controller", [this, controllerArg], controllers)
-        , ("action", [self, this, arg], cdChoiceBody)
-        , ("exercise", [], noLoc $ mkVar $ mkVarOcc "undefined")
-        ]
+      undefined = noLoc $ mkVar $ mkVarOcc "undefined"
+  in  [ mkMethod "consumption" []                    False consuming
+      , mkMethod "controller"  [this, controllerArg] True  controllers
+      , mkMethod "action"      [self, this, arg]     True  cdChoiceBody
+      , mkMethod "exercise"    []                    False undefined
+      ]
 
 mkTemplateClassMethod ::
      String                      -- method name
@@ -2610,9 +2613,11 @@ mkTemplateClassInstanceMethods ::
   -> LHsLocalBinds GhcPs         -- binds
   -> [LHsBind GhcPs]             -- method declarations
 mkTemplateClassInstanceMethods conName ens sig obs agr binds =
-  let mkMethod :: String -> [Pat GhcPs] -> LHsExpr GhcPs -> LHsBind GhcPs
-      mkMethod methodName args methodBody =
-        mkTemplateClassMethod (methodName ++ templateName) args methodBody (Just binds)
+  let mkMethod :: String -> [Pat GhcPs] -> Bool -> LHsExpr GhcPs -> LHsBind GhcPs
+      mkMethod methodName args includeBindings methodBody =
+        mkTemplateClassMethod (methodName ++ templateName) args methodBody $
+          -- General rule: only include template bindings for methods with `this` in scope
+          if includeBindings then Just binds else Nothing
       templateName = occNameString $ rdrNameOcc $ unLoc conName
       this = asPatRecWild "this" conName
       cid = XPat $ noLoc $ VarPat noExt $ noLoc $ mkRdrName "cid"
@@ -2621,19 +2626,18 @@ mkTemplateClassInstanceMethods conName ens sig obs agr binds =
       mkApp e1 e2 = noLoc $ HsApp noExt e1 e2
       emptyList :: LHsExpr GhcPs = noLoc $ ExplicitList noExt Nothing []
       emptyString :: LHsExpr GhcPs = noLoc $ HsLit noExt $ HsString NoSourceText $ fsLit ""
-      compilerMagic :: LHsExpr GhcPs = mkVar $ mkVarOcc "undefined"
+      undefined :: LHsExpr GhcPs = mkVar $ mkVarOcc "undefined"
       archiveBody = mkApp (mkApp (mkVar $ mkVarOcc $ "exercise" ++ templateName ++ "Archive")
                             (mkVar $ mkVarOcc "cid"))
                           (mkVar $ mkDataOcc "Archive")
-  in  map (uncurry3 mkMethod) [
-          ("signatory", [this], fromMaybe emptyList sig)
-        , ("observer",  [this], fromMaybe emptyList obs)
-        , ("ensure",    [this], fromMaybe (mkVar $ mkDataOcc "True") ens)
-        , ("agreement", [this], fromMaybe emptyString agr)
-        , ("create",    [],     compilerMagic)
-        , ("fetch",     [],     compilerMagic)
-        , ("archive",   [cid],  archiveBody)
-        ]
+  in  [ mkMethod "signatory" [this] True  (fromMaybe emptyList sig)
+      , mkMethod "observer"  [this] True  (fromMaybe emptyList obs)
+      , mkMethod "ensure"    [this] True  (fromMaybe (mkVar $ mkDataOcc "True") ens)
+      , mkMethod "agreement" [this] True  (fromMaybe emptyString agr)
+      , mkMethod "create"    []     False undefined
+      , mkMethod "fetch"     []     False undefined
+      , mkMethod "archive"   [cid]  False archiveBody
+      ]
 
 -- | Construct a @class Template TInstance@.
 mkTemplateInstanceClassDecl ::
