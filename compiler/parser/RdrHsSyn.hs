@@ -2143,6 +2143,7 @@ data KeyData = KeyData {
   , kdKeyTy :: LHsType GhcPs
   }
 
+-- | Any declaration that can appear within a template
 data TemplateBodyDecl
   = EnsureDecl (LHsExpr GhcPs)
   | SignatoryDecl (LHsExpr GhcPs)
@@ -2154,6 +2155,7 @@ data TemplateBodyDecl
   | KeyDecl (Located KeyData)
   | MaintainerDecl (LHsExpr GhcPs)
 
+-- | Result of combining declarations in the template body
 data TemplateBodyDecls = TemplateBodyDecls {
       tbdEnsures :: [LHsExpr GhcPs]
     , tbdSignatories :: [LHsExpr GhcPs]
@@ -2164,6 +2166,19 @@ data TemplateBodyDecls = TemplateBodyDecls {
     , tbdFlexChoices :: [Located FlexChoiceData]
     , tbdKeys :: [Located KeyData]
     , tbdMaintainers :: [LHsExpr GhcPs]
+    }
+
+-- Result of validating TemplateBodyDecls, with stricter types
+data ValidTemplateBody = ValidTemplateBody {
+      vtbEnsures :: Maybe (LHsExpr GhcPs)
+    , vtbSignatories :: LHsExpr GhcPs
+    , vtbObservers :: Maybe (LHsExpr GhcPs)
+    , vtbAgreements :: Maybe (LHsExpr GhcPs)
+    , vtbLetBindings :: LHsLocalBinds GhcPs
+    , vtbControlledChoiceGroups :: [Located (LHsExpr GhcPs, Located [Located ChoiceData])]
+    , vtbFlexChoices :: [Located FlexChoiceData]
+    , vtbKeys :: Maybe (Located KeyData)
+    , vtbMaintainers :: Maybe (LHsExpr GhcPs)
     }
 
 instance Semigroup TemplateBodyDecls where
@@ -2877,22 +2892,40 @@ mkTemplateChoiceDecls ChoiceData{..} = do
 -- }
 
 -- | Validate @template@ multiplicity constraints.
-checkTemplateDeclConstraints
-  :: SrcSpan                   -- loc of 'T' in @template T@
-  -> [LHsExpr GhcPs]           -- ensure
-  -> [LHsExpr GhcPs]           -- agreement
-  -> [LHsLocalBinds GhcPs]     -- binds
-  -> [Located KeyData]         -- key
-  -> [LHsExpr GhcPs]           -- maintainer
-  -> P ()
-checkTemplateDeclConstraints nloc ens agr bns kys mts
-  | length ens > 1 = addFatalError nloc (text "Multiple 'ensure' declarations")
-  | length agr > 1 = addFatalError nloc (text "Multiple 'agreement' declarations")
-  | length kys > 1 = addFatalError nloc (text "Multiple 'key' declarations")
-  | length bns > 1 = addFatalError nloc (text "Multiple 'let' block declarations")
-  | length mts >= 1 && null kys = addFatalError nloc (text "Missing 'key' declaration")
-  | length kys == 1 && null mts = addFatalError nloc (text "Missing 'maintainer' declaration")
-  | otherwise      = return ()
+validateTemplateBodyDecls
+  :: SrcSpan             -- location of 'T' in @template T@
+  -> TemplateBodyDecls   -- unvalidated template body
+  -> P ValidTemplateBody -- validated template body
+validateTemplateBodyDecls nloc TemplateBodyDecls{..}
+  | length tbdEnsures > 1 = report "Multiple 'ensure' declarations"
+  | null tbdSignatories = report "Missing 'signatory' declaration"
+  | length tbdAgreements > 1 = report "Multiple 'agreement' declarations"
+  | length tbdKeys > 1 = report "Multiple 'key' declarations"
+  | length tbdLetBindings > 1 = report "Multiple 'let' block declarations"
+  | null tbdKeys && (not . null) tbdMaintainers = report "Missing 'key' declaration for given 'maintainer'"
+  | null tbdMaintainers && (not . null) tbdKeys = report "Missing 'maintainer' declaration for given 'key'"
+  | otherwise = return $
+      ValidTemplateBody {
+          vtbEnsures = listToMaybe tbdEnsures
+        , vtbSignatories = applyConcat (noLoc tbdSignatories)
+        , vtbObservers = mergeDecls tbdObservers
+        , vtbAgreements = listToMaybe tbdAgreements
+        , vtbLetBindings = fromMaybe (noLoc emptyLocalBinds) (listToMaybe tbdLetBindings)
+        , vtbControlledChoiceGroups = tbdControlledChoiceGroups
+        , vtbFlexChoices = tbdFlexChoices
+        , vtbKeys = listToMaybe tbdKeys
+        , vtbMaintainers = mergeDecls tbdMaintainers
+      }
+  where
+    report :: String -> P a
+    report = addFatalError nloc . text
+
+    -- | Combine support multiple 'observer' and 'maintainer' declarations into
+    -- a single list expression.
+    mergeDecls :: [LHsExpr GhcPs] -> Maybe (LHsExpr GhcPs)
+    mergeDecls [] = Nothing
+    mergeDecls xs = Just $ applyConcat $ noLoc xs -- TODO(RJR): Combine locations from the list elements
+
 
 -- | Convert controlled choice groups to a list of individual choices with controllers
 -- so they can be combined with flexible choices.
@@ -2916,27 +2949,19 @@ mkTemplateDecls
   -> LHsType GhcPs -- The template's record type
   -> Located [Located TemplateBodyDecl]  -- Template declarations
   -> P (OrdList (LHsDecl GhcPs)) -- Desugared declarations
-mkTemplateDecls lname@(L nloc name) fields (L _ decls)
-  | TemplateBodyDecls {..} <- extractTemplateBodyDecls decls = do
-  checkTemplateDeclConstraints nloc tbdEnsures tbdAgreements tbdLetBindings tbdKeys tbdMaintainers
+mkTemplateDecls lname@(L nloc name) fields (L _ decls) = do
+  ValidTemplateBody{..} <- validateTemplateBodyDecls nloc (extractTemplateBodyDecls decls)
   let dataName = L nloc (HsTyVar noExt NotPromoted lname)
-      signatories = mergeDecls tbdSignatories
-      observers = Just $ allTemplateObservers (mergeDecls tbdObservers) $ map (fst . unLoc) tbdControlledChoiceGroups
-      (ensures, agreements, keys) =
-        (listToMaybe tbdEnsures, listToMaybe tbdAgreements, listToMaybe tbdKeys)
-      letBindings = case tbdLetBindings of
-        [] -> noLoc emptyLocalBinds
-        binds : _ -> binds
-      maintainers = mergeDecls tbdMaintainers
-      choices = choiceGroupsToCombinedChoices tbdControlledChoiceGroups
-                ++ map (flexChoiceToCombinedChoice . unLoc) tbdFlexChoices
+      allObservers = allTemplateObservers vtbObservers $ map (fst . unLoc) vtbControlledChoiceGroups
+      choices = choiceGroupsToCombinedChoices vtbControlledChoiceGroups
+                ++ map (flexChoiceToCombinedChoice . unLoc) vtbFlexChoices
       choicesWithArchive = archiveChoiceData : choices
-  -- Calculate 'T' data constructor info from 'T' and the record type
-  -- denoted by 'fields'.
+  -- Calculate 'T' data constructor info from 'T' and the record type denoted by 'fields'.
   ci@(conName, _, _) <- splitCon [fields, dataName]
   dataDecl <- mkTemplateTypeDecl (combineLocs lname fields) lname ci
-  choiceDataDecls <- concat <$> traverse mkTemplateChoiceDecls (map ccdChoiceData choices) -- no Archive as data type is common across templates
-  templateInstClassDecl <- mkTemplateInstanceClassDecl dataName conName ensures signatories observers agreements letBindings choicesWithArchive
+  choiceDataDecls <- concat <$> traverse mkTemplateChoiceDecls (map ccdChoiceData choices) -- do not create Archive data type as it is common across templates
+  templateInstClassDecl <- mkTemplateInstanceClassDecl dataName conName vtbEnsures (Just vtbSignatories) (Just allObservers) vtbAgreements vtbLetBindings choicesWithArchive
+    -- ^ TODO: Get rid of Maybes above
   templateInstanceDecls <- mkTemplateInstanceDecls nloc templateName
   choiceInstanceDecls <- concat <$> traverse (mkChoiceInstanceDecls templateName) (map ccdChoiceData choicesWithArchive)
   -- templateInstDecl <- mkTemplateTemplateInstDecl dataName conName tbdEnsures' tbdSignatories' tbdObservers' tbdAgreements' tbdLetBindings'
@@ -2945,13 +2970,6 @@ mkTemplateDecls lname@(L nloc name) fields (L _ decls)
   -- templateKeyInstDecl <- mkTemplateKeyInstDecl dataName conName tbdKeys' tbdMaintainers' tbdLetBindings'
   return $ toOL $ dataDecl ++ choiceDataDecls ++ templateInstClassDecl ++ templateInstanceDecls ++ choiceInstanceDecls
   where
-    -- | We support multiple 'signatory', 'observer' and 'maintainer'
-    -- declarations in a template.
-    mergeDecls :: [LHsExpr GhcPs] -> Maybe (LHsExpr GhcPs)
-    mergeDecls xs
-      | null xs = Nothing
-      | otherwise = Just $ applyConcat $ noLoc xs -- Concat them.
-
     -- | Calculate an expression for the full list of a contract's
     -- observers.
     allTemplateObservers
