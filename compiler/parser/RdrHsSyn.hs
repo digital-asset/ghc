@@ -2620,18 +2620,14 @@ mkTemplateTypeDecl
 
 mkTemplateClassInstanceMethods ::
      Located RdrName             -- ctor 'T'
-  -> Maybe (LHsExpr GhcPs)       -- ensure
-  -> LHsExpr GhcPs               -- signatories
-  -> LHsExpr GhcPs               -- observers
-  -> Maybe (LHsExpr GhcPs)       -- agreement
-  -> LHsLocalBinds GhcPs         -- template-level let bindings
+  -> ValidTemplateBody           -- sanitized template body
   -> [LHsBind GhcPs]             -- method declarations
-mkTemplateClassInstanceMethods conName ens sig obs agr binds =
+mkTemplateClassInstanceMethods conName ValidTemplateBody{..} =
   let mkMethod :: String -> [Pat GhcPs] -> Bool -> LHsExpr GhcPs -> LHsBind GhcPs
       mkMethod methodName args includeBindings methodBody =
         mkTemplateClassMethod (methodName ++ templateName) args methodBody $
           -- General rule: only include template bindings for methods with `this` in scope
-          if includeBindings then Just binds else Nothing
+          if includeBindings then Just vtbLetBindings else Nothing
       templateName = occNameString $ rdrNameOcc $ unLoc conName
       this = asPatRecWild "this" conName
       cid = XPat $ noLoc $ VarPat noExt $ noLoc $ mkRdrName "cid"
@@ -2643,10 +2639,10 @@ mkTemplateClassInstanceMethods conName ens sig obs agr binds =
       archiveBody = mkApp (mkApp (mkVar $ mkVarOcc $ "exercise" ++ templateName ++ "Archive")
                             (mkVar $ mkVarOcc "cid"))
                           (mkVar $ mkDataOcc "Archive")
-  in  [ mkMethod "signatory" [this] True  sig
-      , mkMethod "observer"  [this] True  obs
-      , mkMethod "ensure"    [this] True  (fromMaybe (mkVar $ mkDataOcc "True") ens)
-      , mkMethod "agreement" [this] True  (fromMaybe emptyString agr)
+  in  [ mkMethod "signatory" [this] True  vtbSignatories
+      , mkMethod "observer"  [this] True  vtbObservers
+      , mkMethod "ensure"    [this] True  (fromMaybe (mkVar $ mkDataOcc "True") vtbEnsures)
+      , mkMethod "agreement" [this] True  (fromMaybe emptyString vtbAgreements)
       , mkMethod "create"    []     False undefined
       , mkMethod "fetch"     []     False undefined
       , mkMethod "archive"   [cid]  False archiveBody
@@ -2656,20 +2652,15 @@ mkTemplateClassInstanceMethods conName ens sig obs agr binds =
 mkTemplateInstanceClassDecl ::
      LHsType GhcPs               -- data 'T'
   -> Located RdrName             -- ctor 'T'
-  -> Maybe (LHsExpr GhcPs)       -- ensure
-  -> LHsExpr GhcPs               -- signatories
-  -> LHsExpr GhcPs               -- observers
-  -> Maybe (LHsExpr GhcPs)       -- agreement
-  -> LHsLocalBinds GhcPs         -- binds
-  -> [CombinedChoiceData]        -- data and controllers for each choice (including Archive)
+  -> ValidTemplateBody           -- sanitized template body
   -> P [LHsDecl GhcPs]           -- resulting declaration
-mkTemplateInstanceClassDecl dataName conName ens sig obs agr binds choices = do
+mkTemplateInstanceClassDecl dataName conName vtb@ValidTemplateBody{..} = do
 {
     let templateName = occNameString $ rdrNameOcc $ unLoc conName
         className = L (getLoc dataName) $ mkRdrUnqual $ mkClsOcc $ templateName ++ "Instance"
-        choiceSigs = concatMap (mkTemplateChoiceSigs templateName) (map ccdChoiceData choices)
-        choiceMethods = concatMap (mkTemplateChoiceMethods conName binds) choices
-        templateMethods = mkTemplateClassInstanceMethods conName ens sig obs agr binds
+        choiceSigs = concatMap (mkTemplateChoiceSigs templateName) (map ccdChoiceData vtbChoices)
+        choiceMethods = concatMap (mkTemplateChoiceMethods conName vtbLetBindings) vtbChoices
+        templateMethods = mkTemplateClassInstanceMethods conName vtb
         sigs = mkTemplateClassInstanceSigs templateName ++ choiceSigs
         methods = listToBag $ templateMethods ++ choiceMethods
   ; return [noLoc $ TyClD noExt $ classDecl className sigs methods]
@@ -2965,14 +2956,13 @@ mkTemplateDecls
   -> P (OrdList (LHsDecl GhcPs)) -- Desugared declarations
 mkTemplateDecls lname@(L nloc name) fields (L _ decls) = do
   vtb@ValidTemplateBody{..} <- validateTemplateBodyDecls nloc (extractTemplateBodyDecls decls)
-  let dataName = L nloc (HsTyVar noExt NotPromoted lname)
-      choicesWithArchive = archiveChoiceData : vtbChoices
   -- Calculate 'T' data constructor info from 'T' and the record type denoted by 'fields'.
   ci@(conName, _, _) <- splitCon [fields, dataName]
   dataDecl <- mkTemplateTypeDecl (combineLocs lname fields) lname ci
   choiceDataDecls <- concat <$> traverse mkTemplateChoiceDecls (map ccdChoiceData vtbChoices)
     -- ^ Do not include Archive data type as it has a shared definition across templates
-  templateInstClassDecl <- mkTemplateInstanceClassDecl dataName conName vtbEnsures vtbSignatories vtbObservers vtbAgreements vtbLetBindings choicesWithArchive
+  let choicesWithArchive = archiveChoiceData : vtbChoices
+  templateInstClassDecl <- mkTemplateInstanceClassDecl dataName conName vtb{vtbChoices = choicesWithArchive}
   templateInstanceDecls <- mkTemplateInstanceDecls nloc templateName
   choiceInstanceDecls <- concat <$> traverse (mkChoiceInstanceDecls templateName) (map ccdChoiceData choicesWithArchive)
   -- templateInstDecl <- mkTemplateTemplateInstDecl dataName conName tbdEnsures' tbdSignatories' tbdObservers' tbdAgreements' tbdLetBindings'
@@ -2981,7 +2971,9 @@ mkTemplateDecls lname@(L nloc name) fields (L _ decls) = do
   -- templateKeyInstDecl <- mkTemplateKeyInstDecl dataName conName tbdKeys' tbdMaintainers' tbdLetBindings'
   return $ toOL $ dataDecl ++ choiceDataDecls ++ templateInstClassDecl ++ templateInstanceDecls ++ choiceInstanceDecls
   where
+    dataName = L nloc (HsTyVar noExt NotPromoted lname)
     templateName = occNameString $ rdrNameOcc name
+
     archiveChoiceData = CombinedChoiceData
       { ccdControllers = noLoc $ HsApp noExt (mkVar $ "signatory" ++ templateName) (mkVar "this")
       , ccdChoiceData = ChoiceData {
