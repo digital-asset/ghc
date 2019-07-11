@@ -2622,10 +2622,10 @@ mkTemplateTypeDecl
 mkTemplateClassInstanceMethods ::
      Located RdrName             -- ctor 'T'
   -> Maybe (LHsExpr GhcPs)       -- ensure
-  -> Maybe (LHsExpr GhcPs)       -- signatory
-  -> Maybe (LHsExpr GhcPs)       -- observer
+  -> LHsExpr GhcPs               -- signatories
+  -> LHsExpr GhcPs               -- observers
   -> Maybe (LHsExpr GhcPs)       -- agreement
-  -> LHsLocalBinds GhcPs         -- binds
+  -> LHsLocalBinds GhcPs         -- template-level let bindings
   -> [LHsBind GhcPs]             -- method declarations
 mkTemplateClassInstanceMethods conName ens sig obs agr binds =
   let mkMethod :: String -> [Pat GhcPs] -> Bool -> LHsExpr GhcPs -> LHsBind GhcPs
@@ -2639,14 +2639,13 @@ mkTemplateClassInstanceMethods conName ens sig obs agr binds =
       mkVar :: OccName -> LHsExpr GhcPs = noLoc . HsVar noExt . noLoc . mkRdrUnqual
       mkApp :: LHsExpr GhcPs -> LHsExpr GhcPs -> LHsExpr GhcPs
       mkApp e1 e2 = noLoc $ HsApp noExt e1 e2
-      emptyList :: LHsExpr GhcPs = noLoc $ ExplicitList noExt Nothing []
       emptyString :: LHsExpr GhcPs = noLoc $ HsLit noExt $ HsString NoSourceText $ fsLit ""
       undefined :: LHsExpr GhcPs = mkVar $ mkVarOcc "undefined"
       archiveBody = mkApp (mkApp (mkVar $ mkVarOcc $ "exercise" ++ templateName ++ "Archive")
                             (mkVar $ mkVarOcc "cid"))
                           (mkVar $ mkDataOcc "Archive")
-  in  [ mkMethod "signatory" [this] True  (fromMaybe emptyList sig)
-      , mkMethod "observer"  [this] True  (fromMaybe emptyList obs)
+  in  [ mkMethod "signatory" [this] True  sig
+      , mkMethod "observer"  [this] True  obs
       , mkMethod "ensure"    [this] True  (fromMaybe (mkVar $ mkDataOcc "True") ens)
       , mkMethod "agreement" [this] True  (fromMaybe emptyString agr)
       , mkMethod "create"    []     False undefined
@@ -2659,8 +2658,8 @@ mkTemplateInstanceClassDecl ::
      LHsType GhcPs               -- data 'T'
   -> Located RdrName             -- ctor 'T'
   -> Maybe (LHsExpr GhcPs)       -- ensure
-  -> Maybe (LHsExpr GhcPs)       -- signatory
-  -> Maybe (LHsExpr GhcPs)       -- observer
+  -> LHsExpr GhcPs               -- signatories
+  -> LHsExpr GhcPs               -- observers
   -> Maybe (LHsExpr GhcPs)       -- agreement
   -> LHsLocalBinds GhcPs         -- binds
   -> [CombinedChoiceData]        -- data and controllers for each choice (including Archive)
@@ -2960,8 +2959,7 @@ mkTemplateDecls lname@(L nloc name) fields (L _ decls) = do
   ci@(conName, _, _) <- splitCon [fields, dataName]
   dataDecl <- mkTemplateTypeDecl (combineLocs lname fields) lname ci
   choiceDataDecls <- concat <$> traverse mkTemplateChoiceDecls (map ccdChoiceData choices) -- do not create Archive data type as it is common across templates
-  templateInstClassDecl <- mkTemplateInstanceClassDecl dataName conName vtbEnsures (Just vtbSignatories) (Just allObservers) vtbAgreements vtbLetBindings choicesWithArchive
-    -- ^ TODO: Get rid of Maybes above
+  templateInstClassDecl <- mkTemplateInstanceClassDecl dataName conName vtbEnsures vtbSignatories allObservers vtbAgreements vtbLetBindings choicesWithArchive
   templateInstanceDecls <- mkTemplateInstanceDecls nloc templateName
   choiceInstanceDecls <- concat <$> traverse (mkChoiceInstanceDecls templateName) (map ccdChoiceData choicesWithArchive)
   -- templateInstDecl <- mkTemplateTemplateInstDecl dataName conName tbdEnsures' tbdSignatories' tbdObservers' tbdAgreements' tbdLetBindings'
