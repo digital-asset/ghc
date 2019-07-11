@@ -2172,11 +2172,10 @@ data TemplateBodyDecls = TemplateBodyDecls {
 data ValidTemplateBody = ValidTemplateBody {
       vtbEnsures :: Maybe (LHsExpr GhcPs)
     , vtbSignatories :: LHsExpr GhcPs
-    , vtbObservers :: Maybe (LHsExpr GhcPs)
+    , vtbObservers :: LHsExpr GhcPs
     , vtbAgreements :: Maybe (LHsExpr GhcPs)
     , vtbLetBindings :: LHsLocalBinds GhcPs
-    , vtbControlledChoiceGroups :: [Located (LHsExpr GhcPs, Located [Located ChoiceData])]
-    , vtbFlexChoices :: [Located FlexChoiceData]
+    , vtbChoices :: [CombinedChoiceData]
     , vtbKeys :: Maybe (Located KeyData)
     , vtbMaintainers :: Maybe (LHsExpr GhcPs)
     }
@@ -2907,11 +2906,10 @@ validateTemplateBodyDecls nloc TemplateBodyDecls{..}
       ValidTemplateBody {
           vtbEnsures = listToMaybe tbdEnsures
         , vtbSignatories = applyConcat (noLoc tbdSignatories)
-        , vtbObservers = mergeDecls tbdObservers
+        , vtbObservers = allObservers
         , vtbAgreements = listToMaybe tbdAgreements
         , vtbLetBindings = fromMaybe (noLoc emptyLocalBinds) (listToMaybe tbdLetBindings)
-        , vtbControlledChoiceGroups = tbdControlledChoiceGroups
-        , vtbFlexChoices = tbdFlexChoices
+        , vtbChoices = allChoices
         , vtbKeys = listToMaybe tbdKeys
         , vtbMaintainers = mergeDecls tbdMaintainers
       }
@@ -2919,11 +2917,28 @@ validateTemplateBodyDecls nloc TemplateBodyDecls{..}
     report :: String -> P a
     report = addFatalError nloc . text
 
+    -- Compute full lists of observers and choices here as it simplifies future processing
+    -- TODO(RJR): Figure out the right place to keep locations
+    allObservers = allTemplateObservers (mergeDecls tbdObservers) $ map (fst . unLoc) tbdControlledChoiceGroups
+    allChoices = choiceGroupsToCombinedChoices tbdControlledChoiceGroups ++ map (flexChoiceToCombinedChoice . unLoc) tbdFlexChoices
+
     -- | Combine support multiple 'observer' and 'maintainer' declarations into
     -- a single list expression.
     mergeDecls :: [LHsExpr GhcPs] -> Maybe (LHsExpr GhcPs)
     mergeDecls [] = Nothing
     mergeDecls xs = Just $ applyConcat $ noLoc xs -- TODO(RJR): Combine locations from the list elements
+
+    -- | Calculate an expression for the full list of a contract's observers.
+    -- TODO(RJR): Figure out how to simplify this
+    allTemplateObservers
+      :: Maybe (LHsExpr GhcPs) -- Explicit (list of) observers.
+      -> [LHsExpr GhcPs] -- Contract controllers (list of lists).
+      -> LHsExpr GhcPs -- Union (list) of observers and controllers.
+    allTemplateObservers obs controllers =
+      let app = applyConcat (L noSrcSpan $ maybeToList obs ++ controllers)
+      in case obs of
+           Nothing -> app
+           Just (L loc _) -> L loc (unLoc app)
 
 
 -- | Convert controlled choice groups to a list of individual choices with controllers
@@ -2949,17 +2964,15 @@ mkTemplateDecls
   -> Located [Located TemplateBodyDecl]  -- Template declarations
   -> P (OrdList (LHsDecl GhcPs)) -- Desugared declarations
 mkTemplateDecls lname@(L nloc name) fields (L _ decls) = do
-  ValidTemplateBody{..} <- validateTemplateBodyDecls nloc (extractTemplateBodyDecls decls)
+  vtb@ValidTemplateBody{..} <- validateTemplateBodyDecls nloc (extractTemplateBodyDecls decls)
   let dataName = L nloc (HsTyVar noExt NotPromoted lname)
-      allObservers = allTemplateObservers vtbObservers $ map (fst . unLoc) vtbControlledChoiceGroups
-      choices = choiceGroupsToCombinedChoices vtbControlledChoiceGroups
-                ++ map (flexChoiceToCombinedChoice . unLoc) vtbFlexChoices
-      choicesWithArchive = archiveChoiceData : choices
+      choicesWithArchive = archiveChoiceData : vtbChoices
   -- Calculate 'T' data constructor info from 'T' and the record type denoted by 'fields'.
   ci@(conName, _, _) <- splitCon [fields, dataName]
   dataDecl <- mkTemplateTypeDecl (combineLocs lname fields) lname ci
-  choiceDataDecls <- concat <$> traverse mkTemplateChoiceDecls (map ccdChoiceData choices) -- do not create Archive data type as it is common across templates
-  templateInstClassDecl <- mkTemplateInstanceClassDecl dataName conName vtbEnsures vtbSignatories allObservers vtbAgreements vtbLetBindings choicesWithArchive
+  choiceDataDecls <- concat <$> traverse mkTemplateChoiceDecls (map ccdChoiceData vtbChoices)
+    -- ^ Do not include Archive data type as it has a shared definition across templates
+  templateInstClassDecl <- mkTemplateInstanceClassDecl dataName conName vtbEnsures vtbSignatories vtbObservers vtbAgreements vtbLetBindings choicesWithArchive
   templateInstanceDecls <- mkTemplateInstanceDecls nloc templateName
   choiceInstanceDecls <- concat <$> traverse (mkChoiceInstanceDecls templateName) (map ccdChoiceData choicesWithArchive)
   -- templateInstDecl <- mkTemplateTemplateInstDecl dataName conName tbdEnsures' tbdSignatories' tbdObservers' tbdAgreements' tbdLetBindings'
@@ -2968,18 +2981,6 @@ mkTemplateDecls lname@(L nloc name) fields (L _ decls) = do
   -- templateKeyInstDecl <- mkTemplateKeyInstDecl dataName conName tbdKeys' tbdMaintainers' tbdLetBindings'
   return $ toOL $ dataDecl ++ choiceDataDecls ++ templateInstClassDecl ++ templateInstanceDecls ++ choiceInstanceDecls
   where
-    -- | Calculate an expression for the full list of a contract's
-    -- observers.
-    allTemplateObservers
-      :: Maybe (LHsExpr GhcPs) -- Explicit (list of) observers.
-      -> [LHsExpr GhcPs] -- Contract controllers (list of lists).
-      -> LHsExpr GhcPs -- Union (list) of observers and controllers.
-    allTemplateObservers obs controllers =
-      let app = applyConcat (L noSrcSpan $ maybeToList obs ++ controllers)
-      in case obs of
-           Nothing -> app
-           Just (L loc _) -> L loc (unLoc app)
-
     templateName = occNameString $ rdrNameOcc name
     archiveChoiceData = CombinedChoiceData
       { ccdControllers = noLoc $ HsApp noExt (mkVar $ "signatory" ++ templateName) (mkVar "this")
