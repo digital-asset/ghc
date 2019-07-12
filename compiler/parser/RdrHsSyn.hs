@@ -2312,8 +2312,8 @@ mkRdrName :: String -> RdrName
 mkRdrName = mkRdrUnqual . mkVarOcc
 
 -- | Put all your cats in a bag.
-bagOfCatMaybes :: [Maybe a] -> Bag a
-bagOfCatMaybes = listToBag . catMaybes
+-- bagOfCatMaybes :: [Maybe a] -> Bag a
+-- bagOfCatMaybes = listToBag . catMaybes
 
 mkTemplateClassInstanceSigs :: String -> [LSig GhcPs]
 mkTemplateClassInstanceSigs templateName =
@@ -2486,7 +2486,7 @@ mkTemplateClassMethod rawMethodName args body mBinds = do
 -- [Controlled choice groups - Old syntax] This data structure is a
 -- tiny backwards compatibility hack for 'controller' function
 -- bindings.
-data ArgPattern = ArgWildcardPat | ArgAsPat
+-- data ArgPattern = ArgWildcardPat | ArgAsPat
 
 -- | Construct a 'controller' function binding.
 -- mkTemplateControllerFunBindDecl
@@ -2658,8 +2658,8 @@ mkTemplateInstanceMethods templateName =
 
 -- | Construct an @instance TInstance where@
 -- and an @instance TInstance => Template T where ...@
-mkTemplateInstanceDecls :: SrcSpan -> String -> [LHsDecl GhcPs]
-mkTemplateInstanceDecls loc templateName =
+mkTemplateInstanceDecls :: String -> [LHsDecl GhcPs]
+mkTemplateInstanceDecls templateName =
   let mkTypeName :: OccName -> LHsType GhcPs
       mkTypeName = noLoc . HsTyVar NoExt NotPromoted . noLoc . mkRdrUnqual
       mkAppTy ty1 ty2 = noLoc $ HsAppTy noExt ty1 ty2
@@ -2787,17 +2787,12 @@ mkTemplateChoiceDecls ChoiceData{..} = do
   -- record type.
     let lname@(L nloc _name) = cdChoiceName
         choiceName = L nloc (HsTyVar noExt NotPromoted lname)
-  ; choiceConInfo@(choiceConName, _, _) <-
-      case cdChoiceFields of
-        Nothing -> splitCon [choiceName]
-        Just fields -> splitCon [fields, choiceName]
+  ; choiceConInfo <- splitCon $ maybe id (:) cdChoiceFields [choiceName]
   ; dataDecl <- mkTemplateTypeDecl
                   (combineLocs cdChoiceName
                      (last (void cdChoiceReturnTy :
                             (map void (maybeToList cdChoiceFields)))))
                   cdChoiceName choiceConInfo
-  -- ; templateInstDecl <- mkTemplateChoiceInstDecl dataName choiceName
-                           -- conName choiceConName controllers choice argPatType binds
   -- Prepend the choice documentation, if any, as a 'DocNext'.
   ; mbDocDecl <- pure $ case cdChoiceDoc of
                    Nothing -> []
@@ -2941,7 +2936,7 @@ mkTemplateDecls lname@(L nloc name) fields (L _ decls) = do
     -- ^ Do not include Archive data type as it has a shared definition across templates
   let choicesWithArchive = archiveChoiceData : vtbChoices
       templateInstClassDecl = mkTemplateInstanceClassDecl dataName conName vtb{vtbChoices = choicesWithArchive}
-      templateInstanceDecls = mkTemplateInstanceDecls nloc templateName
+      templateInstanceDecls = mkTemplateInstanceDecls templateName
       choiceInstanceDecls = map (mkChoiceInstanceDecl templateName . ccdChoiceData) choicesWithArchive
   -- templateInstDecl <- mkTemplateTemplateInstDecl dataName conName tbdEnsures' tbdSignatories' tbdObservers' tbdAgreements' tbdLetBindings'
   -- choiceGroupDecls <- mkTemplateChoiceGroupDecls dataName conName tbdControlledChoiceGroups tbdLetBindings'
