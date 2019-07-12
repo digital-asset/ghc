@@ -2621,6 +2621,8 @@ mkTemplateClassInstanceMethods conName ValidTemplateBody{..} =
       templateName = occNameString $ rdrNameOcc $ unLoc conName
       this = asPatRecWild "this" conName
       cid = XPat $ noLoc $ VarPat noExt $ noLoc $ mkRdrName "cid"
+      key = XPat $ noLoc $ VarPat noExt $ noLoc $ mkRdrName "key"
+      hasKeyPat = XPat $ noLoc $ VarPat noExt $ noLoc $ mkRdrUnqual $ mkDataOcc "HasKey"
       mkVar :: OccName -> LHsExpr GhcPs = noLoc . HsVar noExt . noLoc . mkRdrUnqual
       mkApp :: LHsExpr GhcPs -> LHsExpr GhcPs -> LHsExpr GhcPs
       mkApp e1 e2 = noLoc $ HsApp noExt e1 e2
@@ -2629,6 +2631,13 @@ mkTemplateClassInstanceMethods conName ValidTemplateBody{..} =
       archiveBody = mkApp (mkApp (mkVar $ mkVarOcc $ "exercise" ++ templateName ++ "Archive")
                             (mkVar $ mkVarOcc "cid"))
                           (mkVar $ mkDataOcc "Archive")
+      keyMethods = flip (maybe []) vtbKeyData $ \(L _ KeyData{..}) ->
+        [ mkMethod "hasKey"      []               False (mkVar $ mkDataOcc "HasKey")
+        , mkMethod "key"         [this]           True  kdKeyExpr
+        , mkMethod "maintainer"  [hasKeyPat, key] False kdMaintainers
+        , mkMethod "fetchByKey"  []               False undefined
+        , mkMethod "lookupByKey" []               False undefined
+        ]
   in  [ mkMethod "signatory" [this] True  vtbSignatories
       , mkMethod "observer"  [this] True  vtbObservers
       , mkMethod "ensure"    [this] True  (fromMaybe (mkVar $ mkDataOcc "True") vtbEnsures)
@@ -2636,7 +2645,7 @@ mkTemplateClassInstanceMethods conName ValidTemplateBody{..} =
       , mkMethod "create"    []     False undefined
       , mkMethod "fetch"     []     False undefined
       , mkMethod "archive"   [cid]  False archiveBody
-      ]
+      ] ++ keyMethods
 
 -- | Construct a @class Template TInstance@.
 mkTemplateInstanceClassDecl ::
