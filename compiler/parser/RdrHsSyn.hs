@@ -47,6 +47,7 @@ module   RdrHsSyn (
         KeyData(..),
         TemplateBodyDecl(..),
         mkTemplateDecl,
+        mkTemplateTemplateInstDecl,
         applyToParties,
         applyConcat,
 
