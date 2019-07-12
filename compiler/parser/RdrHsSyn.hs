@@ -2140,7 +2140,8 @@ data CombinedChoiceData = CombinedChoiceData {
 
 data KeyData = KeyData {
     kdKeyExpr :: LHsExpr GhcPs
-  , kdKeyTy :: LHsType GhcPs
+  , kdKeyType :: LHsType GhcPs
+  , kdMaintainers :: LHsExpr GhcPs
   }
 
 -- | Any declaration that can appear within a template
@@ -2152,7 +2153,7 @@ data TemplateBodyDecl
   | ChoiceGroupDecl (Located (LHsExpr GhcPs, Located [Located ChoiceData]))
   | LetBindingsDecl (Located ([AddAnn], LHsLocalBinds GhcPs))
   | FlexChoiceDecl (Located FlexChoiceData)
-  | KeyDecl (Located KeyData)
+  | KeyDecl (Located (LHsExpr GhcPs, LHsType GhcPs))
   | MaintainerDecl (LHsExpr GhcPs)
 
 -- | Result of combining declarations in the template body
@@ -2164,7 +2165,7 @@ data TemplateBodyDecls = TemplateBodyDecls {
     , tbdControlledChoiceGroups :: [Located (LHsExpr GhcPs, Located [Located ChoiceData])]
     , tbdLetBindings :: [LHsLocalBinds GhcPs]
     , tbdFlexChoices :: [Located FlexChoiceData]
-    , tbdKeys :: [Located KeyData]
+    , tbdKeys :: [Located (LHsExpr GhcPs, LHsType GhcPs)]
     , tbdMaintainers :: [LHsExpr GhcPs]
     }
 
@@ -2176,8 +2177,7 @@ data ValidTemplateBody = ValidTemplateBody {
     , vtbAgreements :: Maybe (LHsExpr GhcPs)
     , vtbLetBindings :: LHsLocalBinds GhcPs
     , vtbChoices :: [CombinedChoiceData]
-    , vtbKeys :: Maybe (Located KeyData)
-    , vtbMaintainers :: Maybe (LHsExpr GhcPs)
+    , vtbKeyData :: Maybe (Located KeyData)
     }
 
 instance Semigroup TemplateBodyDecls where
@@ -2867,8 +2867,7 @@ validateTemplateBodyDecls nloc TemplateBodyDecls{..}
         , vtbAgreements = listToMaybe tbdAgreements
         , vtbLetBindings = fromMaybe (noLoc emptyLocalBinds) (listToMaybe tbdLetBindings)
         , vtbChoices = allChoices
-        , vtbKeys = listToMaybe tbdKeys
-        , vtbMaintainers = mergeDecls tbdMaintainers
+        , vtbKeyData = keyData
       }
   where
     report :: String -> P a
@@ -2878,6 +2877,11 @@ validateTemplateBodyDecls nloc TemplateBodyDecls{..}
     -- TODO(RJR): Figure out the right place to keep locations
     allObservers = allTemplateObservers (mergeDecls tbdObservers) $ map (fst . unLoc) tbdControlledChoiceGroups
     allChoices = choiceGroupsToCombinedChoices tbdControlledChoiceGroups ++ map (flexChoiceToCombinedChoice . unLoc) tbdFlexChoices
+
+    -- We've validated that keys and maintainers must coexist, so combine them into a single data type.
+    keyData = (fmap . fmap)
+                (\(keyExpr, keyType) -> KeyData keyExpr keyType (applyConcat $ noLoc tbdMaintainers))
+                (listToMaybe tbdKeys)
 
     -- | Combine support multiple 'observer' and 'maintainer' declarations into
     -- a single list expression.

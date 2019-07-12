@@ -1255,10 +1255,10 @@ observer_decl :: { LHsExpr GhcPs }
 agreement_decl :: { LHsExpr GhcPs }
   : 'agreement' exp                              { sLL $1 $> $ unLoc $2 }
 
-key_decl :: { Located KeyData }
+key_decl :: { Located (LHsExpr GhcPs, LHsType GhcPs) }
     -- We use `infixexp` rather than `exp` here because we need to
     -- exclude the case `infixexp OF_TYPE sigtype`
-  : 'key' infixexp OF_TYPE btype                 { sLL $1 $> $ KeyData { kdKeyExpr = $2, kdKeyTy = $4 } }
+  : 'key' infixexp OF_TYPE btype                 { sLL $1 $> ($2, $4) }
 
 maintainer_decl :: { LHsExpr GhcPs }
   : 'maintainer' parties                         { sLL $1 $> $ unLoc (applyConcat $2) }
