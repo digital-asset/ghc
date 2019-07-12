@@ -2630,13 +2630,13 @@ mkTemplateClassInstanceMethods conName ValidTemplateBody{..} =
 
 -- | Construct a @class Template TInstance@.
 mkTemplateInstanceClassDecl ::
-     LHsType GhcPs               -- data 'T'
-  -> Located RdrName             -- ctor 'T'
+     SrcSpan                     -- location of data 'T'
+  -> Located RdrName             -- constructor 'T'
   -> ValidTemplateBody           -- sanitized template body
   -> LHsDecl GhcPs               -- resulting declaration
-mkTemplateInstanceClassDecl dataName conName vtb@ValidTemplateBody{..} =
+mkTemplateInstanceClassDecl templateLoc conName vtb@ValidTemplateBody{..} =
   let templateName = occNameString $ rdrNameOcc $ unLoc conName
-      className = L (getLoc dataName) $ mkRdrUnqual $ mkClsOcc $ templateName ++ "Instance"
+      className = L templateLoc $ mkRdrUnqual $ mkClsOcc $ templateName ++ "Instance"
       choiceSigs = concatMap (mkTemplateChoiceSigs templateName) (map ccdChoiceData vtbChoices)
       choiceMethods = concatMap (mkTemplateChoiceMethods conName vtbLetBindings) vtbChoices
       templateMethods = mkTemplateClassInstanceMethods conName vtb
@@ -2935,7 +2935,7 @@ mkTemplateDecls lname@(L nloc name) fields (L _ decls) = do
   choiceDataDecls <- concat <$> traverse mkTemplateChoiceDecls (map ccdChoiceData vtbChoices)
     -- ^ Do not include Archive data type as it has a shared definition across templates
   let choicesWithArchive = archiveChoiceData : vtbChoices
-      templateInstClassDecl = mkTemplateInstanceClassDecl dataName conName vtb{vtbChoices = choicesWithArchive}
+      templateInstClassDecl = mkTemplateInstanceClassDecl nloc conName vtb{vtbChoices = choicesWithArchive}
       templateInstanceDecls = mkTemplateInstanceDecls templateName
       choiceInstanceDecls = map (mkChoiceInstanceDecl templateName . ccdChoiceData) choicesWithArchive
   -- templateInstDecl <- mkTemplateTemplateInstDecl dataName conName tbdEnsures' tbdSignatories' tbdObservers' tbdAgreements' tbdLetBindings'
