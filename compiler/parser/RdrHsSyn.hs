@@ -2315,8 +2315,8 @@ mkRdrName = mkRdrUnqual . mkVarOcc
 -- bagOfCatMaybes :: [Maybe a] -> Bag a
 -- bagOfCatMaybes = listToBag . catMaybes
 
-mkTemplateClassInstanceSigs :: String -> [LSig GhcPs]
-mkTemplateClassInstanceSigs templateName =
+mkTemplateClassInstanceSigs :: String -> Maybe KeyData -> [LSig GhcPs]
+mkTemplateClassInstanceSigs templateName mbKeyData =
   let mkSig :: String -> LHsType GhcPs -> LSig GhcPs
       mkSig methodName ty =
         let fullMethodName = noLoc $ mkRdrName $ methodName ++ templateName in
@@ -2329,16 +2329,30 @@ mkTemplateClassInstanceSigs templateName =
       mkListTy elemTy = noLoc $ HsListTy noExt elemTy
       mkAppTy ty1 ty2 = noLoc $ HsAppTy noExt ty1 ty2
       templateType = mkTypeName templateName
-      unitType = noLoc $ HsTupleTy noExt HsBoxedOrConstraintTuple []
-  in  map (uncurry mkSig) [
-          ("signatory", mkFunTy templateType (mkListTy $ mkTypeName "Party"))
-        , ("observer",  mkFunTy templateType (mkListTy $ mkTypeName "Party"))
+      unit = noLoc $ HsTupleTy noExt HsBoxedOrConstraintTuple []
+      pairType ty1 ty2 = noLoc $ HsTupleTy noExt HsBoxedOrConstraintTuple [ty1, ty2]
+      parties = mkListTy $ mkTypeName "Party"
+      contractId = mkAppTy (mkTypeName "ContractId") templateType
+      update = mkAppTy (mkTypeName "Update")
+      mkParenTy = noLoc . HsParTy noExt
+      hasKeyType = mkAppTy (mkTypeName "HasKey") templateType
+      keySigs = flip (maybe []) mbKeyData $ \(KeyData _ keyType _) ->
+        [ ("hasKey",      hasKeyType)
+        , ("key",         mkFunTy templateType keyType)
+        , ("maintainer",  mkFunTy hasKeyType (mkFunTy keyType parties))
+        , ("fetchByKey",  mkFunTy keyType (update $ pairType contractId templateType))
+        , ("lookupByKey", mkFunTy keyType (update $ mkParenTy $ mkAppTy (mkTypeName "Optional") (mkParenTy contractId)))
+        ]
+  in  map (uncurry mkSig) $
+        [ ("signatory", mkFunTy templateType parties)
+        , ("observer",  mkFunTy templateType parties)
         , ("ensure",    mkFunTy templateType (mkTypeName "Bool"))
         , ("agreement", mkFunTy templateType (mkTypeName "Text"))
-        , ("create",    mkFunTy templateType (mkAppTy (mkTypeName "Update") $ noLoc $ HsParTy noExt (mkAppTy (mkTypeName "ContractId") templateType)))
-        , ("fetch",     mkFunTy (mkAppTy (mkTypeName "ContractId") templateType) (mkAppTy (mkTypeName "Update") templateType))
-        , ("archive",   mkFunTy (mkAppTy (mkTypeName "ContractId") templateType) (mkAppTy (mkTypeName "Update") unitType))
+        , ("create",    mkFunTy templateType (update $ mkParenTy contractId))
+        , ("fetch",     mkFunTy contractId (update templateType))
+        , ("archive",   mkFunTy contractId (update unit))
         ]
+        ++ keySigs
 
 -- | Utility for constructing a class declaration.
 -- TODO(RJR): Pass in type variables and context for generic templates.
@@ -2639,7 +2653,7 @@ mkTemplateInstanceClassDecl templateLoc conName vtb@ValidTemplateBody{..} =
       choiceSigs = concatMap (mkTemplateChoiceSigs templateName) (map ccdChoiceData vtbChoices)
       choiceMethods = concatMap (mkTemplateChoiceMethods conName vtbLetBindings) vtbChoices
       templateMethods = mkTemplateClassInstanceMethods conName vtb
-      sigs = mkTemplateClassInstanceSigs templateName ++ choiceSigs
+      sigs = mkTemplateClassInstanceSigs templateName (unLoc <$> vtbKeyData) ++ choiceSigs
       methods = listToBag $ templateMethods ++ choiceMethods
   in noLoc $ TyClD noExt $ classDecl className sigs methods
 
