@@ -2613,39 +2613,40 @@ mkTemplateClassInstanceMethods ::
   -> ValidTemplateBody           -- sanitized template body
   -> [LHsBind GhcPs]             -- method declarations
 mkTemplateClassInstanceMethods conName ValidTemplateBody{..} =
-  let mkMethod :: String -> [Pat GhcPs] -> Bool -> LHsExpr GhcPs -> LHsBind GhcPs
-      mkMethod methodName args includeBindings methodBody =
-        mkTemplateClassMethod (methodName ++ templateName) args methodBody $
-          -- General rule: only include template bindings for methods with `this` in scope
-          if includeBindings then Just vtbLetBindings else Nothing
-      templateName = occNameString $ rdrNameOcc $ unLoc conName
-      this = asPatRecWild "this" conName
-      cid = XPat $ noLoc $ VarPat noExt $ noLoc $ mkRdrName "cid"
-      key = XPat $ noLoc $ VarPat noExt $ noLoc $ mkRdrName "key"
-      hasKeyPat = XPat $ noLoc $ VarPat noExt $ noLoc $ mkRdrUnqual $ mkDataOcc "HasKey"
-      mkVar :: OccName -> LHsExpr GhcPs = noLoc . HsVar noExt . noLoc . mkRdrUnqual
-      mkApp :: LHsExpr GhcPs -> LHsExpr GhcPs -> LHsExpr GhcPs
-      mkApp e1 e2 = noLoc $ HsApp noExt e1 e2
-      emptyString :: LHsExpr GhcPs = noLoc $ HsLit noExt $ HsString NoSourceText $ fsLit ""
-      undefined :: LHsExpr GhcPs = mkVar $ mkVarOcc "undefined"
-      archiveBody = mkApp (mkApp (mkVar $ mkVarOcc $ "exercise" ++ templateName ++ "Archive")
-                            (mkVar $ mkVarOcc "cid"))
-                          (mkVar $ mkDataOcc "Archive")
-      keyMethods = flip (maybe []) vtbKeyData $ \(L _ KeyData{..}) ->
-        [ mkMethod "hasKey"      []               False (mkVar $ mkDataOcc "HasKey")
-        , mkMethod "key"         [this]           True  kdKeyExpr
-        , mkMethod "maintainer"  [hasKeyPat, key] False kdMaintainers
-        , mkMethod "fetchByKey"  []               False undefined
-        , mkMethod "lookupByKey" []               False undefined
-        ]
-  in  [ mkMethod "signatory" [this] True  vtbSignatories
-      , mkMethod "observer"  [this] True  vtbObservers
-      , mkMethod "ensure"    [this] True  (fromMaybe (mkVar $ mkDataOcc "True") vtbEnsures)
-      , mkMethod "agreement" [this] True  (fromMaybe emptyString vtbAgreements)
-      , mkMethod "create"    []     False undefined
-      , mkMethod "fetch"     []     False undefined
-      , mkMethod "archive"   [cid]  False archiveBody
-      ] ++ keyMethods
+  [ mkMethod "signatory" [this] True  vtbSignatories
+  , mkMethod "observer"  [this] True  vtbObservers
+  , mkMethod "ensure"    [this] True  (fromMaybe (mkVar $ mkDataOcc "True") vtbEnsures)
+  , mkMethod "agreement" [this] True  (fromMaybe emptyString vtbAgreements)
+  , mkMethod "create"    []     False undefined
+  , mkMethod "fetch"     []     False undefined
+  , mkMethod "archive"   [cid]  False archiveBody
+  ] ++ keyMethods
+  where
+    keyMethods = flip (maybe []) vtbKeyData $ \(L _ KeyData{..}) ->
+      [ mkMethod "hasKey"      []               False (mkVar $ mkDataOcc "HasKey")
+      , mkMethod "key"         [this]           True  kdKeyExpr
+      , mkMethod "maintainer"  [hasKeyPat, key] False kdMaintainers
+      , mkMethod "fetchByKey"  []               False undefined
+      , mkMethod "lookupByKey" []               False undefined
+      ]
+    mkMethod :: String -> [Pat GhcPs] -> Bool -> LHsExpr GhcPs -> LHsBind GhcPs
+    mkMethod methodName args includeBindings methodBody =
+      mkTemplateClassMethod (methodName ++ templateName) args methodBody $
+        -- General rule: only include template bindings for methods with `this` in scope
+        if includeBindings then Just vtbLetBindings else Nothing
+    templateName = occNameString $ rdrNameOcc $ unLoc conName
+    this = asPatRecWild "this" conName
+    cid = mkVarPat $ mkVarOcc "cid"
+    key = mkVarPat $ mkVarOcc "key"
+    hasKeyPat = mkVarPat $ mkDataOcc "HasKey"
+    mkVarPat = XPat . noLoc . VarPat noExt . noLoc . mkRdrUnqual
+    emptyString = noLoc $ HsLit noExt $ HsString NoSourceText $ fsLit ""
+    undefined = mkVar $ mkVarOcc "undefined"
+    archiveBody = mkApp (mkApp (mkVar $ mkVarOcc $ "exercise" ++ templateName ++ "Archive")
+                          (mkVar $ mkVarOcc "cid"))
+                        (mkVar $ mkDataOcc "Archive")
+    mkVar = noLoc . HsVar noExt . noLoc . mkRdrUnqual
+    mkApp e1 e2 = noLoc $ HsApp noExt e1 e2
 
 -- | Construct a @class Template TInstance@.
 mkTemplateInstanceClassDecl ::
