@@ -2294,28 +2294,13 @@ matchGroup loc m = MG { mg_ext = noExt
                       }
 
 -- | Utility for constructing a function binding.
-funBind'
-  :: SrcSpan
-  -> Located RdrName
-  -> MatchGroup GhcPs (LHsExpr GhcPs)
-  -> LHsBind GhcPs
-funBind' loc tag mg =
-  L loc $
-    FunBind { fun_ext = noExt
-            , fun_id = tag
-            , fun_matches = mg
-            , fun_co_fn = WpHole
-            , fun_tick = []
-            }
-
--- | Utility for constructing a function binding.
 funBind
   :: SrcSpan
   -> Located RdrName
   -> MatchGroup GhcPs (LHsExpr GhcPs)
-  -> P (Maybe (LHsBind GhcPs))
+  -> LHsBind GhcPs
 funBind loc tag mg =
-  return $ Just $ L loc $
+  L loc $
     FunBind { fun_ext = noExt
             , fun_id = tag
             , fun_matches = mg
@@ -2459,7 +2444,7 @@ mkTemplateClassMethod rawMethodName args body mBinds = do
       binds = fromMaybe (noLoc emptyLocalBinds) mBinds
       match = matchWithBinds ctx args loc body binds
       match_group = matchGroup loc match
-  funBind' loc fullMethodName match_group
+  funBind loc fullMethodName match_group
 
 -- | Construct an 'ensure', 'signatory', 'observer', 'agreement',
 -- 'key'.
