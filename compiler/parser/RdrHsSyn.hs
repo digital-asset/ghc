@@ -2317,42 +2317,39 @@ mkRdrName = mkRdrUnqual . mkVarOcc
 
 mkTemplateClassInstanceSigs :: String -> Maybe KeyData -> [LSig GhcPs]
 mkTemplateClassInstanceSigs templateName mbKeyData =
-  let mkSig :: String -> LHsType GhcPs -> LSig GhcPs
-      mkSig methodName ty =
-        let fullMethodName = noLoc $ mkRdrName $ methodName ++ templateName in
-        noLoc $ ClassOpSig noExt False [fullMethodName] (HsIB noExt ty)
-      mkFunTy :: LHsType GhcPs -> LHsType GhcPs -> LHsType GhcPs
-      mkFunTy funTy argTy = noLoc $ HsFunTy noExt funTy argTy
-      mkTypeName :: String -> LHsType GhcPs
-      mkTypeName tyName = noLoc $ HsTyVar NoExt NotPromoted (noLoc $ mkRdrUnqual $ mkTcOcc tyName)
-      mkListTy :: LHsType GhcPs -> LHsType GhcPs
-      mkListTy elemTy = noLoc $ HsListTy noExt elemTy
-      mkAppTy ty1 ty2 = noLoc $ HsAppTy noExt ty1 ty2
-      templateType = mkTypeName templateName
-      unit = noLoc $ HsTupleTy noExt HsBoxedOrConstraintTuple []
-      pairType ty1 ty2 = noLoc $ HsTupleTy noExt HsBoxedOrConstraintTuple [ty1, ty2]
-      parties = mkListTy $ mkTypeName "Party"
-      contractId = mkAppTy (mkTypeName "ContractId") templateType
-      update = mkAppTy (mkTypeName "Update")
-      mkParenTy = noLoc . HsParTy noExt
-      hasKeyType = mkAppTy (mkTypeName "HasKey") templateType
-      keySigs = flip (maybe []) mbKeyData $ \(KeyData _ keyType _) ->
-        [ ("hasKey",      hasKeyType)
-        , ("key",         mkFunTy templateType keyType)
-        , ("maintainer",  mkFunTy hasKeyType (mkFunTy keyType parties))
-        , ("fetchByKey",  mkFunTy keyType (update $ pairType contractId templateType))
-        , ("lookupByKey", mkFunTy keyType (update $ mkParenTy $ mkAppTy (mkTypeName "Optional") (mkParenTy contractId)))
-        ]
-  in  map (uncurry mkSig) $
-        [ ("signatory", mkFunTy templateType parties)
-        , ("observer",  mkFunTy templateType parties)
-        , ("ensure",    mkFunTy templateType (mkTypeName "Bool"))
-        , ("agreement", mkFunTy templateType (mkTypeName "Text"))
-        , ("create",    mkFunTy templateType (update $ mkParenTy contractId))
-        , ("fetch",     mkFunTy contractId (update templateType))
-        , ("archive",   mkFunTy contractId (update unit))
-        ]
-        ++ keySigs
+  map (uncurry mkSig) $
+    [ ("signatory", mkFunTy templateType parties)
+    , ("observer",  mkFunTy templateType parties)
+    , ("ensure",    mkFunTy templateType (mkTypeName "Bool"))
+    , ("agreement", mkFunTy templateType (mkTypeName "Text"))
+    , ("create",    mkFunTy templateType (update $ mkParenTy contractId))
+    , ("fetch",     mkFunTy contractId (update templateType))
+    , ("archive",   mkFunTy contractId (update unit))
+    ]
+    ++ keySigs
+  where
+    keySigs = flip (maybe []) mbKeyData $ \(KeyData _ keyType _) ->
+      [ ("hasKey",      hasKeyType)
+      , ("key",         mkFunTy templateType keyType)
+      , ("maintainer",  mkFunTy hasKeyType (mkFunTy keyType parties))
+      , ("fetchByKey",  mkFunTy keyType (update $ pairType contractId templateType))
+      , ("lookupByKey", mkFunTy keyType (update $ mkParenTy $ mkAppTy (mkTypeName "Optional") (mkParenTy contractId)))
+      ]
+    mkSig :: String -> LHsType GhcPs -> LSig GhcPs
+    mkSig methodName ty =
+      let fullMethodName = noLoc $ mkRdrName $ methodName ++ templateName in
+      noLoc $ ClassOpSig noExt False [fullMethodName] (HsIB noExt ty)
+    mkFunTy funTy argTy = noLoc $ HsFunTy noExt funTy argTy
+    mkTypeName = noLoc . HsTyVar NoExt NotPromoted . noLoc . mkRdrUnqual . mkTcOcc
+    mkAppTy ty1 ty2 = noLoc $ HsAppTy noExt ty1 ty2
+    templateType = mkTypeName templateName
+    unit = noLoc $ HsTupleTy noExt HsBoxedOrConstraintTuple []
+    pairType ty1 ty2 = noLoc $ HsTupleTy noExt HsBoxedOrConstraintTuple [ty1, ty2]
+    parties = noLoc $ HsListTy noExt $ mkTypeName "Party"
+    contractId = mkAppTy (mkTypeName "ContractId") templateType
+    update = mkAppTy (mkTypeName "Update")
+    mkParenTy = noLoc . HsParTy noExt
+    hasKeyType = mkAppTy (mkTypeName "HasKey") templateType
 
 -- | Utility for constructing a class declaration.
 -- TODO(RJR): Pass in type variables and context for generic templates.
