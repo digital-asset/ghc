@@ -2315,8 +2315,8 @@ mkRdrName = mkRdrUnqual . mkVarOcc
 -- bagOfCatMaybes :: [Maybe a] -> Bag a
 -- bagOfCatMaybes = listToBag . catMaybes
 
-mkTemplateClassInstanceSigs :: String -> Maybe KeyData -> [LSig GhcPs]
-mkTemplateClassInstanceSigs templateName mbKeyData =
+mkTemplateClassInstanceSigs :: String -> Maybe (LHsType GhcPs) -> [LSig GhcPs]
+mkTemplateClassInstanceSigs templateName mbKeyType =
   map (uncurry mkSig) $
     [ ("signatory", mkFunTy templateType parties)
     , ("observer",  mkFunTy templateType parties)
@@ -2328,7 +2328,7 @@ mkTemplateClassInstanceSigs templateName mbKeyData =
     ]
     ++ keySigs
   where
-    keySigs = flip (maybe []) mbKeyData $ \(KeyData _ keyType _) ->
+    keySigs = flip (maybe []) mbKeyType $ \keyType ->
       [ ("hasKey",      hasKeyType)
       , ("key",         mkFunTy templateType keyType)
       , ("maintainer",  mkFunTy hasKeyType (mkFunTy keyType parties))
@@ -2657,10 +2657,12 @@ mkTemplateInstanceClassDecl ::
 mkTemplateInstanceClassDecl templateLoc conName vtb@ValidTemplateBody{..} =
   let templateName = occNameString $ rdrNameOcc $ unLoc conName
       className = L templateLoc $ mkRdrUnqual $ mkClsOcc $ templateName ++ "Instance"
+      keyType = kdKeyType . unLoc <$> vtbKeyData
+      templateSigs = mkTemplateClassInstanceSigs templateName keyType
+      templateMethods = mkTemplateClassInstanceMethods conName vtb
       choiceSigs = concatMap (mkTemplateChoiceSigs templateName) (map ccdChoiceData vtbChoices)
       choiceMethods = concatMap (mkTemplateChoiceMethods conName vtbLetBindings) vtbChoices
-      templateMethods = mkTemplateClassInstanceMethods conName vtb
-      sigs = mkTemplateClassInstanceSigs templateName (unLoc <$> vtbKeyData) ++ choiceSigs
+      sigs = templateSigs ++ choiceSigs
       methods = listToBag $ templateMethods ++ choiceMethods
   in noLoc $ TyClD noExt $ classDecl className sigs methods
 
@@ -2693,14 +2695,12 @@ mkTemplateInstanceDecls templateName =
 
 mkChoiceInstanceDecl :: String -> ChoiceData -> LHsDecl GhcPs
 mkChoiceInstanceDecl templateName ChoiceData{..} =
-  let mkTypeName :: String -> LHsType GhcPs
-      mkTypeName tyName = noLoc $ HsTyVar NoExt NotPromoted (noLoc $ mkRdrUnqual $ mkTcOcc tyName)
+  let mkTypeName = noLoc . HsTyVar NoExt NotPromoted . noLoc . mkRdrUnqual . mkTcOcc
       mkAppTy :: LHsType GhcPs -> LHsType GhcPs -> LHsType GhcPs
       mkAppTy ty1 ty2 = noLoc $ HsAppTy noExt ty1 ty2
       choiceType = noLoc $ HsTyVar noExt NotPromoted cdChoiceName
       returnType = noLoc $ HsParTy noExt cdChoiceReturnTy
       instanceType = mkTypeName "Choice" `mkAppTy` mkTypeName templateName `mkAppTy` choiceType `mkAppTy` returnType
-      mkVar :: String -> LHsExpr GhcPs
       mkVar = noLoc . HsVar noExt . noLoc . mkRdrUnqual . mkVarOcc
       exerciseMethodBody = mkVar $ "exercise" ++ templateName ++ occNameString (rdrNameOcc (unLoc cdChoiceName))
       exerciseMethod = mkTemplateClassMethod "exercise" [] exerciseMethodBody Nothing
@@ -2708,8 +2708,7 @@ mkChoiceInstanceDecl templateName ChoiceData{..} =
 
 mkKeyInstanceDecl :: String -> LHsType GhcPs -> LHsDecl GhcPs
 mkKeyInstanceDecl templateName keyType =
-  let mkTypeName :: String -> LHsType GhcPs
-      mkTypeName tyName = noLoc $ HsTyVar NoExt NotPromoted (noLoc $ mkRdrUnqual $ mkTcOcc tyName)
+  let mkTypeName = noLoc . HsTyVar NoExt NotPromoted . noLoc . mkRdrUnqual . mkTcOcc
       mkAppTy :: LHsType GhcPs -> LHsType GhcPs -> LHsType GhcPs
       mkAppTy ty1 ty2 = noLoc $ HsAppTy noExt ty1 ty2
       instanceType = mkTypeName "TemplateKey" `mkAppTy` mkTypeName templateName `mkAppTy` keyType
