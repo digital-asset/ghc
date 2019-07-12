@@ -2706,6 +2706,18 @@ mkChoiceInstanceDecl templateName ChoiceData{..} =
       exerciseMethod = mkTemplateClassMethod "exercise" [] exerciseMethodBody Nothing
   in instDecl $ classInstDecl (unLoc instanceType) $ listToBag [exerciseMethod]
 
+mkKeyInstanceDecl :: String -> LHsType GhcPs -> LHsDecl GhcPs
+mkKeyInstanceDecl templateName keyType =
+  let mkTypeName :: String -> LHsType GhcPs
+      mkTypeName tyName = noLoc $ HsTyVar NoExt NotPromoted (noLoc $ mkRdrUnqual $ mkTcOcc tyName)
+      mkAppTy :: LHsType GhcPs -> LHsType GhcPs -> LHsType GhcPs
+      mkAppTy ty1 ty2 = noLoc $ HsAppTy noExt ty1 ty2
+      instanceType = mkTypeName "TemplateKey" `mkAppTy` mkTypeName templateName `mkAppTy` keyType
+      mkVar = noLoc . HsVar noExt . noLoc . mkRdrUnqual . mkVarOcc
+      mkMethod methodName = mkTemplateClassMethod methodName [] (mkVar $ methodName ++ templateName) Nothing
+      methods = map mkMethod ["key", "fetchByKey", "lookupByKey"]
+  in instDecl $ classInstDecl (unLoc instanceType) (listToBag methods)
+
 -- | Construct an @instance Template T@.
 -- mkTemplateTemplateInstDecl ::
 --      LHsType GhcPs               -- data 'T'
@@ -2956,11 +2968,14 @@ mkTemplateDecls lname@(L nloc name) fields (L _ decls) = do
       templateInstClassDecl = mkTemplateInstanceClassDecl nloc conName vtb{vtbChoices = choicesWithArchive}
       templateInstanceDecls = mkTemplateInstanceDecls templateName
       choiceInstanceDecls = map (mkChoiceInstanceDecl templateName . ccdChoiceData) choicesWithArchive
+      keyInstanceDecl = mkKeyInstanceDecl templateName <$> kdKeyType . unLoc <$> vtbKeyData
   -- templateInstDecl <- mkTemplateTemplateInstDecl dataName conName tbdEnsures' tbdSignatories' tbdObservers' tbdAgreements' tbdLetBindings'
   -- choiceGroupDecls <- mkTemplateChoiceGroupDecls dataName conName tbdControlledChoiceGroups tbdLetBindings'
   -- flexChoiceDecls <- mkTemplateFlexChoiceDecls dataName conName tbdFlexChoices tbdLetBindings'
   -- templateKeyInstDecl <- mkTemplateKeyInstDecl dataName conName tbdKeys' tbdMaintainers' tbdLetBindings'
-  return $ toOL $ templateDataDecl : choiceDataDecls ++ [templateInstClassDecl] ++ templateInstanceDecls ++ choiceInstanceDecls
+  return $ toOL $ templateDataDecl : choiceDataDecls
+               ++ [templateInstClassDecl] ++ templateInstanceDecls
+               ++ choiceInstanceDecls ++ maybeToList keyInstanceDecl
   where
     dataName = L nloc (HsTyVar noExt NotPromoted lname)
     templateName = occNameString $ rdrNameOcc name
