@@ -2648,7 +2648,7 @@ mkTemplateClassInstanceMethods conName ValidTemplateBody{..} =
     mkVar = noLoc . HsVar noExt . noLoc . mkRdrUnqual
     mkApp e1 e2 = noLoc $ HsApp noExt e1 e2
 
--- | Construct a @class Template TInstance@.
+-- | Construct a @class TInstance@.
 mkTemplateInstanceClassDecl ::
      SrcSpan                     -- location of data 'T'
   -> Located RdrName             -- constructor 'T'
@@ -2682,12 +2682,13 @@ mkTemplateInstanceMethods templateName =
 -- and an @instance TInstance => Template T where ...@
 mkTemplateInstanceDecls :: String -> [LHsDecl GhcPs]
 mkTemplateInstanceDecls templateName =
-  let mkTypeName :: OccName -> LHsType GhcPs
-      mkTypeName = noLoc . HsTyVar NoExt NotPromoted . noLoc . mkRdrUnqual
+  let mkTypeName :: RdrName -> LHsType GhcPs
+      mkTypeName = noLoc . HsTyVar NoExt NotPromoted . noLoc
       mkAppTy ty1 ty2 = noLoc $ HsAppTy noExt ty1 ty2
-      instType = mkTypeName $ mkClsOcc $ templateName ++ "Instance"
-      templateType = mkAppTy (mkTypeName $ mkTcOcc "Template") (mkTypeName $ mkTcOcc templateName)
-      templateInstQualType = HsQualTy noExt (noLoc [instType]) templateType
+      instType = mkTypeName $ mkRdrUnqual $ mkClsOcc $ templateName ++ "Instance"
+      templateClass = mkTypeName $ qualifyDesugar $ mkClsOcc "Template"
+      templateType = mkTypeName $ mkRdrUnqual $ mkTcOcc templateName
+      templateInstQualType = HsQualTy noExt (noLoc [instType]) (mkAppTy templateClass templateType)
       instanceMethods = listToBag $ mkTemplateInstanceMethods templateName
       baseInstance = instDecl $ classInstDecl (unLoc instType) emptyBag
       templateInstance = instDecl $ classInstDecl templateInstQualType instanceMethods
