@@ -2696,12 +2696,14 @@ mkTemplateInstanceDecls templateName =
 
 mkChoiceInstanceDecl :: String -> ChoiceData -> LHsDecl GhcPs
 mkChoiceInstanceDecl templateName ChoiceData{..} =
-  let mkTypeName = noLoc . HsTyVar NoExt NotPromoted . noLoc . mkRdrUnqual . mkTcOcc
+  let mkTypeName = noLoc . HsTyVar NoExt NotPromoted . noLoc
       mkAppTy :: LHsType GhcPs -> LHsType GhcPs -> LHsType GhcPs
       mkAppTy ty1 ty2 = noLoc $ HsAppTy noExt ty1 ty2
       choiceType = noLoc $ HsTyVar noExt NotPromoted cdChoiceName
       returnType = noLoc $ HsParTy noExt cdChoiceReturnTy
-      instanceType = mkTypeName "Choice" `mkAppTy` mkTypeName templateName `mkAppTy` choiceType `mkAppTy` returnType
+      choiceClass = mkTypeName $ qualifyDesugar $ mkClsOcc "Choice"
+      templateType = mkTypeName $ mkRdrUnqual $ mkTcOcc templateName
+      instanceType = choiceClass `mkAppTy` templateType `mkAppTy` choiceType `mkAppTy` returnType
       mkVar = noLoc . HsVar noExt . noLoc . mkRdrUnqual . mkVarOcc
       exerciseMethodBody = mkVar $ "exercise" ++ templateName ++ occNameString (rdrNameOcc (unLoc cdChoiceName))
       exerciseMethod = mkTemplateClassMethod "exercise" [] exerciseMethodBody Nothing
@@ -2709,10 +2711,12 @@ mkChoiceInstanceDecl templateName ChoiceData{..} =
 
 mkKeyInstanceDecl :: String -> LHsType GhcPs -> LHsDecl GhcPs
 mkKeyInstanceDecl templateName keyType =
-  let mkTypeName = noLoc . HsTyVar NoExt NotPromoted . noLoc . mkRdrUnqual . mkTcOcc
+  let mkTypeName = noLoc . HsTyVar NoExt NotPromoted . noLoc
       mkAppTy :: LHsType GhcPs -> LHsType GhcPs -> LHsType GhcPs
       mkAppTy ty1 ty2 = noLoc $ HsAppTy noExt ty1 ty2
-      instanceType = mkTypeName "TemplateKey" `mkAppTy` mkTypeName templateName `mkAppTy` keyType
+      templateKeyClass = mkTypeName $ qualifyDesugar $ mkClsOcc "TemplateKey"
+      templateType = mkTypeName $ mkRdrUnqual $ mkTcOcc templateName
+      instanceType = templateKeyClass `mkAppTy` templateType `mkAppTy` keyType
       mkVar = noLoc . HsVar noExt . noLoc . mkRdrUnqual . mkVarOcc
       mkMethod methodName = mkTemplateClassMethod methodName [] (mkVar $ methodName ++ templateName) Nothing
       methods = map mkMethod ["key", "fetchByKey", "lookupByKey"]
