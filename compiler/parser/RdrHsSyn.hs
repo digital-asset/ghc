@@ -2318,8 +2318,8 @@ mkRdrName :: String -> RdrName
 mkRdrName = mkRdrUnqual . mkVarOcc
 
 -- | Put all your cats in a bag.
--- bagOfCatMaybes :: [Maybe a] -> Bag a
--- bagOfCatMaybes = listToBag . catMaybes
+bagOfCatMaybes :: [Maybe a] -> Bag a
+bagOfCatMaybes = listToBag . catMaybes
 
 mkTemplateClassInstanceSigs :: String -> Maybe (LHsType GhcPs) -> [LSig GhcPs]
 mkTemplateClassInstanceSigs templateName mbKeyType =
@@ -2460,21 +2460,22 @@ mkTemplateClassMethod rawMethodName args body mBinds = do
 
 -- | Construct an 'ensure', 'signatory', 'observer', 'agreement',
 -- 'key'.
--- mkTemplateFunBindDecl ::
---      String                      -- function name
---   -> Located RdrName             -- data ctor 'T'
---   -> Maybe (LHsExpr GhcPs)       -- function body
---   -> Maybe (LHsLocalBinds GhcPs) -- local binds
---   -> P (Maybe (LHsBind GhcPs))   -- function binding
--- mkTemplateFunBindDecl _ _ Nothing _ = return Nothing
--- mkTemplateFunBindDecl fname con_name (Just body) binds = do
---   let tag = noLoc $ mkRdrUnqual (mkVarOcc fname)
---       this = asPatRecWild "this" con_name
---       loc = getLoc body
---       ctx = matchContext tag
---       match = matchWithBinds ctx [this] loc body binds
---       match_group = matchGroup loc match
---   funBind loc tag match_group
+mkTemplateFunBindDecl ::
+     String                      -- function name
+  -> Located RdrName             -- data ctor 'T'
+  -> Maybe (LHsExpr GhcPs)       -- function body
+  -> Maybe (LHsLocalBinds GhcPs) -- local binds
+  -> P (Maybe (LHsBind GhcPs))   -- function binding
+mkTemplateFunBindDecl _ _ Nothing _ = return Nothing
+mkTemplateFunBindDecl fname con_name (Just body) mBinds = do
+  let tag = noLoc $ mkRdrUnqual (mkVarOcc fname)
+      this = asPatRecWild "this" con_name
+      loc = getLoc body
+      ctx = matchContext tag
+      binds = fromMaybe (noLoc emptyLocalBinds) mBinds
+      match = matchWithBinds ctx [this] loc body binds
+      match_group = matchGroup loc match
+  return $ Just $ funBind loc tag match_group
 
 -- | Construct a 'maintainer' function binding. Note for future
 -- refactoring : this only differs from 'mkTemplateFunBindDecl' in the
@@ -2725,30 +2726,29 @@ mkKeyInstanceDecl templateName keyType =
   in instDecl $ classInstDecl (unLoc instanceType) (listToBag methods)
 
 -- | Construct an @instance Template T@.
--- mkTemplateTemplateInstDecl ::
---      LHsType GhcPs               -- data 'T'
---   -> Located RdrName             -- ctor 'T'
---   -> Maybe (LHsExpr GhcPs)       -- ensure
---   -> Maybe (LHsExpr GhcPs)       -- signatory
---   -> Maybe (LHsExpr GhcPs)       -- observer
---   -> Maybe (LHsExpr GhcPs)       -- agreement
---   -> Maybe (LHsLocalBinds GhcPs) -- binds
---   -> P [LHsDecl GhcPs]         -- resulting declaration
--- mkTemplateTemplateInstDecl dataName conName ens sig obs agr binds = do
--- { -- Function bindings.
---     mbEnsureDecl <- mkTemplateFunBindDecl "ensure" conName ens binds
---   ; mbSignatoryDecl <- mkTemplateFunBindDecl "signatory" conName sig binds
---   ; mbObserverDecl <- mkTemplateFunBindDecl "observer" conName obs binds
---   ; mbAgreementDecl<- mkTemplateFunBindDecl "agreement" conName agr binds
---   -- Class instance declaration.
---   ; let funBinds = bagOfCatMaybes
---           [mbEnsureDecl, mbSignatoryDecl, mbObserverDecl, mbAgreementDecl]
---         className = noLoc $ HsTyVar noExt NotPromoted
---                     $ noLoc $ qualifyDesugar $ mkClsOcc "Template"
---         class_inst_decl = classInstDecl (HsAppTy noExt className dataName) funBinds
---   -- Instance declaration.
---   ; instDecl class_inst_decl
--- }
+mkTemplateTemplateInstDecl ::
+     LHsType GhcPs               -- data 'T'
+  -> Located RdrName             -- ctor 'T'
+  -> Maybe (LHsExpr GhcPs)       -- ensure
+  -> Maybe (LHsExpr GhcPs)       -- signatory
+  -> Maybe (LHsExpr GhcPs)       -- observer
+  -> Maybe (LHsExpr GhcPs)       -- agreement
+  -> Maybe (LHsLocalBinds GhcPs) -- binds
+  -> P [LHsDecl GhcPs]         -- resulting declaration
+mkTemplateTemplateInstDecl dataName conName ens sig obs agr binds = do
+  -- Function bindings.
+  mbEnsureDecl <- mkTemplateFunBindDecl "ensure" conName ens binds
+  mbSignatoryDecl <- mkTemplateFunBindDecl "signatory" conName sig binds
+  mbObserverDecl <- mkTemplateFunBindDecl "observer" conName obs binds
+  mbAgreementDecl<- mkTemplateFunBindDecl "agreement" conName agr binds
+  -- Class instance declaration.
+  let funBinds = bagOfCatMaybes
+        [mbEnsureDecl, mbSignatoryDecl, mbObserverDecl, mbAgreementDecl]
+      className = noLoc $ HsTyVar noExt NotPromoted
+                  $ noLoc $ qualifyDesugar $ mkClsOcc "Template"
+      class_inst_decl = classInstDecl (HsAppTy noExt className dataName) funBinds
+  -- Instance declaration.
+  return [instDecl class_inst_decl]
 
 -- | Construct an @instance Choice T S R@.
 {- mkTemplateChoiceInstDecl
