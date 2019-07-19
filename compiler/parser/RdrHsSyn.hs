@@ -2454,7 +2454,7 @@ mkTemplateChoiceMethods conName binds (CombinedChoiceData controllers ChoiceData
       controllerArg = if flexible then arg else WildPat noExt
       mkMethod :: String -> [Pat GhcPs] -> Bool -> LHsExpr GhcPs -> LHsBind GhcPs
       mkMethod methodName args includeBindings body =
-        mkTemplateClassMethod (methodName ++ templateName ++ choiceName) args body $
+        mkTemplateClassMethod ("_" ++ methodName ++ templateName ++ choiceName) args body $
           -- General rule: only include template bindings for methods with `this` in scope
           if includeBindings then Just binds else Nothing
       mkVarQual :: OccName -> HsExpr GhcPs = HsVar noExt . noLoc . qualifyDesugar
@@ -2641,7 +2641,7 @@ mkTemplateClassInstanceMethods conName ValidTemplateBody{..} =
       ]
     mkMethod :: String -> [Pat GhcPs] -> Bool -> LHsExpr GhcPs -> LHsBind GhcPs
     mkMethod methodName args includeBindings methodBody =
-      mkTemplateClassMethod (methodName ++ templateName) args methodBody $
+      mkTemplateClassMethod ("_" ++ methodName ++ templateName) args methodBody $
         -- General rule: only include template bindings for methods with `this` in scope
         if includeBindings then Just vtbLetBindings else Nothing
     templateName = occNameString $ rdrNameOcc $ unLoc conName
@@ -2682,7 +2682,7 @@ mkTemplateInstanceMethods ::
 mkTemplateInstanceMethods templateName =
   let mkMethod :: String -> LHsBind GhcPs
       mkMethod methodName =
-        let bodyName = mkVar $ methodName ++ templateName
+        let bodyName = mkVar $ "_" ++ methodName ++ templateName
         in  mkTemplateClassMethod methodName [] bodyName Nothing
       mkVar :: String -> LHsExpr GhcPs
       mkVar = noLoc . HsVar noExt . noLoc . mkRdrUnqual . mkVarOcc
@@ -2715,7 +2715,7 @@ mkChoiceInstanceDecl templateName ChoiceData{..} =
       templateType = mkTypeName $ mkRdrUnqual $ mkTcOcc templateName
       instanceType = choiceClass `mkAppTy` templateType `mkAppTy` choiceType `mkAppTy` returnType
       mkVar = noLoc . HsVar noExt . noLoc . mkRdrUnqual . mkVarOcc
-      exerciseMethodBody = mkVar $ "exercise" ++ templateName ++ occNameString (rdrNameOcc (unLoc cdChoiceName))
+      exerciseMethodBody = mkVar $ "_" ++ "exercise" ++ templateName ++ occNameString (rdrNameOcc (unLoc cdChoiceName))
       exerciseMethod = mkTemplateClassMethod "exercise" [] exerciseMethodBody Nothing
   in instDecl $ classInstDecl (unLoc instanceType) $ listToBag [exerciseMethod]
 
@@ -2728,7 +2728,7 @@ mkKeyInstanceDecl templateName keyType =
       templateType = mkTypeName $ mkRdrUnqual $ mkTcOcc templateName
       instanceType = templateKeyClass `mkAppTy` templateType `mkAppTy` keyType
       mkVar = noLoc . HsVar noExt . noLoc . mkRdrUnqual . mkVarOcc
-      mkMethod methodName = mkTemplateClassMethod methodName [] (mkVar $ methodName ++ templateName) Nothing
+      mkMethod methodName = mkTemplateClassMethod methodName [] (mkVar $ "_" ++ methodName ++ templateName) Nothing
       methods = map mkMethod ["key", "fetchByKey", "lookupByKey"]
   in instDecl $ classInstDecl (unLoc instanceType) (listToBag methods)
 
