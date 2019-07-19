@@ -2416,6 +2416,14 @@ mkTemplateChoiceSigs templateName ChoiceData{..} =
         , ("exercise", mkFunTy (mkAppTy (mkQualTypeName "ContractId") templateType) (mkFunTy choiceType (mkAppTy (mkQualTypeName "Update") (mkParTy cdChoiceReturnTy))))
         ]
 
+mkMagic :: String -> LHsExpr GhcPs
+mkMagic methodName =
+  let mkVarQual :: OccName -> LHsExpr GhcPs = noLoc . HsVar noExt . noLoc . qualifyDesugar
+      mkAppType :: LHsExpr GhcPs -> LHsType GhcPs -> LHsExpr GhcPs
+      mkAppType e ty = noLoc $ HsAppType noExt e (mkHsWildCardBndrs ty)
+  in  mkAppType (mkVarQual $ mkVarOcc "magic") $
+        noLoc $ HsTyLit noExt $ HsStrTy NoSourceText $ mkFastString methodName
+
 mkTemplateChoiceMethods ::
      Located RdrName             -- template data ctor 'T'
   -> LHsLocalBinds GhcPs         -- local binds
@@ -2436,11 +2444,11 @@ mkTemplateChoiceMethods conName binds (CombinedChoiceData controllers ChoiceData
           if includeBindings then Just binds else Nothing
       mkVarQual :: OccName -> HsExpr GhcPs = HsVar noExt . noLoc . qualifyDesugar
       consuming = mkVarQual . mkDataOcc . show . fromMaybe PreConsuming <$> cdChoiceConsuming
-      undefined = noLoc $ mkVarQual $ mkVarOcc "undefined"
+      magicExercise = mkMagic $ if choiceName == "Archive" then "archive" else "exercise"
   in  [ mkMethod "consumption" []                    False consuming
       , mkMethod "controller"  [this, controllerArg] True  controllers
       , mkMethod "action"      [self, this, arg]     True  cdChoiceBody
-      , mkMethod "exercise"    []                    False undefined
+      , mkMethod "exercise"    []                    False magicExercise
       ]
 
 mkTemplateClassMethod ::
@@ -2619,8 +2627,8 @@ mkTemplateClassInstanceMethods conName ValidTemplateBody{..} =
   , mkMethod "observer"  [this] True  vtbObservers
   , mkMethod "ensure"    [this] True  (fromMaybe (mkVarQual $ mkDataOcc "True") vtbEnsures)
   , mkMethod "agreement" [this] True  (fromMaybe emptyString vtbAgreements)
-  , mkMethod "create"    []     False undefined
-  , mkMethod "fetch"     []     False undefined
+  , mkMethod "create"    []     False (mkMagic "create")
+  , mkMethod "fetch"     []     False (mkMagic "fetch")
   , mkMethod "archive"   [cid]  False archiveBody
   ] ++ keyMethods
   where
@@ -2628,8 +2636,8 @@ mkTemplateClassInstanceMethods conName ValidTemplateBody{..} =
       [ mkMethod "hasKey"      []               False (mkVarQual $ mkDataOcc "HasKey")
       , mkMethod "key"         [this]           True  kdKeyExpr
       , mkMethod "maintainer"  [hasKeyPat, key] False kdMaintainers
-      , mkMethod "fetchByKey"  []               False undefined
-      , mkMethod "lookupByKey" []               False undefined
+      , mkMethod "fetchByKey"  []               False (mkMagic "fetchByKey")
+      , mkMethod "lookupByKey" []               False (mkMagic "lookupByKey")
       ]
     mkMethod :: String -> [Pat GhcPs] -> Bool -> LHsExpr GhcPs -> LHsBind GhcPs
     mkMethod methodName args includeBindings methodBody =
@@ -2643,7 +2651,6 @@ mkTemplateClassInstanceMethods conName ValidTemplateBody{..} =
     hasKeyPat = mkVarPat $ mkDataOcc "HasKey"
     mkVarPat = XPat . noLoc . VarPat noExt . noLoc . mkRdrUnqual
     emptyString = noLoc $ HsLit noExt $ HsString NoSourceText $ fsLit ""
-    undefined = mkVarQual $ mkVarOcc "undefined"
     archiveBody = mkApp (mkApp (mkVarUnqual $ mkVarOcc $ "exercise" ++ templateName ++ "Archive")
                           (mkVarUnqual $ mkVarOcc "cid"))
                         (mkVarQual $ mkDataOcc "Archive")
