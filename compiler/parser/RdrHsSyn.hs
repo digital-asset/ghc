@@ -2416,6 +2416,21 @@ mkTemplateChoiceSigs templateName ChoiceData{..} =
         , ("exercise", mkFunTy (mkAppTy (mkQualTypeName "ContractId") templateType) (mkFunTy choiceType (mkAppTy (mkQualTypeName "Update") (mkParTy cdChoiceReturnTy))))
         ]
 
+mkTemplateClassMethod ::
+     String                      -- method name
+  -> [Pat GhcPs]                 -- method argument patterns
+  -> LHsExpr GhcPs               -- function body
+  -> Maybe (LHsLocalBinds GhcPs) -- local binds
+  -> LHsBind GhcPs               -- function binding
+mkTemplateClassMethod rawMethodName args body mBinds = do
+  let fullMethodName = noLoc $ mkRdrName rawMethodName
+      ctx = matchContext fullMethodName
+      loc = getLoc body
+      binds = fromMaybe (noLoc emptyLocalBinds) mBinds
+      match = matchWithBinds ctx args loc body binds
+      match_group = matchGroup loc match
+  funBind loc fullMethodName match_group
+
 mkMagic :: String -> LHsExpr GhcPs
 mkMagic methodName =
   let mkVarQual :: OccName -> LHsExpr GhcPs = noLoc . HsVar noExt . noLoc . qualifyDesugar
@@ -2450,21 +2465,6 @@ mkTemplateChoiceMethods conName binds (CombinedChoiceData controllers ChoiceData
       , mkMethod "action"      [self, this, arg]     True  cdChoiceBody
       , mkMethod "exercise"    []                    False magicExercise
       ]
-
-mkTemplateClassMethod ::
-     String                      -- method name
-  -> [Pat GhcPs]                 -- method argument patterns
-  -> LHsExpr GhcPs               -- function body
-  -> Maybe (LHsLocalBinds GhcPs) -- local binds
-  -> LHsBind GhcPs               -- function binding
-mkTemplateClassMethod rawMethodName args body mBinds = do
-  let fullMethodName = noLoc $ mkRdrName rawMethodName
-      ctx = matchContext fullMethodName
-      loc = getLoc body
-      binds = fromMaybe (noLoc emptyLocalBinds) mBinds
-      match = matchWithBinds ctx args loc body binds
-      match_group = matchGroup loc match
-  funBind loc fullMethodName match_group
 
 -- | Construct an 'ensure', 'signatory', 'observer', 'agreement',
 -- 'key'.
