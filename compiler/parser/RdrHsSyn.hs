@@ -2657,7 +2657,8 @@ mkTemplateClassInstanceMethods conName ValidTemplateBody{..} =
     hasKeyPat = mkVarPat $ mkDataOcc "HasKey"
     mkVarPat = XPat . noLoc . VarPat noExt . noLoc . mkRdrUnqual
     emptyString = noLoc $ HsLit noExt $ HsString NoSourceText $ fsLit ""
-    archiveBody = mkApp (mkApp (mkVarUnqual $ mkVarOcc $ "exercise" ++ templateName ++ "Archive")
+    archiveBody = mkApp (mkApp (mkVarUnqual $ mkVarOcc $ prefixTemplateClassMethod $
+                                  "exercise" ++ templateName ++ "Archive")
                           (mkVarUnqual $ mkVarOcc "cid"))
                         (mkVarQual $ mkDataOcc "Archive")
     mkVarUnqual = noLoc . HsVar noExt . noLoc . mkRdrUnqual
@@ -3004,7 +3005,7 @@ mkTemplateDecls lname@(L nloc name) fields (L _ decls) = do
     templateName = occNameString $ rdrNameOcc name
 
     archiveChoiceData = CombinedChoiceData
-      { ccdControllers = noLoc $ HsApp noExt (mkVar $ "signatory" ++ templateName) (mkVar "this")
+      { ccdControllers = noLoc $ HsApp noExt (mkVar $ prefixTemplateClassMethod $ "signatory" ++ templateName) (mkVar "this")
       , ccdChoiceData = ChoiceData {
             cdChoiceName = noLoc $ qualifyDesugar $ mkTcOcc "Archive"
           , cdChoiceFields = Nothing
