@@ -13,9 +13,11 @@ Highlights
 
 The highlights, since the 8.6.1 release, are:
 
-- Many, many bug fixes.
+- GHC now supports :ref:`visible type applications <visible-type-application>`.
+- Type variables in type family instances and rewrite rules can now be explicitly ``forall``-bound.
 - A new code layout algorithm for x86.
-
+- The final phase of the ``MonadFail`` proposal has been implemented.
+- Many, many bug fixes.
 
 Full details
 ------------
@@ -31,7 +33,8 @@ Language
 
 - GHC now allows explicitly binding type variables in type family instances and
   rewrite rules, as described in
-  `GHC proposal #7 <https://github.com/ghc-proposals/ghc-proposals/blob/master/proposals/0007-instance-foralls.rst>`__. For instance: ::
+  `GHC proposal #7 <https://github.com/ghc-proposals/ghc-proposals/blob/master/proposals/0007-instance-foralls.rst>`__.
+  For instance: ::
 
     type family G a b where
       forall x y. G [x] (Proxy y) = Double
@@ -121,6 +124,15 @@ Compiler
   only convenient workaround was to enable `-fobject-code` for all
   modules.
 
+- Add support for generating a new type of output: extended interfaces files.
+  Generation of these files, which sport a ``.hie`` suffix, is enabled via the
+  :ghc-flag:`-fwrite-ide-info` flag. See :ref:`hie-options` for more information.
+
+LLVM backend
+~~~~~~~~~~~~
+
+The :ghc-flag:`LLVM backend <-fllvm>` of this release is compatible with LLVM 7.
+
 Runtime system
 ~~~~~~~~~~~~~~
 
@@ -139,10 +151,6 @@ Runtime system
 
 - The output filename used for :ref:`eventlog output <rts-eventlog>` can now be
   specified with the :rts-flag:`-ol` flag.
-
-- Add support for generating a new type of output: extended interfaces files.
-  Generation of these files, which sport a ``.hie`` suffix, is enabled via the
-  ``-fwrite-ide-info`` flag. See :ref:`hie-options` for more information.
 
 Template Haskell
 ~~~~~~~~~~~~~~~~
@@ -178,8 +186,9 @@ Template Haskell
 ~~~~~~~~~~~~~~~~~~~~
 
 - GHC now exposes a new primop, ``traceBinaryEvent#``. This primop writes
-  eventlog events similar to ``traceBinaryEvent#`` but allows the user to pass
-  the event payload as a binary blob instead of a ``String``.
+  eventlog events similar to ``traceEvent#`` but allows the user to pass
+  the event payload as a binary blob instead of a zero-terminated
+  ``ByteString``.
 
 - The ``StableName#`` type parameter now has a phantom role instead of
   a representational one. There is really no reason to care about the
@@ -238,7 +247,7 @@ for further change information.
     libraries/binary/binary.cabal:           Dependency of ``ghc`` library
     libraries/bytestring/bytestring.cabal:   Dependency of ``ghc`` library
     libraries/Cabal/Cabal/Cabal.cabal:       Dependency of ``ghc-pkg`` utility
-    libraries/containers/containers.cabal:   Dependency of ``ghc`` library
+    libraries/containers/containers/containers.cabal:   Dependency of ``ghc`` library
     libraries/deepseq/deepseq.cabal:         Dependency of ``ghc`` library
     libraries/directory/directory.cabal:     Dependency of ``ghc`` library
     libraries/filepath/filepath.cabal:       Dependency of ``ghc`` library

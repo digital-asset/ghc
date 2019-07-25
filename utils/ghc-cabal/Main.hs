@@ -14,7 +14,7 @@ import Distribution.Simple.LocalBuildInfo
 import Distribution.Simple.GHC
 import Distribution.Simple.Program
 import Distribution.Simple.Program.HcPkg
-import Distribution.Simple.Setup (ConfigFlags(configStripLibs), fromFlag, toFlag)
+import Distribution.Simple.Setup (ConfigFlags(configStripLibs), fromFlagOrDefault, toFlag)
 import Distribution.Simple.Utils (defaultPackageDesc, findHookedPackageDesc, writeFileAtomic,
                                   toUTF8LBS)
 import Distribution.Simple.Build (writeAutogenFiles)
@@ -168,7 +168,7 @@ doCopy directory distDir
                                withPrograms = progs',
                                installDirTemplates = idts,
                                configFlags = cfg,
-                               stripLibs = fromFlag (configStripLibs cfg),
+                               stripLibs = fromFlagOrDefault False (configStripLibs cfg),
                                withSharedLib = withSharedLibs
                            }
 
@@ -388,10 +388,11 @@ generate directory distdir config_args
           libraryDirs = forDeps Installed.libraryDirs
           -- The mkLibraryRelDir function is a bit of a hack.
           -- Ideally it should be handled in the makefiles instead.
-          mkLibraryRelDir "rts"   = "rts/dist/build"
-          mkLibraryRelDir "ghc"   = "compiler/stage2/build"
-          mkLibraryRelDir "Cabal" = "libraries/Cabal/Cabal/dist-install/build"
-          mkLibraryRelDir l       = "libraries/" ++ l ++ "/dist-install/build"
+          mkLibraryRelDir "rts"        = "rts/dist/build"
+          mkLibraryRelDir "ghc"        = "compiler/stage2/build"
+          mkLibraryRelDir "Cabal"      = "libraries/Cabal/Cabal/dist-install/build"
+          mkLibraryRelDir "containers" = "libraries/containers/containers/dist-install/build"
+          mkLibraryRelDir l            = "libraries/" ++ l ++ "/dist-install/build"
           libraryRelDirs = map mkLibraryRelDir transitiveDepNames
 
           -- this is a hack to accommodate Cabal 2.2+ more hygenic
