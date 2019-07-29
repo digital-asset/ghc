@@ -2261,6 +2261,9 @@ mkUpdate = mkAppTy (mkQualType "Update")
 partiesType :: LHsType GhcPs
 partiesType = noLoc $ HsListTy noExt $ mkQualType "Party"
 
+mkVarPat :: OccName -> Pat GhcPs
+mkVarPat = XPat . noLoc . VarPat noExt . noLoc . mkRdrUnqual
+
 -- | Calculates the application of a 'toParties' function to an
 -- expression (invoked from Parser.y).
 applyToParties :: LHsExpr GhcPs -> LHsExpr GhcPs
@@ -2484,7 +2487,7 @@ mkTemplateChoiceMethods conName binds (CombinedChoiceData controllers ChoiceData
         if includeBindings then Just binds else Nothing
     templateName = occNameString $ rdrNameOcc $ unLoc conName
     choiceName = occNameString $ rdrNameOcc $ unLoc cdChoiceName
-    self = XPat $ noLoc $ VarPat noExt $ noLoc $ mkRdrUnqual $ mkVarOcc "self"
+    self = mkVarPat $ mkVarOcc "self"
     this = asPatRecWild "this" conName
     choiceNameToRdrName = if choiceName == "Archive" then qualifyDesugar else mkRdrUnqual
     arg = argPatOfChoice (noLoc $ choiceNameToRdrName $ mkDataOcc choiceName) cdChoiceFields
@@ -2572,7 +2575,6 @@ mkTemplateClassInstanceMethods conName ValidTemplateBody{..} =
     cid = mkVarPat $ mkVarOcc "cid"
     key = mkVarPat $ mkVarOcc "key"
     hasKeyPat = mkVarPat $ mkDataOcc "HasKey"
-    mkVarPat = XPat . noLoc . VarPat noExt . noLoc . mkRdrUnqual
     emptyString = noLoc $ HsLit noExt $ HsString NoSourceText $ fsLit ""
     archiveBody = mkApp (mkApp (mkUnqualVar $ mkVarOcc $ prefixTemplateClassMethod $
                                   "exercise" ++ templateName ++ "Archive")
