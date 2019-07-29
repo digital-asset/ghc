@@ -2465,26 +2465,27 @@ mkTemplateChoiceMethods ::
   -> CombinedChoiceData          -- choice data and controllers
   -> [LHsBind GhcPs]             -- function binding
 mkTemplateChoiceMethods conName binds (CombinedChoiceData controllers ChoiceData{..} flexible) =
-  let templateName = occNameString $ rdrNameOcc $ unLoc conName
-      choiceName = occNameString $ rdrNameOcc $ unLoc cdChoiceName
-      self = XPat $ noLoc $ VarPat noExt $ noLoc $ mkRdrUnqual $ mkVarOcc "self"
-      this = asPatRecWild "this" conName
-      choiceNameToRdrName = if choiceName == "Archive" then qualifyDesugar else mkRdrUnqual
-      arg = argPatOfChoice (noLoc $ choiceNameToRdrName $ mkDataOcc choiceName) cdChoiceFields
-      controllerArg = if flexible then arg else WildPat noExt
-      mkMethod :: String -> [Pat GhcPs] -> Bool -> LHsExpr GhcPs -> LHsBind GhcPs
-      mkMethod methodName args includeBindings body =
-        let fullMethodName = prefixTemplateClassMethod $ methodName ++ templateName ++ choiceName in
-        mkTemplateClassMethod fullMethodName args body $
-          -- General rule: only include template bindings for methods with `this` in scope
-          if includeBindings then Just binds else Nothing
-      consuming = unLoc . mkQualVar . mkDataOcc . show . fromMaybe PreConsuming <$> cdChoiceConsuming
-      magicExercise = mkMagic $ if choiceName == "Archive" then "archive" else "exercise"
-  in  [ mkMethod "consumption" []                    False consuming
-      , mkMethod "controller"  [this, controllerArg] True  controllers
-      , mkMethod "action"      [self, this, arg]     True  cdChoiceBody
-      , mkMethod "exercise"    []                    False magicExercise
-      ]
+  [ mkMethod "consumption" []                    False consuming
+  , mkMethod "controller"  [this, controllerArg] True  controllers
+  , mkMethod "action"      [self, this, arg]     True  cdChoiceBody
+  , mkMethod "exercise"    []                    False magicExercise
+  ]
+  where
+    mkMethod :: String -> [Pat GhcPs] -> Bool -> LHsExpr GhcPs -> LHsBind GhcPs
+    mkMethod methodName args includeBindings body =
+      let fullMethodName = prefixTemplateClassMethod $ methodName ++ templateName ++ choiceName in
+      mkTemplateClassMethod fullMethodName args body $
+        -- General rule: only include template bindings for methods with `this` in scope
+        if includeBindings then Just binds else Nothing
+    templateName = occNameString $ rdrNameOcc $ unLoc conName
+    choiceName = occNameString $ rdrNameOcc $ unLoc cdChoiceName
+    self = XPat $ noLoc $ VarPat noExt $ noLoc $ mkRdrUnqual $ mkVarOcc "self"
+    this = asPatRecWild "this" conName
+    choiceNameToRdrName = if choiceName == "Archive" then qualifyDesugar else mkRdrUnqual
+    arg = argPatOfChoice (noLoc $ choiceNameToRdrName $ mkDataOcc choiceName) cdChoiceFields
+    controllerArg = if flexible then arg else WildPat noExt
+    consuming = unLoc . mkQualVar . mkDataOcc . show . fromMaybe PreConsuming <$> cdChoiceConsuming
+    magicExercise = mkMagic $ if choiceName == "Archive" then "archive" else "exercise"
 
 -- | Construct a @data X = X{...} deriving (Eq, Show)@
 mkTemplateTypeDecl ::
