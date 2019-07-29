@@ -2242,6 +2242,9 @@ mkFunTy funTy argTy = noLoc $ HsFunTy noExt funTy argTy
 mkAppTy :: LHsType GhcPs -> LHsType GhcPs -> LHsType GhcPs
 mkAppTy ty1 ty2 = noLoc $ HsAppTy noExt ty1 ty2
 
+mkParenTy :: LHsType GhcPs -> LHsType GhcPs
+mkParenTy = noLoc . HsParTy noExt
+
 -- Representations of DAML type constructors
 mkContractId :: LHsType GhcPs -> LHsType GhcPs
 mkContractId = mkAppTy (mkQualType "ContractId")
@@ -2372,7 +2375,6 @@ mkTemplateClassInstanceSigs templateName mbKeyType =
     hasKeyType = mkQualType "HasKey" `mkAppTy` templateType
     unit = noLoc $ HsTupleTy noExt HsBoxedOrConstraintTuple []
     pairType ty1 ty2 = noLoc $ HsTupleTy noExt HsBoxedOrConstraintTuple [ty1, ty2]
-    mkParenTy = noLoc . HsParTy noExt
 
 -- | Utility for constructing a class declaration.
 -- TODO(RJR): Pass in type variables and context for generic templates.
@@ -2412,22 +2414,24 @@ instDecl cid = noLoc $ InstD noExt $ ClsInstD noExt cid
 
 mkTemplateChoiceSigs :: String -> ChoiceData -> [LSig GhcPs]
 mkTemplateChoiceSigs templateName ChoiceData{..} =
-  let choiceName = occNameString $ rdrNameOcc $ unLoc cdChoiceName
-      choiceType = noLoc $ HsTyVar NoExt NotPromoted cdChoiceName
-      templateType = mkUnqualType templateName
-      consuming = unLoc . mkQualType . show . fromMaybe PreConsuming <$> cdChoiceConsuming
-      mkParTy :: LHsType GhcPs -> LHsType GhcPs = noLoc . HsParTy noExt
-      mkSig :: String -> LHsType GhcPs -> LSig GhcPs
-      mkSig methodName ty =
-        let fullMethodName = noLoc $ mkRdrUnqual $ mkVarOcc $ prefixTemplateClassMethod $
-                               methodName ++ templateName ++ choiceName in
-        noLoc $ ClassOpSig noExt False [fullMethodName] (HsIB noExt ty)
-  in  map (uncurry mkSig) [
-          ("consumption", consuming `mkAppTy` templateType)
-        , ("controller", mkFunTy templateType (mkFunTy choiceType partiesType))
-        , ("action", mkFunTy (mkContractId templateType) (mkFunTy templateType (mkFunTy choiceType (mkUpdate (mkParTy cdChoiceReturnTy)))))
-        , ("exercise", mkFunTy (mkContractId templateType) (mkFunTy choiceType (mkUpdate (mkParTy cdChoiceReturnTy))))
-        ]
+  map (uncurry mkSig)
+    [ ("consumption", consuming `mkAppTy` templateType)
+    , ("controller", mkFunTy templateType (mkFunTy choiceType partiesType))
+    , ("action", mkFunTy contractId (mkFunTy templateType (mkFunTy choiceType choiceReturnType)))
+    , ("exercise", mkFunTy contractId (mkFunTy choiceType choiceReturnType))
+    ]
+  where
+    mkSig :: String -> LHsType GhcPs -> LSig GhcPs
+    mkSig methodName ty =
+      let fullMethodName = noLoc $ mkRdrUnqual $ mkVarOcc $ prefixTemplateClassMethod $
+                             methodName ++ templateName ++ choiceName in
+      noLoc $ ClassOpSig noExt False [fullMethodName] (HsIB noExt ty)
+    choiceName = occNameString $ rdrNameOcc $ unLoc cdChoiceName
+    choiceType = noLoc $ HsTyVar NoExt NotPromoted cdChoiceName
+    templateType = mkUnqualType templateName
+    contractId = mkContractId templateType
+    choiceReturnType = mkUpdate $ mkParenTy cdChoiceReturnTy
+    consuming = unLoc . mkQualType . show . fromMaybe PreConsuming <$> cdChoiceConsuming
 
 mkTemplateClassMethod ::
      String                      -- method name
