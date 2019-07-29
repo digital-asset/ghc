@@ -1227,9 +1227,6 @@ flex_choice_decl :: { Located FlexChoiceData }
                        , cdChoiceDoc = $6 }
     }
 
--- flexible_choice_body :: { Located ([AddAnn],[LStmt GhcPs (LHsExpr GhcPs)]) }
---  : 'do' stmtlist                                { sLL $1 $2 $ unLoc $2 }
-
 consuming :: { Located (Maybe ChoiceConsuming) }
  : 'preconsuming'                                { sL1 $1 (Just PreConsuming)  }
  | 'nonconsuming'                                { sL1 $1 (Just NonConsuming)  }
