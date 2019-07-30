@@ -2368,13 +2368,15 @@ mkTemplateClassInstanceSigs templateName mbKeyType =
     ]
     ++ keySigs
   where
-    keySigs = flip (maybe []) mbKeyType $ \keyType ->
-      [ ("hasKey",      hasKeyType)
-      , ("key",         templateType `mkFunTy` keyType)
-      , ("maintainer",  mkFunTy hasKeyType (mkFunTy keyType partiesType))
-      , ("fetchByKey",  keyType `mkFunTy` mkUpdate (pairType contractId templateType))
-      , ("lookupByKey", keyType `mkFunTy` mkUpdate (mkParenTy $ mkQualType "Optional" `mkAppTy` mkParenTy contractId))
-      ]
+    keySigs = case mbKeyType of
+      Nothing -> []
+      Just keyType ->
+        [ ("hasKey",      hasKeyType)
+        , ("key",         templateType `mkFunTy` keyType)
+        , ("maintainer",  mkFunTy hasKeyType (mkFunTy keyType partiesType))
+        , ("fetchByKey",  keyType `mkFunTy` mkUpdate (pairType contractId templateType))
+        , ("lookupByKey", keyType `mkFunTy` mkUpdate (mkParenTy $ mkQualType "Optional" `mkAppTy` mkParenTy contractId))
+        ]
     mkSig :: String -> LHsType GhcPs -> LSig GhcPs
     mkSig methodName ty =
       let fullMethodName = noLoc $ mkRdrUnqual $ mkVarOcc $ prefixTemplateClassMethod $ methodName ++ templateName in
@@ -2557,13 +2559,15 @@ mkTemplateClassInstanceMethods conName ValidTemplateBody{..} =
   , mkMethod "archive"   [cid]  False archiveBody
   ] ++ keyMethods
   where
-    keyMethods = flip (maybe []) vtbKeyData $ \(L _ KeyData{..}) ->
-      [ mkMethod "hasKey"      []               False (mkQualVar $ mkDataOcc "HasKey")
-      , mkMethod "key"         [this]           True  kdKeyExpr
-      , mkMethod "maintainer"  [hasKeyPat, key] False kdMaintainers
-      , mkMethod "fetchByKey"  []               False (mkMagic "fetchByKey")
-      , mkMethod "lookupByKey" []               False (mkMagic "lookupByKey")
-      ]
+    keyMethods = case vtbKeyData of
+      Nothing -> []
+      Just (L _ KeyData{..}) ->
+        [ mkMethod "hasKey"      []               False (mkQualVar $ mkDataOcc "HasKey")
+        , mkMethod "key"         [this]           True  kdKeyExpr
+        , mkMethod "maintainer"  [hasKeyPat, key] False kdMaintainers
+        , mkMethod "fetchByKey"  []               False (mkMagic "fetchByKey")
+        , mkMethod "lookupByKey" []               False (mkMagic "lookupByKey")
+        ]
     mkMethod :: String -> [Pat GhcPs] -> Bool -> LHsExpr GhcPs -> LHsBind GhcPs
     mkMethod methodName args includeBindings methodBody =
       let fullMethodName = prefixTemplateClassMethod $ methodName ++ templateName in
