@@ -2379,8 +2379,8 @@ mkTemplateClassInstanceSigs templateName mbKeyType =
         ]
     mkSig :: String -> LHsType GhcPs -> LSig GhcPs
     mkSig methodName ty =
-      let fullMethodName = noLoc $ mkRdrUnqual $ mkVarOcc $ prefixTemplateClassMethod $ methodName ++ templateName in
-      noLoc $ ClassOpSig noExt False [fullMethodName] (HsIB noExt ty)
+      let fullMethodName = noLoc $ mkRdrUnqual $ mkVarOcc $ prefixTemplateClassMethod $ methodName ++ templateName
+      in  noLoc $ ClassOpSig noExt False [fullMethodName] (HsIB noExt ty)
     templateType = mkUnqualType templateName
     contractId = mkContractId templateType
     hasKeyType = mkQualType "HasKey" `mkAppTy` templateType
@@ -2434,8 +2434,8 @@ mkTemplateChoiceSigs templateName ChoiceData{..} =
     mkSig :: String -> LHsType GhcPs -> LSig GhcPs
     mkSig methodName ty =
       let fullMethodName = noLoc $ mkRdrUnqual $ mkVarOcc $ prefixTemplateClassMethod $
-                             methodName ++ templateName ++ choiceName in
-      noLoc $ ClassOpSig noExt False [fullMethodName] (HsIB noExt ty)
+                             methodName ++ templateName ++ choiceName
+      in  noLoc $ ClassOpSig noExt False [fullMethodName] (HsIB noExt ty)
     choiceName = occNameString $ rdrNameOcc $ unLoc cdChoiceName
     choiceType = noLoc $ HsTyVar NoExt NotPromoted cdChoiceName
     templateType = mkUnqualType templateName
@@ -2483,10 +2483,10 @@ mkTemplateChoiceMethods conName binds (CombinedChoiceData controllers ChoiceData
   where
     mkMethod :: String -> [Pat GhcPs] -> Bool -> LHsExpr GhcPs -> LHsBind GhcPs
     mkMethod methodName args includeBindings body =
-      let fullMethodName = prefixTemplateClassMethod $ methodName ++ templateName ++ choiceName in
-      mkTemplateClassMethod fullMethodName args body $
-        -- General rule: only include template bindings for methods with `this` in scope
-        if includeBindings then Just binds else Nothing
+      let fullMethodName = prefixTemplateClassMethod $ methodName ++ templateName ++ choiceName
+      in  mkTemplateClassMethod fullMethodName args body $
+            -- General rule: only include template bindings for methods with `this` in scope
+            if includeBindings then Just binds else Nothing
     templateName = occNameString $ rdrNameOcc $ unLoc conName
     choiceName = occNameString $ rdrNameOcc $ unLoc cdChoiceName
     self = mkVarPat $ mkVarOcc "self"
@@ -2570,10 +2570,10 @@ mkTemplateClassInstanceMethods conName ValidTemplateBody{..} =
         ]
     mkMethod :: String -> [Pat GhcPs] -> Bool -> LHsExpr GhcPs -> LHsBind GhcPs
     mkMethod methodName args includeBindings methodBody =
-      let fullMethodName = prefixTemplateClassMethod $ methodName ++ templateName in
-      mkTemplateClassMethod fullMethodName args methodBody $
-        -- General rule: only include template bindings for methods with `this` in scope
-        if includeBindings then Just vtbLetBindings else Nothing
+      let fullMethodName = prefixTemplateClassMethod $ methodName ++ templateName
+      in  mkTemplateClassMethod fullMethodName args methodBody $
+            -- General rule: only include template bindings for methods with `this` in scope
+            if includeBindings then Just vtbLetBindings else Nothing
     templateName = occNameString $ rdrNameOcc $ unLoc conName
     this = asPatRecWild "this" conName
     cid = mkVarPat $ mkVarOcc "cid"
@@ -2646,8 +2646,8 @@ mkKeyInstanceDecl templateName keyType =
       templateType = mkUnqualType templateName
       instanceType = templateKeyClass `mkAppTy` templateType `mkAppTy` keyType
       mkMethod methodName =
-        let methodBody = mkUnqualVar $ mkVarOcc $ prefixTemplateClassMethod $ methodName ++ templateName in
-        mkTemplateClassMethod methodName [] methodBody Nothing
+        let methodBody = mkUnqualVar $ mkVarOcc $ prefixTemplateClassMethod $ methodName ++ templateName
+        in  mkTemplateClassMethod methodName [] methodBody Nothing
       methods = map mkMethod ["key", "fetchByKey", "lookupByKey"]
   in instDecl $ classInstDecl (unLoc instanceType) (listToBag methods)
 
