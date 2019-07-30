@@ -2387,7 +2387,7 @@ mkTemplateClassInstanceSigs templateName mbKeyType =
     pairType ty1 ty2 = noLoc $ HsTupleTy noExt HsBoxedOrConstraintTuple [ty1, ty2]
 
 -- | Utility for constructing a class declaration.
--- TODO(RJR): Pass in type variables and context for generic templates.
+-- TODO(RJR, #1387): Pass in type variables and context for generic templates.
 classDecl :: Located RdrName -> [LSig GhcPs] -> LHsBinds GhcPs -> TyClDecl GhcPs
 classDecl className sigs methods =
   ClassDecl { tcdCExt = noExt
