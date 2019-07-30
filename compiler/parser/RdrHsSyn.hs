@@ -2170,10 +2170,10 @@ data TemplateBodyDecls = TemplateBodyDecls {
 
 -- Result of validating TemplateBodyDecls, with stricter types
 data ValidTemplateBody = ValidTemplateBody {
-      vtbEnsures :: Maybe (LHsExpr GhcPs)
+      vtbEnsure :: Maybe (LHsExpr GhcPs)
     , vtbSignatories :: LHsExpr GhcPs
     , vtbObservers :: LHsExpr GhcPs
-    , vtbAgreements :: Maybe (LHsExpr GhcPs)
+    , vtbAgreement :: Maybe (LHsExpr GhcPs)
     , vtbLetBindings :: LHsLocalBinds GhcPs
     , vtbChoices :: [CombinedChoiceData]
     , vtbKeyData :: Maybe (Located KeyData)
@@ -2550,8 +2550,8 @@ mkTemplateClassInstanceMethods ::
 mkTemplateClassInstanceMethods conName ValidTemplateBody{..} =
   [ mkMethod "signatory" [this] True  vtbSignatories
   , mkMethod "observer"  [this] True  vtbObservers
-  , mkMethod "ensure"    [this] True  (fromMaybe (mkQualVar $ mkDataOcc "True") vtbEnsures)
-  , mkMethod "agreement" [this] True  (fromMaybe emptyString vtbAgreements)
+  , mkMethod "ensure"    [this] True  (fromMaybe (mkQualVar $ mkDataOcc "True") vtbEnsure)
+  , mkMethod "agreement" [this] True  (fromMaybe emptyString vtbAgreement)
   , mkMethod "create"    []     False (mkMagic "create")
   , mkMethod "fetch"     []     False (mkMagic "fetch")
   , mkMethod "archive"   [cid]  False archiveBody
@@ -2681,10 +2681,10 @@ validateTemplateBodyDecls nloc TemplateBodyDecls{..}
   | null tbdMaintainers && (not . null) tbdKeys = report "Missing 'maintainer' declaration for given 'key'"
   | otherwise = return $
       ValidTemplateBody {
-          vtbEnsures = listToMaybe tbdEnsures
+          vtbEnsure = listToMaybe tbdEnsures
         , vtbSignatories = applyConcat (noLoc tbdSignatories)
         , vtbObservers = allObservers
-        , vtbAgreements = listToMaybe tbdAgreements
+        , vtbAgreement = listToMaybe tbdAgreements
         , vtbLetBindings = fromMaybe (noLoc emptyLocalBinds) (listToMaybe tbdLetBindings)
         , vtbChoices = allChoices
         , vtbKeyData = keyData
