@@ -2660,7 +2660,7 @@ mkTemplateChoiceDecls ChoiceData{..} = do
   -- record type.
   let lname@(L nloc _name) = cdChoiceName
       choiceName = L nloc (HsTyVar noExt NotPromoted lname)
-  choiceConInfo <- splitCon $ maybe id (:) cdChoiceFields [choiceName]
+  choiceConInfo <- splitCon $ maybeToList cdChoiceFields ++ [choiceName]
   let dataDecl = mkTemplateTypeDecl
                    (combineLocs cdChoiceName
                      (last (void cdChoiceReturnTy :
