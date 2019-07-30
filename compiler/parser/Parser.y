@@ -1158,7 +1158,7 @@ topdecl :: { LHsDecl GhcPs }
 --
 template_decl :: { OrdList (LHsDecl GhcPs) }
   : 'template' qtycon arecord_with 'where' template_body
-                                                 {% mkTemplateDecl $2 $3 $5 }
+                                                 {% mkTemplateDecls $2 $3 $5 }
 
 template_body :: { Located [Located TemplateBodyDecl] }
   : '{' template_body_decls '}'                  { sLL $1 $3 (reverse (unLoc $2)) }
@@ -1184,7 +1184,7 @@ template_body_decl :: { Located TemplateBodyDecl }
   | key_decl                                     { sL1 $1 $ KeyDecl $1 }
   | maintainer_decl                              { sL1 $1 $ MaintainerDecl $1 }
 
-let_bindings_decl :: { Located ([AddAnn], Located (HsLocalBinds GhcPs)) }
+let_bindings_decl :: { Located ([AddAnn], LHsLocalBinds GhcPs) }
   : 'let' binds                 { sLL $1 $> (mj AnnWhere $1 : (fst $ unLoc $2)
                                              , snd $ unLoc $2) }
 
@@ -1205,18 +1205,18 @@ choice_decls :: { Located [Located ChoiceData] }
  | {- empty -}                                   { sL0 [] }
 
 choice_decl :: { Located ChoiceData }
-  : consuming qtycon OF_TYPE btype_ maybe_docprev arecord_with_opt 'do' stmtlist -- note the use of 'btype_'
+  : consuming qtycon OF_TYPE btype_ maybe_docprev arecord_with_opt doexp -- note the use of 'btype_'
     { sL (comb3 $1 $2 $>) $
             ChoiceData { cdChoiceName = $2
                        , cdChoiceReturnTy = $4
                        , cdChoiceFields = $6
-                       , cdChoiceBody = $8
+                       , cdChoiceBody = $7
                        , cdChoiceConsuming = $1
                        , cdChoiceDoc = $5 }
     }
 
 flex_choice_decl :: { Located FlexChoiceData }
-  : consuming 'choice' qtycon OF_TYPE btype_ maybe_docprev arecord_with_opt 'controller' party_list flexible_choice_body
+  : consuming 'choice' qtycon OF_TYPE btype_ maybe_docprev arecord_with_opt 'controller' party_list doexp
     { sL (comb3 $1 $2 $>) $
         FlexChoiceData (applyConcat $9)
             ChoiceData { cdChoiceName = $3
@@ -1227,13 +1227,10 @@ flex_choice_decl :: { Located FlexChoiceData }
                        , cdChoiceDoc = $6 }
     }
 
-flexible_choice_body :: { Located ([AddAnn],[LStmt GhcPs (LHsExpr GhcPs)]) }
-  : 'do' stmtlist                                { sLL $1 $2 $ unLoc $2 }
-
-consuming :: { Located (Maybe String) }
- : 'preconsuming'                                { sL1 $1 Nothing }
- | 'nonconsuming'                                { sL1 $1 (Just "nonconsuming") }
- | 'postconsuming'                               { sL1 $1 (Just "postconsuming") }
+consuming :: { Located (Maybe ChoiceConsuming) }
+ : 'preconsuming'                                { sL1 $1 (Just PreConsuming)  }
+ | 'nonconsuming'                                { sL1 $1 (Just NonConsuming)  }
+ | 'postconsuming'                               { sL1 $1 (Just PostConsuming) }
  | {- empty -}                                   { sL0 Nothing }
 
 -- This production is only used by choice_decl.
@@ -1255,10 +1252,10 @@ observer_decl :: { LHsExpr GhcPs }
 agreement_decl :: { LHsExpr GhcPs }
   : 'agreement' exp                              { sLL $1 $> $ unLoc $2 }
 
-key_decl :: { Located KeyData }
+key_decl :: { Located (LHsExpr GhcPs, LHsType GhcPs) }
     -- We use `infixexp` rather than `exp` here because we need to
     -- exclude the case `infixexp OF_TYPE sigtype`
-  : 'key' infixexp OF_TYPE btype                 { sLL $1 $> $ KeyData { kdKeyExpr = $2, kdKeyTy = $4 } }
+  : 'key' infixexp OF_TYPE btype                 { sLL $1 $> ($2, $4) }
 
 maintainer_decl :: { LHsExpr GhcPs }
   : 'maintainer' parties                         { sLL $1 $> $ unLoc (applyConcat $2) }
@@ -2910,9 +2907,7 @@ aexp    :: { LHsExpr GhcPs }
                                                    FromSource (snd $ unLoc $4)))
                                                (mj AnnCase $1:mj AnnOf $3
                                                   :(fst $ unLoc $4)) }
-        | 'do' stmtlist              {% ams (cL (comb2 $1 $2)
-                                               (mkHsDo DoExpr (snd $ unLoc $2)))
-                                               (mj AnnDo $1:(fst $ unLoc $2)) }
+        | doexp                 { $1 }
         | 'mdo' stmtlist            {% ams (cL (comb2 $1 $2)
                                               (mkHsDo MDoExpr (snd $ unLoc $2)))
                                            (mj AnnMdo $1:(fst $ unLoc $2)) }
@@ -2924,6 +2919,11 @@ aexp    :: { LHsExpr GhcPs }
                                [mj AnnProc $1,mu AnnRarrow $3] }
 
         | aexp1                 { $1 }
+
+doexp   :: { LHsExpr GhcPs }
+        :  'do' stmtlist        {% ams (cL (comb2 $1 $2)
+                                         (mkHsDo DoExpr (snd $ unLoc $2)))
+                                         (mj AnnDo $1:(fst $ unLoc $2)) }
 
 aexp1   :: { LHsExpr GhcPs }
         : aexp1 '{' fbinds '}' {% do { r <- mkRecConstrOrUpdate $1 (comb2 $2 $4)
