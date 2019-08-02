@@ -2401,10 +2401,10 @@ mkTemplateClassInstanceSigs templateName mbKeyType =
 
 -- | Utility for constructing a class declaration.
 -- TODO(RJR, #1387): Pass in type variables and context for generic templates.
-classDecl :: Located RdrName -> [LSig GhcPs] -> LHsBinds GhcPs -> TyClDecl GhcPs
-classDecl className sigs methods =
+classDecl :: Located RdrName -> LHsContext GhcPs -> [LSig GhcPs] -> LHsBinds GhcPs -> TyClDecl GhcPs
+classDecl className context sigs methods =
   ClassDecl { tcdCExt = noExt
-            , tcdCtxt = noLoc []
+            , tcdCtxt = context
             , tcdLName = className
             , tcdTyVars = HsQTvs noExt []
             , tcdFixity = Prefix
@@ -2598,15 +2598,31 @@ mkTemplateClassInstanceMethods conName ValidTemplateBody{..} =
                           (mkUnqualVar $ mkVarOcc "cid"))
                         (mkQualVar $ mkDataOcc "Archive")
 
+templateConstraintsToContext :: [Located TemplateConstraint] -> LHsContext GhcPs
+templateConstraintsToContext constraints =
+  let loc = foldl' combineSrcSpans noSrcSpan $ map getLoc constraints
+      ctx = map (fmap templateConstraintToType) constraints
+  in  L loc ctx
+
+templateConstraintToType :: TemplateConstraint -> HsType GhcPs
+templateConstraintToType (TemplateConstraint constraint@(L conLoc _) tyVars) =
+  unLoc $ foldl' mkAppWithLocs constraintType $ map mkTyVar tyVars
+    where
+      mkAppWithLocs ty1@(L l1 _) ty2@(L l2 _) = L (combineSrcSpans l1 l2) (HsAppTy noExt ty1 ty2)
+      constraintType = L conLoc $ HsTyVar NoExt NotPromoted constraint
+      mkTyVar tv@(L tvLoc _) = L tvLoc $ HsTyVar noExt NotPromoted tv
+
 -- | Construct a @class TInstance@.
 mkTemplateInstanceClassDecl ::
      SrcSpan                     -- location of data 'T'
   -> Located RdrName             -- constructor 'T'
+  -> [Located TemplateConstraint] -- template constraints
   -> ValidTemplateBody           -- sanitized template body
   -> LHsDecl GhcPs               -- resulting declaration
-mkTemplateInstanceClassDecl templateLoc conName vtb@ValidTemplateBody{..} =
+mkTemplateInstanceClassDecl templateLoc conName constraints vtb@ValidTemplateBody{..} =
   let templateName = occNameString $ rdrNameOcc $ unLoc conName
       className = L templateLoc $ mkRdrUnqual $ mkClsOcc $ templateName ++ "Instance"
+      context = templateConstraintsToContext constraints
       keyType = kdKeyType . unLoc <$> vtbKeyData
       templateSigs = mkTemplateClassInstanceSigs templateName keyType
       templateMethods = mkTemplateClassInstanceMethods conName vtb
@@ -2614,7 +2630,7 @@ mkTemplateInstanceClassDecl templateLoc conName vtb@ValidTemplateBody{..} =
       choiceMethods = concatMap (mkTemplateChoiceMethods conName vtbLetBindings) vtbChoices
       sigs = templateSigs ++ choiceSigs
       methods = listToBag $ templateMethods ++ choiceMethods
-  in noLoc $ TyClD noExt $ classDecl className sigs methods
+  in noLoc $ TyClD noExt $ classDecl className context sigs methods
 
 mkTemplateInstanceMethods ::
      String            -- template name
@@ -2753,14 +2769,6 @@ flexChoiceToCombinedChoice :: FlexChoiceData -> CombinedChoiceData
 flexChoiceToCombinedChoice (FlexChoiceData controller choiceData) =
   CombinedChoiceData controller choiceData True
 
-templateConstraintToContext :: TemplateConstraint -> HsContext GhcPs
-templateConstraintToContext (TemplateConstraint constraint@(L conLoc _) tyVars) =
-  [foldl' mkAppWithLocs constraintType $ map mkTyVar tyVars]
-    where
-      mkAppWithLocs ty1@(L l1 _) ty2@(L l2 _) = L (combineSrcSpans l1 l2) (HsAppTy noExt ty1 ty2)
-      constraintType = L conLoc $ HsTyVar NoExt NotPromoted constraint
-      mkTyVar tv@(L tvLoc _) = L tvLoc $ HsTyVar noExt NotPromoted tv
-
 -- | Desugar a @template@ declaration into a list of decls (this is
 -- called from 'Parser.y').
 mkTemplateDecls
@@ -2768,7 +2776,7 @@ mkTemplateDecls
   -> LHsType GhcPs                       -- Template parameter record type
   -> Located [Located TemplateBodyDecl]  -- Template declarations
   -> P (OrdList (LHsDecl GhcPs))         -- Desugared declarations
-mkTemplateDecls (L _ (TemplateHeader _ lname@(L nloc name) _)) fields (L _ decls) = do
+mkTemplateDecls (L _ (TemplateHeader constraints lname@(L nloc name) _)) fields (L _ decls) = do
   vtb@ValidTemplateBody{..} <- validateTemplateBodyDecls nloc (extractTemplateBodyDecls decls)
   -- Calculate 'T' data constructor info from 'T' and the record type denoted by 'fields'.
   ci@(conName, _, _) <- splitCon [fields, dataName]
@@ -2776,7 +2784,7 @@ mkTemplateDecls (L _ (TemplateHeader _ lname@(L nloc name) _)) fields (L _ decls
   choiceDataDecls <- concat <$> traverse mkTemplateChoiceDecls (map ccdChoiceData vtbChoices)
     -- ^ Do not include Archive data type as it has a shared definition across templates
   let choicesWithArchive = archiveChoiceData : vtbChoices
-      templateInstClassDecl = mkTemplateInstanceClassDecl nloc conName vtb{vtbChoices = choicesWithArchive}
+      templateInstClassDecl = mkTemplateInstanceClassDecl nloc conName constraints vtb{vtbChoices = choicesWithArchive}
       templateInstanceDecls = mkTemplateInstanceDecls templateName
       choiceInstanceDecls = map (mkChoiceInstanceDecl templateName . ccdChoiceData) choicesWithArchive
       keyInstanceDecl = mkKeyInstanceDecl templateName <$> kdKeyType . unLoc <$> vtbKeyData
