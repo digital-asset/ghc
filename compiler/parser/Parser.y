@@ -1157,8 +1157,13 @@ topdecl :: { LHsDecl GhcPs }
 -- Templates
 --
 template_decl :: { OrdList (LHsDecl GhcPs) }
-  : 'template' qtycon arecord_with 'where' template_body
+  : 'template' template_header arecord_with 'where' template_body
                                                  {% mkTemplateDecls $2 $3 $5 }
+
+template_header :: { Located TemplateHeader }
+  : qtycon                                       { sL1 $1 $ TemplateHeader [] $1 [] }
+  | qtycon varids0                               { sLL $1 $> $ TemplateHeader [] $1 (unLoc $2) }
+  | qtycon varids0 '=>' qtycon varids0           { sLL $1 $> $ TemplateHeader [sLL $1 $2 $ TemplateConstraint $1 (unLoc $2)] $4 (unLoc $5) }
 
 template_body :: { Located [Located TemplateBodyDecl] }
   : '{' template_body_decls '}'                  { sLL $1 $3 (reverse (unLoc $2)) }

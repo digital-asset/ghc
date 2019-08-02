@@ -40,6 +40,8 @@ module   RdrHsSyn (
         ChoiceConsuming(..),
         FlexChoiceData(..),
         KeyData(..),
+        TemplateConstraint(..),
+        TemplateHeader(..),
         TemplateBodyDecl(..),
         mkTemplateDecls,
         applyToParties,
@@ -2143,6 +2145,17 @@ data KeyData = KeyData {
   , kdMaintainers :: LHsExpr GhcPs
   }
 
+data TemplateConstraint = TemplateConstraint {
+    tcConstraintName :: Located RdrName
+  , tcTypeVars :: [Located RdrName]
+  }
+
+data TemplateHeader = TemplateHeader {
+    thContext :: [Located TemplateConstraint]
+  , thTemplateName :: Located RdrName
+  , thTypeVars :: [Located RdrName]
+  }
+
 -- | Any declaration that can appear within a template
 data TemplateBodyDecl
   = EnsureDecl (LHsExpr GhcPs)
@@ -2740,14 +2753,22 @@ flexChoiceToCombinedChoice :: FlexChoiceData -> CombinedChoiceData
 flexChoiceToCombinedChoice (FlexChoiceData controller choiceData) =
   CombinedChoiceData controller choiceData True
 
+templateConstraintToContext :: TemplateConstraint -> HsContext GhcPs
+templateConstraintToContext (TemplateConstraint constraint@(L conLoc _) tyVars) =
+  [foldl' mkAppWithLocs constraintType $ map mkTyVar tyVars]
+    where
+      mkAppWithLocs ty1@(L l1 _) ty2@(L l2 _) = L (combineSrcSpans l1 l2) (HsAppTy noExt ty1 ty2)
+      constraintType = L conLoc $ HsTyVar NoExt NotPromoted constraint
+      mkTyVar tv@(L tvLoc _) = L tvLoc $ HsTyVar noExt NotPromoted tv
+
 -- | Desugar a @template@ declaration into a list of decls (this is
 -- called from 'Parser.y').
 mkTemplateDecls
-  :: Located RdrName -- The template name
-  -> LHsType GhcPs -- The template's record type
+  :: Located TemplateHeader              -- Template constraints, name and type variables
+  -> LHsType GhcPs                       -- Template parameter record type
   -> Located [Located TemplateBodyDecl]  -- Template declarations
-  -> P (OrdList (LHsDecl GhcPs)) -- Desugared declarations
-mkTemplateDecls lname@(L nloc name) fields (L _ decls) = do
+  -> P (OrdList (LHsDecl GhcPs))         -- Desugared declarations
+mkTemplateDecls (L _ (TemplateHeader _ lname@(L nloc name) _)) fields (L _ decls) = do
   vtb@ValidTemplateBody{..} <- validateTemplateBodyDecls nloc (extractTemplateBodyDecls decls)
   -- Calculate 'T' data constructor info from 'T' and the record type denoted by 'fields'.
   ci@(conName, _, _) <- splitCon [fields, dataName]
