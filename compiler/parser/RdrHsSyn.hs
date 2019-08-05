@@ -2654,16 +2654,14 @@ mkTemplateInstanceMethods templateName =
 
 -- | Construct an @instance TInstance where@
 -- and an @instance TInstance => Template T where ...@
-mkTemplateInstanceDecls :: String -> [LHsDecl GhcPs]
-mkTemplateInstanceDecls templateName =
+mkTemplateInstanceDecl :: String -> LHsDecl GhcPs
+mkTemplateInstanceDecl templateName =
   let instType = mkUnqualClass $ templateName ++ "Instance"
       templateClass = mkQualClass "Template"
       templateType = mkUnqualType templateName
       templateInstQualType = HsQualTy noExt (noLoc [instType]) (mkAppTy templateClass templateType)
       instanceMethods = listToBag $ mkTemplateInstanceMethods templateName
-      baseInstance = instDecl $ classInstDecl (unLoc instType) emptyBag
-      templateInstance = instDecl $ classInstDecl templateInstQualType instanceMethods
-  in [baseInstance, templateInstance]
+  in  instDecl $ classInstDecl templateInstQualType instanceMethods
 
 mkChoiceInstanceDecl :: String -> ChoiceData -> LHsDecl GhcPs
 mkChoiceInstanceDecl templateName ChoiceData{..} =
@@ -2785,7 +2783,7 @@ mkTemplateDecls
   -> LHsType GhcPs                       -- Template parameter record type
   -> Located [Located TemplateBodyDecl]  -- Template declarations
   -> P (OrdList (LHsDecl GhcPs))         -- Desugared declarations
-mkTemplateDecls (L _ th@(TemplateHeader _ lname@(L nloc name) _tyVars)) fields (L _ decls) = do
+mkTemplateDecls (L _ th@(TemplateHeader _ lname@(L nloc name) tyVars)) fields (L _ decls) = do
   vtb@ValidTemplateBody{..} <- validateTemplateBodyDecls nloc (extractTemplateBodyDecls decls)
   -- Calculate 'T' data constructor info from 'T' and the record type denoted by 'fields'.
   ci@(conName, _, _) <- splitCon [fields, dataName]
@@ -2794,15 +2792,18 @@ mkTemplateDecls (L _ th@(TemplateHeader _ lname@(L nloc name) _tyVars)) fields (
     -- ^ Do not include Archive data type as it has a shared definition across templates
   let choicesWithArchive = archiveChoiceData : vtbChoices
       templateInstClassDecl = mkTemplateInstanceClassDecl nloc conName th vtb{vtbChoices = choicesWithArchive}
-      templateInstanceDecls = mkTemplateInstanceDecls templateName
+      -- Automatically create the base class (`TInstance`) instance if the template is not generic (i.e. has no type parameters)
+      baseInstance = if null tyVars then [instDecl $ classInstDecl (unLoc tInstanceClass) emptyBag] else []
+      templateInstance = mkTemplateInstanceDecl templateName
       choiceInstanceDecls = map (mkChoiceInstanceDecl templateName . ccdChoiceData) choicesWithArchive
       keyInstanceDecl = mkKeyInstanceDecl templateName <$> kdKeyType . unLoc <$> vtbKeyData
   return $ toOL $ templateDataDecl : choiceDataDecls
-               ++ [templateInstClassDecl] ++ templateInstanceDecls
+               ++ [templateInstClassDecl] ++ baseInstance ++ [templateInstance]
                ++ choiceInstanceDecls ++ maybeToList keyInstanceDecl
   where
     dataName = L nloc (HsTyVar noExt NotPromoted lname)
     templateName = occNameString $ rdrNameOcc name
+    tInstanceClass = mkUnqualClass $ templateName ++ "Instance"
     archiveChoiceData = CombinedChoiceData
       { ccdControllers = mkApp
                            (mkUnqualVar $ mkVarOcc $ prefixTemplateClassMethod $ "signatory" ++ templateName)
