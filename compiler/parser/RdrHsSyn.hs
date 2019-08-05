@@ -2265,6 +2265,7 @@ mkParenTy :: LHsType GhcPs -> LHsType GhcPs
 mkParenTy = noLoc . HsParTy noExt
 
 -- Representations of DAML type constructors
+
 mkContractId :: LHsType GhcPs -> LHsType GhcPs
 mkContractId = mkAppTy (mkQualType "ContractId")
 
@@ -2273,6 +2274,9 @@ mkUpdate = mkAppTy (mkQualType "Update")
 
 partiesType :: LHsType GhcPs
 partiesType = noLoc $ HsListTy noExt $ mkQualType "Party"
+
+mkAppTyVars :: LHsType GhcPs -> [Located RdrName] -> LHsType GhcPs
+mkAppTyVars tyCon tyVars = foldl' mkAppTy tyCon $ map rdrNameToType tyVars
 
 mkVarPat :: OccName -> Pat GhcPs
 mkVarPat = XPat . noLoc . VarPat noExt . noLoc . mkRdrUnqual
@@ -2402,11 +2406,11 @@ mkTemplateClassInstanceSigs templateName tyVars mbKeyType =
     mkSig methodName ty =
       let fullMethodName = noLoc $ mkRdrUnqual $ mkVarOcc $ prefixTemplateClassMethod $ methodName ++ templateName
       in  noLoc $ ClassOpSig noExt False [fullMethodName] (HsIB noExt ty)
-    mbParenTy = if null tyVars then id else mkParenTy
-    templateType = foldl' mkAppTy (mkUnqualType templateName) (map rdrNameToType tyVars)
+    templateType = mkAppTyVars (mkUnqualType templateName) tyVars
     contractId = mkContractId $ mbParenTy templateType
     hasKeyType = mkQualType "HasKey" `mkAppTy` mbParenTy templateType
     pairType ty1 ty2 = noLoc $ HsTupleTy noExt HsBoxedOrConstraintTuple [ty1, ty2]
+    mbParenTy = if null tyVars then id else mkParenTy
 
 -- | Utility for constructing a class declaration.
 classDecl ::
@@ -2449,10 +2453,10 @@ classInstDecl tyApps funBinds =
 instDecl :: ClsInstDecl GhcPs -> LHsDecl GhcPs
 instDecl cid = noLoc $ InstD noExt $ ClsInstD noExt cid
 
-mkTemplateChoiceSigs :: String -> ChoiceData -> [LSig GhcPs]
-mkTemplateChoiceSigs templateName ChoiceData{..} =
+mkTemplateChoiceSigs :: String -> [Located RdrName] -> ChoiceData -> [LSig GhcPs]
+mkTemplateChoiceSigs templateName tyVars ChoiceData{..} =
   map (uncurry mkSig)
-    [ ("consumption", consuming `mkAppTy` templateType)
+    [ ("consumption", consuming `mkAppTy` mbParenTy templateType)
     , ("controller", mkFunTy templateType (mkFunTy choiceType partiesType))
     , ("action", mkFunTy contractId (mkFunTy templateType (mkFunTy choiceType choiceReturnType)))
     , ("exercise", mkFunTy contractId (mkFunTy choiceType choiceReturnType))
@@ -2464,11 +2468,12 @@ mkTemplateChoiceSigs templateName ChoiceData{..} =
                              methodName ++ templateName ++ choiceName
       in  noLoc $ ClassOpSig noExt False [fullMethodName] (HsIB noExt ty)
     choiceName = occNameString $ rdrNameOcc $ unLoc cdChoiceName
-    choiceType = noLoc $ HsTyVar NoExt NotPromoted cdChoiceName
-    templateType = mkUnqualType templateName
-    contractId = mkContractId templateType
+    choiceType = mkAppTyVars (rdrNameToType cdChoiceName) tyVars
+    templateType = mkAppTyVars (mkUnqualType templateName) tyVars
+    contractId = mkContractId $ mbParenTy templateType
     choiceReturnType = mkUpdate $ mkParenTy cdChoiceReturnTy
     consuming = unLoc . mkQualType . show . fromMaybe PreConsuming <$> cdChoiceConsuming
+    mbParenTy = if null tyVars then id else mkParenTy
 
 mkTemplateClassMethod ::
      String                      -- method name
@@ -2642,7 +2647,7 @@ mkTemplateInstanceClassDecl templateLoc conName TemplateHeader{..} vtb@ValidTemp
       keyType = kdKeyType . unLoc <$> vtbKeyData
       templateSigs = mkTemplateClassInstanceSigs templateName thTypeVars keyType
       templateMethods = mkTemplateClassInstanceMethods conName vtb
-      choiceSigs = concatMap (mkTemplateChoiceSigs templateName) (map ccdChoiceData vtbChoices)
+      choiceSigs = concatMap (mkTemplateChoiceSigs templateName thTypeVars) (map ccdChoiceData vtbChoices)
       choiceMethods = concatMap (mkTemplateChoiceMethods conName vtbLetBindings) vtbChoices
       sigs = templateSigs ++ choiceSigs
       methods = listToBag $ templateMethods ++ choiceMethods
