@@ -2652,14 +2652,18 @@ mkTemplateInstanceMethods templateName =
       let bodyName = mkUnqualVar $ mkVarOcc $ prefixTemplateClassMethod $ methodName ++ templateName
       in  mkTemplateClassMethod methodName [] bodyName Nothing
 
+-- TODO(RJR): Pass in type variables for TInstance context
+withInstanceContext :: String -> LHsType GhcPs -> HsType GhcPs
+withInstanceContext templateName =
+  let tInstanceClass = mkUnqualClass $ templateName ++ "Instance"
+  in  HsQualTy noExt (noLoc [tInstanceClass])
+
 -- | Construct an @instance TInstance where@
 -- and an @instance TInstance => Template T where ...@
 mkTemplateInstanceDecl :: String -> LHsDecl GhcPs
 mkTemplateInstanceDecl templateName =
-  let instType = mkUnqualClass $ templateName ++ "Instance"
-      templateClass = mkQualClass "Template"
-      templateType = mkUnqualType templateName
-      templateInstQualType = HsQualTy noExt (noLoc [instType]) (mkAppTy templateClass templateType)
+  let templateClass = mkQualClass "Template" `mkAppTy` mkUnqualType templateName
+      templateInstQualType = withInstanceContext templateName templateClass
       instanceMethods = listToBag $ mkTemplateInstanceMethods templateName
   in  instDecl $ classInstDecl templateInstQualType instanceMethods
 
@@ -2667,25 +2671,25 @@ mkChoiceInstanceDecl :: String -> ChoiceData -> LHsDecl GhcPs
 mkChoiceInstanceDecl templateName ChoiceData{..} =
   let choiceType = noLoc $ HsTyVar noExt NotPromoted cdChoiceName
       returnType = noLoc $ HsParTy noExt cdChoiceReturnTy
-      choiceClass = mkQualClass "Choice"
       templateType = mkUnqualType templateName
-      instanceType = choiceClass `mkAppTy` templateType `mkAppTy` choiceType `mkAppTy` returnType
+      choiceClass = mkQualClass "Choice" `mkAppTy` templateType `mkAppTy` choiceType `mkAppTy` returnType
+      instanceType = withInstanceContext templateName choiceClass
       exerciseMethodBody =
         mkUnqualVar $ mkVarOcc $ prefixTemplateClassMethod $
           "exercise" ++ templateName ++ occNameString (rdrNameOcc (unLoc cdChoiceName))
       exerciseMethod = mkTemplateClassMethod "exercise" [] exerciseMethodBody Nothing
-  in instDecl $ classInstDecl (unLoc instanceType) $ listToBag [exerciseMethod]
+  in instDecl $ classInstDecl instanceType $ listToBag [exerciseMethod]
 
 mkKeyInstanceDecl :: String -> LHsType GhcPs -> LHsDecl GhcPs
 mkKeyInstanceDecl templateName keyType =
-  let templateKeyClass = mkQualClass "TemplateKey"
-      templateType = mkUnqualType templateName
-      instanceType = templateKeyClass `mkAppTy` templateType `mkAppTy` keyType
+  let templateType = mkUnqualType templateName
+      keyClass = mkQualClass "TemplateKey" `mkAppTy` templateType `mkAppTy` keyType
+      instanceType = withInstanceContext templateName keyClass
       mkMethod methodName =
         let methodBody = mkUnqualVar $ mkVarOcc $ prefixTemplateClassMethod $ methodName ++ templateName
         in  mkTemplateClassMethod methodName [] methodBody Nothing
       methods = map mkMethod ["key", "fetchByKey", "lookupByKey"]
-  in instDecl $ classInstDecl (unLoc instanceType) (listToBag methods)
+  in instDecl $ classInstDecl instanceType $ listToBag methods
 
 -- | Contruct a @data S = S {...}@ for a single choice 'S'.
 mkTemplateChoiceDecls
