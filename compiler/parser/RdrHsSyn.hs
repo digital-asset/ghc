@@ -2468,7 +2468,9 @@ mkTemplateChoiceSigs templateName tyVars ChoiceData{..} =
                              methodName ++ templateName ++ choiceName
       in  noLoc $ ClassOpSig noExt False [fullMethodName] (HsIB noExt ty)
     choiceName = occNameString $ rdrNameOcc $ unLoc cdChoiceName
-    choiceType = mkAppTyVars (rdrNameToType cdChoiceName) tyVars
+    choiceType = case choiceName of
+      "Archive" -> rdrNameToType cdChoiceName
+      _ -> mkAppTyVars (rdrNameToType cdChoiceName) tyVars
     templateType = mkAppTyVars (mkUnqualType templateName) tyVars
     contractId = mkContractId $ mbParenTy templateType
     choiceReturnType = mkUpdate $ mkParenTy cdChoiceReturnTy
