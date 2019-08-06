@@ -121,7 +121,6 @@ import PrelNames        ( allNameStrings )
 import SrcLoc
 import Unique           ( hasKey )
 import OrdList          ( OrdList, fromOL, toOL )
-import Bag              ( emptyBag, consBag )
 import Outputable
 import FastString
 import Maybes
@@ -2276,17 +2275,17 @@ mkUpdate = mkAppTy (mkQualType "Update")
 partiesType :: LHsType GhcPs
 partiesType = noLoc $ HsListTy noExt $ mkQualType "Party"
 
-mkAppTyVars :: LHsType GhcPs -> [Located RdrName] -> LHsType GhcPs
-mkAppTyVars tyCon tyVars = foldl' mkAppTy tyCon $ map rdrNameToType tyVars
+mkAppTyArgs :: LHsType GhcPs -> [Located RdrName] -> LHsType GhcPs
+mkAppTyArgs tyCon tyVars = foldl' mkAppTy tyCon $ map rdrNameToType tyVars
 
 mkTemplateType :: String -> [Located RdrName] -> LHsType GhcPs
-mkTemplateType templateName tyVars = mkAppTyVars (mkUnqualType templateName) tyVars
+mkTemplateType templateName tyVars = mkAppTyArgs (mkUnqualType templateName) tyVars
 
 mkChoiceType :: Located RdrName -> [Located RdrName] -> LHsType GhcPs
 mkChoiceType choiceName tyVars =
   case occNameString $ rdrNameOcc $ unLoc choiceName of
     "Archive" -> rdrNameToType choiceName
-    _ -> mkAppTyVars (rdrNameToType choiceName) tyVars
+    _ -> mkAppTyArgs (rdrNameToType choiceName) tyVars
 
 mkVarPat :: OccName -> Pat GhcPs
 mkVarPat = XPat . noLoc . VarPat noExt . noLoc . mkRdrUnqual
@@ -2677,7 +2676,7 @@ mkTemplateInstanceMethods templateName =
 withInstanceContext :: String -> [Located RdrName] -> LHsType GhcPs -> HsType GhcPs
 withInstanceContext templateName tyVars =
   let tInstanceClass = mkUnqualClass $ templateName ++ "Instance"
-      tInstanceConstraint = mkAppTyVars tInstanceClass tyVars
+      tInstanceConstraint = mkAppTyArgs tInstanceClass tyVars
   in  HsQualTy noExt (noLoc [tInstanceConstraint])
 
 -- | Construct an @instance TInstance where@
@@ -2863,7 +2862,11 @@ mkTemplateInstance
   -> [Located RdrName]
   -> P (OrdList (LHsDecl GhcPs))
 mkTemplateInstance instName templateName tyArgs =
-  return $ toOL []
+  let templateString = occNameString $ rdrNameOcc $ unLoc templateName
+      tInstanceClass = mkUnqualClass $ templateString ++ "Instance"
+      instType = unLoc $ mkAppTyArgs tInstanceClass tyArgs
+      inst = instDecl $ classInstDecl instType emptyBag
+  in  return $ toOL [inst]
 
 -----------------------------------------------------------------------------
 -- utilities for foreign declarations
