@@ -2683,34 +2683,42 @@ withInstanceContext templateName =
 -- and an @instance TInstance => Template T where ...@
 mkTemplateInstanceDecl :: String -> [Located RdrName] -> LHsDecl GhcPs
 mkTemplateInstanceDecl templateName tyVars =
-  let templateClass = mkQualClass "Template" `mkAppTy` mkUnqualType templateName
+  let templateType = mkTemplateType templateName tyVars
+      templateClass = mkQualClass "Template" `mkAppTy` mbParenTy templateType
       templateInstQualType = withInstanceContext templateName templateClass
       instanceMethods = listToBag $ mkTemplateInstanceMethods templateName
   in  instDecl $ classInstDecl templateInstQualType instanceMethods
+  where
+    mbParenTy = if null tyVars then id else mkParenTy
 
 mkChoiceInstanceDecl :: String -> [Located RdrName] -> ChoiceData -> LHsDecl GhcPs
 mkChoiceInstanceDecl templateName tyVars ChoiceData{..} =
-  let choiceType = noLoc $ HsTyVar noExt NotPromoted cdChoiceName
-      returnType = noLoc $ HsParTy noExt cdChoiceReturnTy
-      templateType = mkUnqualType templateName
-      choiceClass = mkQualClass "Choice" `mkAppTy` templateType `mkAppTy` choiceType `mkAppTy` returnType
+  let templateType = mkTemplateType templateName tyVars
+      choiceType = mkChoiceType cdChoiceName tyVars
+      returnType = mkParenTy cdChoiceReturnTy
+      choiceClass = foldl' mkAppTy (mkQualClass "Choice")
+                      [mbParenTy templateType, mbParenTy choiceType, returnType]
       instanceType = withInstanceContext templateName choiceClass
       exerciseMethodBody =
         mkUnqualVar $ mkVarOcc $ prefixTemplateClassMethod $
           "exercise" ++ templateName ++ occNameString (rdrNameOcc (unLoc cdChoiceName))
       exerciseMethod = mkTemplateClassMethod "exercise" [] exerciseMethodBody Nothing
   in instDecl $ classInstDecl instanceType $ listToBag [exerciseMethod]
+  where
+    mbParenTy = if null tyVars then id else mkParenTy
 
 mkKeyInstanceDecl :: String -> [Located RdrName] -> LHsType GhcPs -> LHsDecl GhcPs
 mkKeyInstanceDecl templateName tyVars keyType =
-  let templateType = mkUnqualType templateName
-      keyClass = mkQualClass "TemplateKey" `mkAppTy` templateType `mkAppTy` keyType
+  let templateType = mkTemplateType templateName tyVars
+      keyClass = mkQualClass "TemplateKey" `mkAppTy` mbParenTy templateType `mkAppTy` keyType
       instanceType = withInstanceContext templateName keyClass
       mkMethod methodName =
         let methodBody = mkUnqualVar $ mkVarOcc $ prefixTemplateClassMethod $ methodName ++ templateName
         in  mkTemplateClassMethod methodName [] methodBody Nothing
       methods = map mkMethod ["key", "fetchByKey", "lookupByKey"]
   in instDecl $ classInstDecl instanceType $ listToBag methods
+  where
+    mbParenTy = if null tyVars then id else mkParenTy
 
 -- | Contruct a @data S a b c = S {...}@ for a single choice 'S'.
 mkChoiceDataDecls
