@@ -2861,12 +2861,19 @@ mkTemplateInstance
   -> Located RdrName
   -> [Located RdrName]
   -> P (OrdList (LHsDecl GhcPs))
-mkTemplateInstance instName templateName tyArgs =
+mkTemplateInstance instName templateName tyArgs = do
   let templateString = occNameString $ rdrNameOcc $ unLoc templateName
       tInstanceClass = mkUnqualClass $ templateString ++ "Instance"
       instType = unLoc $ mkAppTyArgs tInstanceClass tyArgs
       inst = instDecl $ classInstDecl instType emptyBag
-  in  return $ toOL [inst]
+      newTypeCon = L (getLoc instName) $ mkConDeclH98 (rdrNameToDataName instName) Nothing Nothing $
+                     PrefixCon [mkAppTyArgs (rdrNameToType templateName) tyArgs]
+  decl <- mkTyData (getLoc instName) NewType Nothing (noLoc (Nothing, rdrNameToType instName)) Nothing [newTypeCon] (noLoc [])
+  let newType = fmap (TyClD noExt) decl
+  return $ toOL [newType, inst]
+  where
+    rdrNameToDataName (L loc name) =
+      L loc $ mkRdrUnqual $ mkDataOcc $ occNameString $ rdrNameOcc name
 
 -----------------------------------------------------------------------------
 -- utilities for foreign declarations
