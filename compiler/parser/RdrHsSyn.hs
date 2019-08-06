@@ -2278,6 +2278,15 @@ partiesType = noLoc $ HsListTy noExt $ mkQualType "Party"
 mkAppTyVars :: LHsType GhcPs -> [Located RdrName] -> LHsType GhcPs
 mkAppTyVars tyCon tyVars = foldl' mkAppTy tyCon $ map rdrNameToType tyVars
 
+mkTemplateType :: String -> [Located RdrName] -> LHsType GhcPs
+mkTemplateType templateName tyVars = mkAppTyVars (mkUnqualType templateName) tyVars
+
+mkChoiceType :: Located RdrName -> [Located RdrName] -> LHsType GhcPs
+mkChoiceType choiceName tyVars =
+  case occNameString $ rdrNameOcc $ unLoc choiceName of
+    "Archive" -> rdrNameToType choiceName
+    _ -> mkAppTyVars (rdrNameToType choiceName) tyVars
+
 mkVarPat :: OccName -> Pat GhcPs
 mkVarPat = XPat . noLoc . VarPat noExt . noLoc . mkRdrUnqual
 
@@ -2406,7 +2415,7 @@ mkTemplateClassInstanceSigs templateName tyVars mbKeyType =
     mkSig methodName ty =
       let fullMethodName = noLoc $ mkRdrUnqual $ mkVarOcc $ prefixTemplateClassMethod $ methodName ++ templateName
       in  noLoc $ ClassOpSig noExt False [fullMethodName] (HsIB noExt ty)
-    templateType = mkAppTyVars (mkUnqualType templateName) tyVars
+    templateType = mkTemplateType templateName tyVars
     contractId = mkContractId $ mbParenTy templateType
     hasKeyType = mkQualType "HasKey" `mkAppTy` mbParenTy templateType
     pairType ty1 ty2 = noLoc $ HsTupleTy noExt HsBoxedOrConstraintTuple [ty1, ty2]
@@ -2468,10 +2477,8 @@ mkTemplateChoiceSigs templateName tyVars ChoiceData{..} =
                              methodName ++ templateName ++ choiceName
       in  noLoc $ ClassOpSig noExt False [fullMethodName] (HsIB noExt ty)
     choiceName = occNameString $ rdrNameOcc $ unLoc cdChoiceName
-    choiceType = case choiceName of
-      "Archive" -> rdrNameToType cdChoiceName
-      _ -> mkAppTyVars (rdrNameToType cdChoiceName) tyVars
-    templateType = mkAppTyVars (mkUnqualType templateName) tyVars
+    choiceType = mkChoiceType cdChoiceName tyVars
+    templateType = mkTemplateType templateName tyVars
     contractId = mkContractId $ mbParenTy templateType
     choiceReturnType = mkUpdate $ mkParenTy cdChoiceReturnTy
     consuming = unLoc . mkQualType . show . fromMaybe PreConsuming <$> cdChoiceConsuming
@@ -2674,15 +2681,15 @@ withInstanceContext templateName =
 
 -- | Construct an @instance TInstance where@
 -- and an @instance TInstance => Template T where ...@
-mkTemplateInstanceDecl :: String -> LHsDecl GhcPs
-mkTemplateInstanceDecl templateName =
+mkTemplateInstanceDecl :: String -> [Located RdrName] -> LHsDecl GhcPs
+mkTemplateInstanceDecl templateName tyVars =
   let templateClass = mkQualClass "Template" `mkAppTy` mkUnqualType templateName
       templateInstQualType = withInstanceContext templateName templateClass
       instanceMethods = listToBag $ mkTemplateInstanceMethods templateName
   in  instDecl $ classInstDecl templateInstQualType instanceMethods
 
-mkChoiceInstanceDecl :: String -> ChoiceData -> LHsDecl GhcPs
-mkChoiceInstanceDecl templateName ChoiceData{..} =
+mkChoiceInstanceDecl :: String -> [Located RdrName] -> ChoiceData -> LHsDecl GhcPs
+mkChoiceInstanceDecl templateName tyVars ChoiceData{..} =
   let choiceType = noLoc $ HsTyVar noExt NotPromoted cdChoiceName
       returnType = noLoc $ HsParTy noExt cdChoiceReturnTy
       templateType = mkUnqualType templateName
@@ -2694,8 +2701,8 @@ mkChoiceInstanceDecl templateName ChoiceData{..} =
       exerciseMethod = mkTemplateClassMethod "exercise" [] exerciseMethodBody Nothing
   in instDecl $ classInstDecl instanceType $ listToBag [exerciseMethod]
 
-mkKeyInstanceDecl :: String -> LHsType GhcPs -> LHsDecl GhcPs
-mkKeyInstanceDecl templateName keyType =
+mkKeyInstanceDecl :: String -> [Located RdrName] -> LHsType GhcPs -> LHsDecl GhcPs
+mkKeyInstanceDecl templateName tyVars keyType =
   let templateType = mkUnqualType templateName
       keyClass = mkQualClass "TemplateKey" `mkAppTy` templateType `mkAppTy` keyType
       instanceType = withInstanceContext templateName keyClass
@@ -2813,9 +2820,9 @@ mkTemplateDecls (L _ th@(TemplateHeader _ lname@(L nloc name) tyVars)) fields (L
       templateInstClassDecl = mkTemplateInstanceClassDecl nloc conName th vtb{vtbChoices = choicesWithArchive}
       -- Automatically create the base class (`TInstance`) instance if the template is not generic (i.e. has no type parameters)
       baseInstance = if null tyVars then [instDecl $ classInstDecl (unLoc tInstanceClass) emptyBag] else []
-      templateInstance = mkTemplateInstanceDecl templateName
-      choiceInstanceDecls = map (mkChoiceInstanceDecl templateName . ccdChoiceData) choicesWithArchive
-      keyInstanceDecl = mkKeyInstanceDecl templateName <$> kdKeyType . unLoc <$> vtbKeyData
+      templateInstance = mkTemplateInstanceDecl templateName tyVars
+      choiceInstanceDecls = map (mkChoiceInstanceDecl templateName tyVars . ccdChoiceData) choicesWithArchive
+      keyInstanceDecl = mkKeyInstanceDecl templateName tyVars <$> kdKeyType . unLoc <$> vtbKeyData
   return $ toOL $ templateDataDecl : choiceDataDecls
                ++ [templateInstClassDecl] ++ baseInstance ++ [templateInstance]
                ++ choiceInstanceDecls ++ maybeToList keyInstanceDecl
