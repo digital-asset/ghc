@@ -2673,11 +2673,11 @@ mkTemplateInstanceMethods templateName =
       let bodyName = mkUnqualVar $ mkVarOcc $ prefixTemplateClassMethod $ methodName ++ templateName
       in  mkTemplateClassMethod methodName [] bodyName Nothing
 
--- TODO(RJR): Pass in type variables for TInstance context
-withInstanceContext :: String -> LHsType GhcPs -> HsType GhcPs
-withInstanceContext templateName =
+withInstanceContext :: String -> [Located RdrName] -> LHsType GhcPs -> HsType GhcPs
+withInstanceContext templateName tyVars =
   let tInstanceClass = mkUnqualClass $ templateName ++ "Instance"
-  in  HsQualTy noExt (noLoc [tInstanceClass])
+      tInstanceConstraint = mkAppTyVars tInstanceClass tyVars
+  in  HsQualTy noExt (noLoc [tInstanceConstraint])
 
 -- | Construct an @instance TInstance where@
 -- and an @instance TInstance => Template T where ...@
@@ -2685,7 +2685,7 @@ mkTemplateInstanceDecl :: String -> [Located RdrName] -> LHsDecl GhcPs
 mkTemplateInstanceDecl templateName tyVars =
   let templateType = mkTemplateType templateName tyVars
       templateClass = mkQualClass "Template" `mkAppTy` mbParenTy templateType
-      templateInstQualType = withInstanceContext templateName templateClass
+      templateInstQualType = withInstanceContext templateName tyVars templateClass
       instanceMethods = listToBag $ mkTemplateInstanceMethods templateName
   in  instDecl $ classInstDecl templateInstQualType instanceMethods
   where
@@ -2698,7 +2698,7 @@ mkChoiceInstanceDecl templateName tyVars ChoiceData{..} =
       returnType = mkParenTy cdChoiceReturnTy
       choiceClass = foldl' mkAppTy (mkQualClass "Choice")
                       [mbParenTy templateType, mbParenTy choiceType, returnType]
-      instanceType = withInstanceContext templateName choiceClass
+      instanceType = withInstanceContext templateName tyVars choiceClass
       exerciseMethodBody =
         mkUnqualVar $ mkVarOcc $ prefixTemplateClassMethod $
           "exercise" ++ templateName ++ occNameString (rdrNameOcc (unLoc cdChoiceName))
@@ -2711,7 +2711,7 @@ mkKeyInstanceDecl :: String -> [Located RdrName] -> LHsType GhcPs -> LHsDecl Ghc
 mkKeyInstanceDecl templateName tyVars keyType =
   let templateType = mkTemplateType templateName tyVars
       keyClass = mkQualClass "TemplateKey" `mkAppTy` mbParenTy templateType `mkAppTy` keyType
-      instanceType = withInstanceContext templateName keyClass
+      instanceType = withInstanceContext templateName tyVars keyClass
       mkMethod methodName =
         let methodBody = mkUnqualVar $ mkVarOcc $ prefixTemplateClassMethod $ methodName ++ templateName
         in  mkTemplateClassMethod methodName [] methodBody Nothing
