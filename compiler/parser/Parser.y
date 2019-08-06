@@ -1159,11 +1159,22 @@ topdecl :: { LHsDecl GhcPs }
 template_decl :: { OrdList (LHsDecl GhcPs) }
   : 'template' template_header arecord_with 'where' template_body
                                                  {% mkTemplateDecls $2 $3 $5 }
+  | 'template' 'instance' qtycon '=' qtycon qtycons
+                                                 {% mkTemplateInstance $3 $5 (unLoc $6) }
 
+-- TODO(RJR): Generalize to multiple constraints
 template_header :: { Located TemplateHeader }
   : qtycon                                       { sL1 $1 $ TemplateHeader [] $1 [] }
-  | qtycon varids0                               { sLL $1 $> $ TemplateHeader [] $1 (unLoc $2) }
-  | qtycon varids0 '=>' qtycon varids0           { sLL $1 $> $ TemplateHeader [sLL $1 $2 $ TemplateConstraint $1 (unLoc $2)] $4 (unLoc $5) }
+  | qtycon tyvars                                { sLL $1 $> $ TemplateHeader [] $1 (unLoc $2) }
+  | qtycon tyvars '=>' qtycon tyvars             { sLL $1 $> $ TemplateHeader [sLL $1 $2 $ TemplateConstraint $1 (unLoc $2)] $4 (unLoc $5) }
+
+-- Type variables (in the order the user wrote)
+tyvars :: { Located [Located RdrName] }
+  : varids0                                      { fmap reverse $1 }
+
+qtycons :: { Located [Located RdrName] }
+  : {- empty -}                                  { noLoc [] }
+  | qtycon qtycons                               { sLL $1 $> ($1 : unLoc $2) }
 
 template_body :: { Located [Located TemplateBodyDecl] }
   : '{' template_body_decls '}'                  { sLL $1 $3 (reverse (unLoc $2)) }

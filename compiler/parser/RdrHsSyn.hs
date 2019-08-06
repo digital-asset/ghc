@@ -44,6 +44,7 @@ module   RdrHsSyn (
         TemplateHeader(..),
         TemplateBodyDecl(..),
         mkTemplateDecls,
+        mkTemplateInstance,
         applyToParties,
         applyConcat,
 
@@ -2853,6 +2854,16 @@ mkTemplateDecls (L _ th@(TemplateHeader _ lname@(L nloc name) tyVars)) fields (L
       , ccdFlexible = False
       }
     pureUnit = mkApp (mkUnqualVar $ mkVarOcc "pure") (noLoc $ ExplicitTuple noExt [] Boxed)
+
+-- Generate `newtype` and `instance` declarations corresponding to a
+-- `template instance InstanceName = T Arg1 .. ArgN`.
+mkTemplateInstance
+  :: Located RdrName
+  -> Located RdrName
+  -> [Located RdrName]
+  -> P (OrdList (LHsDecl GhcPs))
+mkTemplateInstance instName templateName tyArgs =
+  return $ toOL []
 
 -----------------------------------------------------------------------------
 -- utilities for foreign declarations
