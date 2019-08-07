@@ -40,7 +40,6 @@ module   RdrHsSyn (
         ChoiceConsuming(..),
         FlexChoiceData(..),
         KeyData(..),
-        TemplateConstraint(..),
         TemplateHeader(..),
         TemplateBodyDecl(..),
         mkTemplateDecls,
@@ -2145,13 +2144,13 @@ data KeyData = KeyData {
   , kdMaintainers :: LHsExpr GhcPs
   }
 
-data TemplateConstraint = TemplateConstraint {
+{-data TemplateConstraint = TemplateConstraint {
     tcConstraintName :: Located RdrName
   , tcTypeVars :: [Located RdrName]
-  }
+  }-}
 
 data TemplateHeader = TemplateHeader {
-    thConstraints :: [Located TemplateConstraint]
+    thContext :: LHsContext GhcPs
   , thTemplateName :: Located RdrName
   , thTypeVars :: [Located RdrName]
   }
@@ -2627,7 +2626,7 @@ mkTemplateClassInstanceMethods conName ValidTemplateBody{..} =
                           (mkUnqualVar $ mkVarOcc "cid"))
                         (mkQualVar $ mkDataOcc "Archive")
 
-templateConstraintsToContext :: [Located TemplateConstraint] -> LHsContext GhcPs
+{-templateConstraintsToContext :: [Located TemplateConstraint] -> LHsContext GhcPs
 templateConstraintsToContext constraints =
   let loc = foldl' combineSrcSpans noSrcSpan $ map getLoc constraints
       ctx = map (fmap templateConstraintToType) constraints
@@ -2639,7 +2638,7 @@ templateConstraintToType (TemplateConstraint constraint@(L conLoc _) tyVars) =
     where
       mkAppWithLocs ty1@(L l1 _) ty2@(L l2 _) = L (combineSrcSpans l1 l2) (HsAppTy noExt ty1 ty2)
       constraintType = L conLoc $ HsTyVar NoExt NotPromoted constraint
-      mkTyVar tv@(L tvLoc _) = L tvLoc $ HsTyVar noExt NotPromoted tv
+      mkTyVar tv@(L tvLoc _) = L tvLoc $ HsTyVar noExt NotPromoted tv-}
 
 -- | Construct a @class TInstance@.
 mkTemplateInstanceClassDecl ::
@@ -2651,7 +2650,7 @@ mkTemplateInstanceClassDecl ::
 mkTemplateInstanceClassDecl templateLoc conName TemplateHeader{..} vtb@ValidTemplateBody{..} =
   let templateName = occNameString $ rdrNameOcc $ unLoc conName
       className = L templateLoc $ mkRdrUnqual $ mkClsOcc $ templateName ++ "Instance"
-      context = templateConstraintsToContext thConstraints
+      -- context = templateConstraintsToContext thConstraints
       tyVars = mkHsQTvs $ map rdrNameToTyVar thTypeVars
       keyType = kdKeyType . unLoc <$> vtbKeyData
       templateSigs = mkTemplateClassInstanceSigs templateName thTypeVars keyType
@@ -2660,7 +2659,7 @@ mkTemplateInstanceClassDecl templateLoc conName TemplateHeader{..} vtb@ValidTemp
       choiceMethods = concatMap (mkTemplateChoiceMethods conName vtbLetBindings) vtbChoices
       sigs = templateSigs ++ choiceSigs
       methods = listToBag $ templateMethods ++ choiceMethods
-  in noLoc $ TyClD noExt $ classDecl className context tyVars sigs methods
+  in noLoc $ TyClD noExt $ classDecl className thContext tyVars sigs methods
 
 mkTemplateInstanceMethods ::
      String            -- template name
