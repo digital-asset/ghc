@@ -1162,11 +1162,25 @@ template_decl :: { OrdList (LHsDecl GhcPs) }
   | 'template' 'instance' qtycon '=' qtycon qtycons
                                                  {% mkTemplateInstance $3 $5 (unLoc $6) }
 
--- TODO(RJR): Generalize to multiple constraints
 template_header :: { Located TemplateHeader }
   : qtycon                                       { sL1 $1 $ TemplateHeader [] $1 [] }
   | qtycon tyvars                                { sLL $1 $> $ TemplateHeader [] $1 (unLoc $2) }
-  | qtycon tyvars '=>' qtycon tyvars             { sLL $1 $> $ TemplateHeader [sLL $1 $2 $ TemplateConstraint $1 (unLoc $2)] $4 (unLoc $5) }
+  | constraint '=>' qtycon tyvars                { sLL $1 $> $ TemplateHeader [$1] $3 (unLoc $4) }
+  | '(' constraints ')' '=>' qtycon tyvars       { sLL $1 $> $ TemplateHeader (unLoc $2) $5 (unLoc $6) }
+
+-- NOTE(RJR): Typeclass contexts are parsed as types elsewhere in the parser,
+-- but doing that naively here results in failure to parse templates without constraints.
+-- Hence we write custom parsing for template constraints here.
+constraints :: { Located [Located TemplateConstraint] }
+  : {- empty -}                                  { noLoc [] }
+  | constraints_one                              { $1 }
+
+constraints_one :: { Located [Located TemplateConstraint] }
+  : constraint                                   { sL1 $1 [$1] }
+  | constraint ',' constraints_one               { sLL $1 $> ($1 : unLoc $3) }
+
+constraint :: { Located TemplateConstraint }
+  : qtycon tyvars                                { sLL $1 $2 $ TemplateConstraint $1 (unLoc $2) }
 
 -- Type variables (in the order the user wrote)
 tyvars :: { Located [Located RdrName] }
