@@ -1163,8 +1163,7 @@ template_decl :: { OrdList (LHsDecl GhcPs) }
                                                  {% mkTemplateInstance $3 $5 (unLoc $6) }
 
 template_header :: { Located TemplateHeader }
-  : qtycon                                       { sL1 $1 $ TemplateHeader [] $1 [] }
-  | qtycon tyvars                                { sLL $1 $> $ TemplateHeader [] $1 (unLoc $2) }
+  : qtycon tyvars                                { sLL $1 $> $ TemplateHeader [] $1 (unLoc $2) }
   | constraint '=>' qtycon tyvars                { sLL $1 $> $ TemplateHeader [$1] $3 (unLoc $4) }
   | '(' constraints ')' '=>' qtycon tyvars       { sLL $1 $> $ TemplateHeader (unLoc $2) $5 (unLoc $6) }
 
