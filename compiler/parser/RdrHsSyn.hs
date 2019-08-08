@@ -2276,7 +2276,7 @@ partiesType :: LHsType GhcPs
 partiesType = noLoc $ HsListTy noExt $ mkQualType "Party"
 
 mkAppTyArgs :: LHsType GhcPs -> [Located RdrName] -> LHsType GhcPs
-mkAppTyArgs tyCon tyVars = foldl' mkAppTy tyCon $ map rdrNameToType tyVars
+mkAppTyArgs tyCon tyVars = mkHsAppTys tyCon $ map rdrNameToType tyVars
 
 mkTemplateType :: String -> [Located RdrName] -> LHsType GhcPs
 mkTemplateType templateName tyVars = mkAppTyArgs (mkUnqualType templateName) tyVars
