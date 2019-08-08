@@ -2287,6 +2287,10 @@ mkChoiceType choiceName tyVars =
     "Archive" -> rdrNameToType choiceName
     _ -> mkAppTyArgs (rdrNameToType choiceName) tyVars
 
+-- | Scheme for naming the `TInstance` class from the template name `T`.
+mkInstanceClassName :: String -> String
+mkInstanceClassName templateName = templateName ++ "Instance"
+
 mkVarPat :: OccName -> Pat GhcPs
 mkVarPat = XPat . noLoc . VarPat noExt . noLoc . mkRdrUnqual
 
@@ -2650,7 +2654,7 @@ mkTemplateInstanceClassDecl ::
   -> LHsDecl GhcPs               -- resulting declaration
 mkTemplateInstanceClassDecl templateLoc conName TemplateHeader{..} vtb@ValidTemplateBody{..} =
   let templateName = occNameString $ rdrNameOcc $ unLoc conName
-      className = L templateLoc $ mkRdrUnqual $ mkClsOcc $ templateName ++ "Instance"
+      className = L templateLoc $ mkRdrUnqual $ mkClsOcc $ mkInstanceClassName templateName
       context = templateConstraintsToContext thConstraints
       tyVars = mkHsQTvs $ map rdrNameToTyVar thTypeVars
       keyType = kdKeyType . unLoc <$> vtbKeyData
@@ -2675,7 +2679,7 @@ mkTemplateInstanceMethods templateName =
 
 withInstanceContext :: String -> [Located RdrName] -> LHsType GhcPs -> HsType GhcPs
 withInstanceContext templateName tyVars =
-  let tInstanceClass = mkUnqualClass $ templateName ++ "Instance"
+  let tInstanceClass = mkUnqualClass $ mkInstanceClassName templateName
       tInstanceConstraint = mkAppTyArgs tInstanceClass tyVars
   in  HsQualTy noExt (noLoc [tInstanceConstraint])
 
@@ -2813,10 +2817,10 @@ flexChoiceToCombinedChoice (FlexChoiceData controller choiceData) =
 -- | Desugar a @template@ declaration into a list of decls (this is
 -- called from 'Parser.y').
 mkTemplateDecls
-  :: Located TemplateHeader              -- Template constraints, name and type variables
-  -> LHsType GhcPs                       -- Template parameter record type
-  -> Located [Located TemplateBodyDecl]  -- Template declarations
-  -> P (OrdList (LHsDecl GhcPs))         -- Desugared declarations
+  :: Located TemplateHeader              -- ^ Template constraints, name and type variables
+  -> LHsType GhcPs                       -- ^ Template parameter record type
+  -> Located [Located TemplateBodyDecl]  -- ^ Template declarations
+  -> P (OrdList (LHsDecl GhcPs))         -- ^ Desugared declarations
 mkTemplateDecls (L _ th@(TemplateHeader _ lname@(L nloc name) tyVars)) fields (L _ decls) = do
   vtb@ValidTemplateBody{..} <- validateTemplateBodyDecls nloc (extractTemplateBodyDecls decls)
   -- Calculate 'T' data constructor info from 'T' and the record type denoted by 'fields'.
@@ -2837,7 +2841,7 @@ mkTemplateDecls (L _ th@(TemplateHeader _ lname@(L nloc name) tyVars)) fields (L
   where
     dataName = L nloc (HsTyVar noExt NotPromoted lname)
     templateName = occNameString $ rdrNameOcc name
-    tInstanceClass = mkUnqualClass $ templateName ++ "Instance"
+    tInstanceClass = mkUnqualClass $ mkInstanceClassName templateName
     archiveChoiceData = CombinedChoiceData
       { ccdControllers = mkApp
                            (mkUnqualVar $ mkVarOcc $ prefixTemplateClassMethod $ "signatory" ++ templateName)
@@ -2863,7 +2867,7 @@ mkTemplateInstance
   -> P (OrdList (LHsDecl GhcPs))  -- ^ Resulting declarations (`newtype` and `instance` of `TInstance` class)
 mkTemplateInstance instName templateName tyArgs = do
   let templateString = occNameString $ rdrNameOcc $ unLoc templateName
-      tInstanceClass = mkUnqualClass $ templateString ++ "Instance"
+      tInstanceClass = mkUnqualClass $ mkInstanceClassName templateString
       instType = unLoc $ mkHsAppTys tInstanceClass tyArgs
       inst = instDecl $ classInstDecl instType emptyBag
       newTypeCon = L (getLoc instName) $ mkConDeclH98 (rdrNameToDataName instName) Nothing Nothing $
