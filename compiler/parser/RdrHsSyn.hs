@@ -2862,22 +2862,30 @@ mkTemplateDecls (L _ th@(TemplateHeader _ lname@(L nloc name) tyVars)) fields (L
 -- `template instance InstanceName = T Arg1 .. ArgN`.
 mkTemplateInstance
   :: Located RdrName              -- ^ Name given to template instance
-  -> Located RdrName              -- ^ Name of generic template
-  -> [LHsType GhcPs]              -- ^ Type arguments to generic template
+  -> LHsType GhcPs                -- ^ Application of generic template to type arguments
   -> P (OrdList (LHsDecl GhcPs))  -- ^ Resulting declarations (`newtype` and `instance` of `TInstance` class)
-mkTemplateInstance instName templateName tyArgs = do
-  let templateString = occNameString $ rdrNameOcc $ unLoc templateName
-      tInstanceClass = mkUnqualClass $ mkInstanceClassName templateString
-      instType = unLoc $ mkHsAppTys tInstanceClass tyArgs
-      inst = instDecl $ classInstDecl instType emptyBag
-      newTypeCon = L (getLoc instName) $ mkConDeclH98 (rdrNameToDataName instName) Nothing Nothing $
-                     PrefixCon [mkHsAppTys (rdrNameToType templateName) tyArgs]
-  decl <- mkTyData (getLoc instName) NewType Nothing (noLoc (Nothing, rdrNameToType instName)) Nothing [newTypeCon] (noLoc [])
-  let newType = fmap (TyClD noExt) decl
-  return $ toOL [newType, inst]
+mkTemplateInstance instName@(L instLoc _) templateApp
+  | (templateType, tyArgs) <- splitHsAppTysPs templateApp
+  , L _ (HsTyVar NoExt NotPromoted templateName) <- templateType = do
+      let templateString = occNameString $ rdrNameOcc $ unLoc templateName
+          tInstanceClass = mkUnqualClass $ mkInstanceClassName templateString
+          instType = unLoc $ mkHsAppTys tInstanceClass tyArgs
+          instDataName = mkRdrUnqual . mkDataOcc . occNameString . rdrNameOcc <$> instName
+          newTypeCon = L instLoc $ mkConDeclH98 instDataName Nothing Nothing $ PrefixCon [templateApp]
+      newTypeDecl <- mkTyData instLoc NewType Nothing (noLoc (Nothing, rdrNameToType instName)) Nothing [newTypeCon] (noLoc [])
+      return $ toOL [TyClD noExt <$> newTypeDecl, instDecl $ classInstDecl instType emptyBag]
+  | otherwise = addFatalError instLoc $ text $
+      occNameString (rdrNameOcc (unLoc instName)) ++ " is not an application of a generic template"
+      -- TODO(RJR): Create helper function for Located RdrName -> String
+
+-- Simplified version of splitHsAppTys for splitting a type application
+splitHsAppTysPs :: LHsType GhcPs -> (LHsType GhcPs, [LHsType GhcPs])
+splitHsAppTysPs t = go t []
   where
-    rdrNameToDataName (L loc name) =
-      L loc $ mkRdrUnqual $ mkDataOcc $ occNameString $ rdrNameOcc name
+    go :: LHsType GhcPs -> [LHsType GhcPs] -> (LHsType GhcPs, [LHsType GhcPs])
+    go (L _ (HsAppTy _ f a)) as = go f (a : as)
+    go f                     as = (f, as)
+
 
 -----------------------------------------------------------------------------
 -- utilities for foreign declarations
