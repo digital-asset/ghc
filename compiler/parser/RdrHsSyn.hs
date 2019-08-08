@@ -2857,17 +2857,17 @@ mkTemplateDecls (L _ th@(TemplateHeader _ lname@(L nloc name) tyVars)) fields (L
 -- Generate `newtype` and `instance` declarations corresponding to a
 -- `template instance InstanceName = T Arg1 .. ArgN`.
 mkTemplateInstance
-  :: Located RdrName
-  -> Located RdrName
-  -> [Located RdrName]
-  -> P (OrdList (LHsDecl GhcPs))
+  :: Located RdrName              -- ^ Name given to template instance
+  -> Located RdrName              -- ^ Name of generic template
+  -> [LHsType GhcPs]              -- ^ Type arguments to generic template
+  -> P (OrdList (LHsDecl GhcPs))  -- ^ Resulting declarations (`newtype` and `instance` of `TInstance` class)
 mkTemplateInstance instName templateName tyArgs = do
   let templateString = occNameString $ rdrNameOcc $ unLoc templateName
       tInstanceClass = mkUnqualClass $ templateString ++ "Instance"
-      instType = unLoc $ mkAppTyArgs tInstanceClass tyArgs
+      instType = unLoc $ mkHsAppTys tInstanceClass tyArgs
       inst = instDecl $ classInstDecl instType emptyBag
       newTypeCon = L (getLoc instName) $ mkConDeclH98 (rdrNameToDataName instName) Nothing Nothing $
-                     PrefixCon [mkAppTyArgs (rdrNameToType templateName) tyArgs]
+                     PrefixCon [mkHsAppTys (rdrNameToType templateName) tyArgs]
   decl <- mkTyData (getLoc instName) NewType Nothing (noLoc (Nothing, rdrNameToType instName)) Nothing [newTypeCon] (noLoc [])
   let newType = fmap (TyClD noExt) decl
   return $ toOL [newType, inst]
