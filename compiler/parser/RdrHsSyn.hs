@@ -2283,7 +2283,7 @@ mkTemplateType templateName tyVars = mkAppTyArgs (mkUnqualType templateName) tyV
 
 mkChoiceType :: Located RdrName -> [Located RdrName] -> LHsType GhcPs
 mkChoiceType choiceName tyVars =
-  case occNameString $ rdrNameOcc $ unLoc choiceName of
+  case rdrNameToString choiceName of
     "Archive" -> rdrNameToType choiceName
     _ -> mkAppTyArgs (rdrNameToType choiceName) tyVars
 
@@ -2301,6 +2301,9 @@ rdrNameToTyVar lname@(L loc _) = L loc $ UserTyVar noExt lname
 
 rdrNameToType :: Located RdrName -> LHsType GhcPs
 rdrNameToType lname@(L loc _) = L loc $ HsTyVar noExt NotPromoted lname
+
+rdrNameToString :: Located RdrName -> String
+rdrNameToString = occNameString . rdrNameOcc . unLoc
 
 -- | Calculates the application of a 'toParties' function to an
 -- expression (invoked from Parser.y).
@@ -2478,9 +2481,8 @@ mkTemplateChoiceSigs templateName tyVars ChoiceData{..} =
     mkSig :: String -> LHsType GhcPs -> LSig GhcPs
     mkSig methodName ty =
       let fullMethodName = noLoc $ mkRdrUnqual $ mkVarOcc $ prefixTemplateClassMethod $
-                             methodName ++ templateName ++ choiceName
+                             methodName ++ templateName ++ rdrNameToString cdChoiceName
       in  noLoc $ ClassOpSig noExt False [fullMethodName] (HsIB noExt ty)
-    choiceName = occNameString $ rdrNameOcc $ unLoc cdChoiceName
     choiceType = mkChoiceType cdChoiceName tyVars
     templateType = mkTemplateType templateName tyVars
     contractId = mkContractId $ mbParenTy templateType
@@ -2532,8 +2534,7 @@ mkTemplateChoiceMethods conName binds (CombinedChoiceData controllers ChoiceData
       in  mkTemplateClassMethod fullMethodName args body $
             -- General rule: only include template bindings for methods with `this` in scope
             if includeBindings then Just binds else Nothing
-    templateName = occNameString $ rdrNameOcc $ unLoc conName
-    choiceName = occNameString $ rdrNameOcc $ unLoc cdChoiceName
+    (templateName, choiceName) = (rdrNameToString conName, rdrNameToString cdChoiceName)
     self = mkVarPat $ mkVarOcc "self"
     this = asPatRecWild "this" conName
     choiceNameToRdrName = if choiceName == "Archive" then qualifyDesugar else mkRdrUnqual
@@ -2620,7 +2621,7 @@ mkTemplateClassInstanceMethods conName ValidTemplateBody{..} =
       in  mkTemplateClassMethod fullMethodName args methodBody $
             -- General rule: only include template bindings for methods with `this` in scope
             if includeBindings then Just vtbLetBindings else Nothing
-    templateName = occNameString $ rdrNameOcc $ unLoc conName
+    templateName = rdrNameToString conName
     this = asPatRecWild "this" conName
     cid = mkVarPat $ mkVarOcc "cid"
     key = mkVarPat $ mkVarOcc "key"
@@ -2639,11 +2640,10 @@ templateConstraintsToContext constraints =
 
 templateConstraintToType :: TemplateConstraint -> HsType GhcPs
 templateConstraintToType (TemplateConstraint constraint@(L conLoc _) tyVars) =
-  unLoc $ foldl' mkAppWithLocs constraintType $ map mkTyVar tyVars
+  unLoc $ foldl' mkAppWithLocs constraintType $ map rdrNameToType tyVars
     where
       mkAppWithLocs ty1@(L l1 _) ty2@(L l2 _) = L (combineSrcSpans l1 l2) (HsAppTy noExt ty1 ty2)
       constraintType = L conLoc $ HsTyVar NoExt NotPromoted constraint
-      mkTyVar tv@(L tvLoc _) = L tvLoc $ HsTyVar noExt NotPromoted tv
 
 -- | Construct a @class TInstance@.
 mkTemplateInstanceClassDecl ::
@@ -2653,7 +2653,7 @@ mkTemplateInstanceClassDecl ::
   -> ValidTemplateBody           -- sanitized template body
   -> LHsDecl GhcPs               -- resulting declaration
 mkTemplateInstanceClassDecl templateLoc conName TemplateHeader{..} vtb@ValidTemplateBody{..} =
-  let templateName = occNameString $ rdrNameOcc $ unLoc conName
+  let templateName = rdrNameToString conName
       className = L templateLoc $ mkRdrUnqual $ mkClsOcc $ mkInstanceClassName templateName
       context = templateConstraintsToContext thConstraints
       tyVars = mkHsQTvs $ map rdrNameToTyVar thTypeVars
@@ -2705,7 +2705,7 @@ mkChoiceInstanceDecl templateName tyVars ChoiceData{..} =
       instanceType = withInstanceContext templateName tyVars choiceClass
       exerciseMethodBody =
         mkUnqualVar $ mkVarOcc $ prefixTemplateClassMethod $
-          "exercise" ++ templateName ++ occNameString (rdrNameOcc (unLoc cdChoiceName))
+          "exercise" ++ templateName ++ rdrNameToString cdChoiceName
       exerciseMethod = mkTemplateClassMethod "exercise" [] exerciseMethodBody Nothing
   in instDecl $ classInstDecl instanceType $ listToBag [exerciseMethod]
   where
@@ -2821,10 +2821,10 @@ mkTemplateDecls
   -> LHsType GhcPs                       -- ^ Template parameter record type
   -> Located [Located TemplateBodyDecl]  -- ^ Template declarations
   -> P (OrdList (LHsDecl GhcPs))         -- ^ Desugared declarations
-mkTemplateDecls (L _ th@(TemplateHeader _ lname@(L nloc name) tyVars)) fields (L _ decls) = do
+mkTemplateDecls (L _ th@(TemplateHeader _ lname@(L nloc _) tyVars)) fields (L _ decls) = do
   vtb@ValidTemplateBody{..} <- validateTemplateBodyDecls nloc (extractTemplateBodyDecls decls)
   -- Calculate 'T' data constructor info from 'T' and the record type denoted by 'fields'.
-  ci@(conName, _, _) <- splitCon [fields, dataName]
+  ci@(conName, _, _) <- splitCon [fields, rdrNameToType lname]
   let templateDataDecl = mkTemplateDataDecl (combineLocs lname fields) lname tyVars ci
   choiceDataDecls <- concat <$> traverse (mkChoiceDataDecls tyVars) (map ccdChoiceData vtbChoices)
     -- ^ Do not include Archive data type as it has a shared definition across templates
@@ -2839,8 +2839,7 @@ mkTemplateDecls (L _ th@(TemplateHeader _ lname@(L nloc name) tyVars)) fields (L
                ++ [templateInstClassDecl] ++ baseInstance ++ [templateInstance]
                ++ choiceInstanceDecls ++ maybeToList keyInstanceDecl
   where
-    dataName = L nloc (HsTyVar noExt NotPromoted lname)
-    templateName = occNameString $ rdrNameOcc name
+    templateName = rdrNameToString lname
     tInstanceClass = mkUnqualClass $ mkInstanceClassName templateName
     archiveChoiceData = CombinedChoiceData
       { ccdControllers = mkApp
@@ -2867,16 +2866,13 @@ mkTemplateInstance
 mkTemplateInstance instName@(L instLoc _) templateApp
   | (templateType, tyArgs) <- splitHsAppTysPs templateApp
   , L _ (HsTyVar NoExt NotPromoted templateName) <- templateType = do
-      let templateString = occNameString $ rdrNameOcc $ unLoc templateName
-          tInstanceClass = mkUnqualClass $ mkInstanceClassName templateString
+      let tInstanceClass = mkUnqualClass $ mkInstanceClassName $ rdrNameToString templateName
           instType = unLoc $ mkHsAppTys tInstanceClass tyArgs
-          instDataName = mkRdrUnqual . mkDataOcc . occNameString . rdrNameOcc <$> instName
+          instDataName = L instLoc $ mkRdrUnqual $ mkDataOcc $ rdrNameToString $ instName
           newTypeCon = L instLoc $ mkConDeclH98 instDataName Nothing Nothing $ PrefixCon [templateApp]
       newTypeDecl <- mkTyData instLoc NewType Nothing (noLoc (Nothing, rdrNameToType instName)) Nothing [newTypeCon] (noLoc [])
       return $ toOL [TyClD noExt <$> newTypeDecl, instDecl $ classInstDecl instType emptyBag]
-  | otherwise = addFatalError instLoc $ text $
-      occNameString (rdrNameOcc (unLoc instName)) ++ " is not an application of a generic template"
-      -- TODO(RJR): Create helper function for Located RdrName -> String
+  | otherwise = addFatalError instLoc $ text $ rdrNameToString instName ++ " is not an application of a generic template"
 
 -- Simplified version of splitHsAppTys for splitting a type application
 splitHsAppTysPs :: LHsType GhcPs -> (LHsType GhcPs, [LHsType GhcPs])
