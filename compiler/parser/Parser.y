@@ -1157,8 +1157,33 @@ topdecl :: { LHsDecl GhcPs }
 -- Templates
 --
 template_decl :: { OrdList (LHsDecl GhcPs) }
-  : 'template' qtycon arecord_with 'where' template_body
+  : 'template' template_header arecord_with 'where' template_body
                                                  {% mkTemplateDecls $2 $3 $5 }
+  | 'template' 'instance' qtycon '=' btype_      {% mkTemplateInstance $3 $5 }
+    -- ^ parse template application as a single type application
+
+template_header :: { Located TemplateHeader }
+  : qtycon tyvars                                { sLL $1 $> $ TemplateHeader [] $1 (unLoc $2) }
+  | constraint '=>' qtycon tyvars                { sLL $1 $> $ TemplateHeader [$1] $3 (unLoc $4) }
+  | '(' constraints ')' '=>' qtycon tyvars       { sLL $1 $> $ TemplateHeader (unLoc $2) $5 (unLoc $6) }
+
+-- NOTE(RJR): Typeclass contexts are parsed as types elsewhere in the parser,
+-- but doing that naively here results in failure to parse templates without constraints.
+-- Hence we write custom parsing for template constraints here.
+constraints :: { Located [Located TemplateConstraint] }
+  : {- empty -}                                  { noLoc [] }
+  | constraints_one                              { $1 }
+
+constraints_one :: { Located [Located TemplateConstraint] }
+  : constraint                                   { sL1 $1 [$1] }
+  | constraint ',' constraints_one               { sLL $1 $> ($1 : unLoc $3) }
+
+constraint :: { Located TemplateConstraint }
+  : qtycon tyvars                                { sLL $1 $2 $ TemplateConstraint $1 (unLoc $2) }
+
+-- Type variables (in the order the user wrote)
+tyvars :: { Located [Located RdrName] }
+  : varids0                                      { fmap reverse $1 }
 
 template_body :: { Located [Located TemplateBodyDecl] }
   : '{' template_body_decls '}'                  { sLL $1 $3 (reverse (unLoc $2)) }
