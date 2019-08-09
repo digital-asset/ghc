@@ -2639,11 +2639,8 @@ templateConstraintsToContext constraints =
   in  L loc ctx
 
 templateConstraintToType :: TemplateConstraint -> HsType GhcPs
-templateConstraintToType (TemplateConstraint constraint@(L conLoc _) tyVars) =
-  unLoc $ foldl' mkAppWithLocs constraintType $ map rdrNameToType tyVars
-    where
-      mkAppWithLocs ty1@(L l1 _) ty2@(L l2 _) = L (combineSrcSpans l1 l2) (HsAppTy noExt ty1 ty2)
-      constraintType = L conLoc $ HsTyVar NoExt NotPromoted constraint
+templateConstraintToType (TemplateConstraint constraint tyVars) =
+  unLoc $ mkAppTyArgs (rdrNameToType constraint) tyVars
 
 -- | Construct a @class TInstance@.
 mkTemplateInstanceClassDecl ::
