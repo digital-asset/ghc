@@ -2181,7 +2181,7 @@ data TemplateBodyDecls = TemplateBodyDecls {
     , tbdMaintainers :: [LHsExpr GhcPs]
     }
 
--- Result of validating TemplateBodyDecls, with stricter types
+-- | Result of validating TemplateBodyDecls, with stricter types
 data ValidTemplateBody = ValidTemplateBody {
       vtbEnsure :: Maybe (LHsExpr GhcPs)
     , vtbSignatories :: LHsExpr GhcPs
@@ -2264,8 +2264,6 @@ unitType = noLoc $ HsTupleTy noExt HsBoxedOrConstraintTuple []
 mkParenTy :: LHsType GhcPs -> LHsType GhcPs
 mkParenTy = noLoc . HsParTy noExt
 
--- Representations of DAML type constructors
-
 mkContractId :: LHsType GhcPs -> LHsType GhcPs
 mkContractId = mkAppTy (mkQualType "ContractId")
 
@@ -2294,7 +2292,7 @@ mkInstanceClassName templateName = templateName ++ "Instance"
 mkVarPat :: OccName -> Pat GhcPs
 mkVarPat = XPat . noLoc . VarPat noExt . noLoc . mkRdrUnqual
 
--- Type variable conversions
+-- Name conversions
 
 rdrNameToTyVar :: Located RdrName -> LHsTyVarBndr GhcPs
 rdrNameToTyVar lname@(L loc _) = L loc $ UserTyVar noExt lname
@@ -2430,12 +2428,12 @@ mkTemplateClassInstanceSigs templateName tyVars mbKeyType =
 
 -- | Utility for constructing a class declaration.
 classDecl ::
-     Located RdrName   -- class name
-  -> LHsContext GhcPs  -- constraint context
-  -> LHsQTyVars GhcPs  -- type variables
-  -> [LSig GhcPs]      -- method signatures
-  -> LHsBinds GhcPs    -- default method bindings
-  -> TyClDecl GhcPs    -- resulting class declaration
+     Located RdrName   -- ^ class name
+  -> LHsContext GhcPs  -- ^ constraint context
+  -> LHsQTyVars GhcPs  -- ^ type variables
+  -> [LSig GhcPs]      -- ^ method signatures
+  -> LHsBinds GhcPs    -- ^ default method bindings
+  -> TyClDecl GhcPs    -- ^ resulting class declaration
 classDecl className context tyVars sigs methods =
   ClassDecl { tcdCExt = noExt
             , tcdCtxt = context
@@ -2491,11 +2489,11 @@ mkTemplateChoiceSigs templateName tyVars ChoiceData{..} =
     mbParenTy = if null tyVars then id else mkParenTy
 
 mkTemplateClassMethod ::
-     String                      -- method name
-  -> [Pat GhcPs]                 -- method argument patterns
-  -> LHsExpr GhcPs               -- function body
-  -> Maybe (LHsLocalBinds GhcPs) -- local binds
-  -> LHsBind GhcPs               -- function binding
+     String                      -- ^ method name
+  -> [Pat GhcPs]                 -- ^ method argument patterns
+  -> LHsExpr GhcPs               -- ^ function body
+  -> Maybe (LHsLocalBinds GhcPs) -- ^ local binds
+  -> LHsBind GhcPs               -- ^ function binding
 mkTemplateClassMethod rawMethodName args body mBinds = do
   let fullMethodName = noLoc $ mkRdrUnqual $ mkVarOcc rawMethodName
       ctx = matchContext fullMethodName
@@ -2517,10 +2515,10 @@ mkMagic methodName =
         noLoc $ HsTyLit noExt $ HsStrTy NoSourceText $ mkFastString methodName
 
 mkTemplateChoiceMethods ::
-     Located RdrName             -- template data ctor 'T'
-  -> LHsLocalBinds GhcPs         -- local binds
-  -> CombinedChoiceData          -- choice data and controllers
-  -> [LHsBind GhcPs]             -- function binding
+     Located RdrName             -- ^ template data ctor 'T'
+  -> LHsLocalBinds GhcPs         -- ^ local binds
+  -> CombinedChoiceData          -- ^ choice data and controllers
+  -> [LHsBind GhcPs]             -- ^ function binding
 mkTemplateChoiceMethods conName binds (CombinedChoiceData controllers ChoiceData{..} flexible) =
   [ mkMethod "consumption" []                    False consuming
   , mkMethod "controller"  [this, controllerArg] True  controllers
@@ -2545,13 +2543,13 @@ mkTemplateChoiceMethods conName binds (CombinedChoiceData controllers ChoiceData
 
 -- | Construct a @data X a b c = X {...} deriving (Eq, Show)@
 mkTemplateDataDecl ::
-     SrcSpan                 -- the span to associate with
-  -> Located RdrName         -- template 'T' (or choice 'S')
-  -> [Located RdrName]       -- type variables 'a b c'
+     SrcSpan                 -- ^ the span to associate with
+  -> Located RdrName         -- ^ template 'T' (or choice 'S')
+  -> [Located RdrName]       -- ^ type variables 'a b c'
   -> (Located RdrName
      , HsConDeclDetails GhcPs
-     , Maybe LHsDocString)   -- result of 'splitCon'
-  -> LHsDecl GhcPs           -- the resulting @data@ declaration
+     , Maybe LHsDocString)   -- ^ result of 'splitCon'
+  -> LHsDecl GhcPs           -- ^ the resulting @data@ declaration
 mkTemplateDataDecl loc lname@(L nloc _name) tyVars (conName, conDetails, conDoc) =
   -- NOTE (SM, SF): We assume that the program does not have any
   -- BangPatterns on the fields here. Otherwise, "re-jigging" with
@@ -2593,9 +2591,9 @@ mkTemplateDataDecl loc lname@(L nloc _name) tyVars (conName, conDetails, conDoc)
   in L loc $ TyClD noExt dataDecl
 
 mkTemplateClassInstanceMethods ::
-     Located RdrName             -- ctor 'T'
-  -> ValidTemplateBody           -- sanitized template body
-  -> [LHsBind GhcPs]             -- method declarations
+     Located RdrName             -- ^ ctor 'T'
+  -> ValidTemplateBody           -- ^ sanitized template body
+  -> [LHsBind GhcPs]             -- ^ method declarations
 mkTemplateClassInstanceMethods conName ValidTemplateBody{..} =
   [ mkMethod "signatory" [this] True  vtbSignatories
   , mkMethod "observer"  [this] True  vtbObservers
@@ -2644,11 +2642,11 @@ templateConstraintToType (TemplateConstraint constraint tyVars) =
 
 -- | Construct a @class TInstance@.
 mkTemplateInstanceClassDecl ::
-     SrcSpan                     -- location of data 'T'
-  -> Located RdrName             -- constructor 'T'
-  -> TemplateHeader              -- template constraints and type variables
-  -> ValidTemplateBody           -- sanitized template body
-  -> LHsDecl GhcPs               -- resulting declaration
+     SrcSpan                     -- ^ location of data 'T'
+  -> Located RdrName             -- ^ constructor 'T'
+  -> TemplateHeader              -- ^ template constraints and type variables
+  -> ValidTemplateBody           -- ^ sanitized template body
+  -> LHsDecl GhcPs               -- ^ resulting declaration
 mkTemplateInstanceClassDecl templateLoc conName TemplateHeader{..} vtb@ValidTemplateBody{..} =
   let templateName = rdrNameToString conName
       className = L templateLoc $ mkRdrUnqual $ mkClsOcc $ mkInstanceClassName templateName
@@ -2664,8 +2662,8 @@ mkTemplateInstanceClassDecl templateLoc conName TemplateHeader{..} vtb@ValidTemp
   in noLoc $ TyClD noExt $ classDecl className context tyVars sigs methods
 
 mkTemplateInstanceMethods ::
-     String            -- template name
-  -> [LHsBind GhcPs]   -- method declarations
+     String            -- ^ template name
+  -> [LHsBind GhcPs]   -- ^ method declarations
 mkTemplateInstanceMethods templateName =
   map mkMethod ["signatory", "observer", "ensure", "agreement", "create", "fetch", "archive"]
   where
@@ -2723,9 +2721,9 @@ mkKeyInstanceDecl templateName tyVars keyType =
 
 -- | Contruct a @data S a b c = S {...}@ for a single choice 'S'.
 mkChoiceDataDecls
-  :: [Located RdrName]   -- type variables 'a b c'
-  -> ChoiceData          -- choice data for 'S'
-  -> P [LHsDecl GhcPs]   -- resulting declarations
+  :: [Located RdrName]   -- ^ type variables 'a b c'
+  -> ChoiceData          -- ^ choice data for 'S'
+  -> P [LHsDecl GhcPs]   -- ^ resulting declarations
 mkChoiceDataDecls tyVars ChoiceData{..} = do
   -- Calculate data constructor info from the choice name and (maybe)
   -- record type.
@@ -2743,9 +2741,9 @@ mkChoiceDataDecls tyVars ChoiceData{..} = do
 
 -- | Validate @template@ multiplicity constraints.
 validateTemplateBodyDecls
-  :: SrcSpan             -- location of 'T' in @template T@
-  -> TemplateBodyDecls   -- unvalidated template body
-  -> P ValidTemplateBody -- validated template body
+  :: SrcSpan             -- ^ location of 'T' in @template T@
+  -> TemplateBodyDecls   -- ^ unvalidated template body
+  -> P ValidTemplateBody -- ^ validated template body
 validateTemplateBodyDecls nloc TemplateBodyDecls{..}
   | length tbdEnsures > 1 = report "Multiple 'ensure' declarations"
   | null tbdSignatories = report "Missing 'signatory' declaration"
@@ -2768,12 +2766,12 @@ validateTemplateBodyDecls nloc TemplateBodyDecls{..}
     report :: String -> P a
     report = addFatalError nloc . text
 
-    -- Compute full lists of observers and choices here as it simplifies future processing
+    -- | Compute full lists of observers and choices here as it simplifies future processing
     -- TODO(RJR): Figure out the right place to keep locations
     allObservers = allTemplateObservers (mergeDecls tbdObservers) $ map (fst . unLoc) tbdControlledChoiceGroups
     allChoices = choiceGroupsToCombinedChoices tbdControlledChoiceGroups ++ map (flexChoiceToCombinedChoice . unLoc) tbdFlexChoices
 
-    -- We've validated that keys and maintainers must coexist, so combine them into a single data type.
+    -- | We've validated that keys and maintainers must coexist, so combine them into a single data type.
     keyData = (fmap . fmap)
                 (\(keyExpr, keyType) -> KeyData keyExpr keyType (applyConcat $ noLoc tbdMaintainers))
                 (listToMaybe tbdKeys)
@@ -2787,9 +2785,9 @@ validateTemplateBodyDecls nloc TemplateBodyDecls{..}
     -- | Calculate an expression for the full list of a contract's observers.
     -- TODO(RJR): Figure out how to simplify this
     allTemplateObservers
-      :: Maybe (LHsExpr GhcPs) -- Explicit (list of) observers.
-      -> [LHsExpr GhcPs] -- Contract controllers (list of lists).
-      -> LHsExpr GhcPs -- Union (list) of observers and controllers.
+      :: Maybe (LHsExpr GhcPs) -- ^ Explicit (list of) observers.
+      -> [LHsExpr GhcPs]       -- ^ Contract controllers (list of lists).
+      -> LHsExpr GhcPs         -- ^ Union (list) of observers and controllers.
     allTemplateObservers obs controllers =
       let app = applyConcat (L noSrcSpan $ maybeToList obs ++ controllers)
       in case obs of
@@ -2854,7 +2852,7 @@ mkTemplateDecls (L _ th@(TemplateHeader _ lname@(L nloc _) tyVars)) fields (L _ 
       }
     pureUnit = mkApp (mkUnqualVar $ mkVarOcc "pure") (noLoc $ ExplicitTuple noExt [] Boxed)
 
--- Generate `newtype` and `instance` declarations corresponding to a
+-- | Generate `newtype` and `instance` declarations corresponding to a
 -- `template instance InstanceName = T Arg1 .. ArgN`.
 mkTemplateInstance
   :: Located RdrName              -- ^ Name given to template instance
@@ -2872,7 +2870,7 @@ mkTemplateInstance instName@(L instLoc _) templateApp
       return $ toOL [TyClD noExt <$> newTypeDecl, instDecl $ classInstDecl instType emptyBag]
   | otherwise = addFatalError instLoc $ text $ rdrNameToString instName ++ " is not an application of a generic template"
 
--- Simplified version of splitHsAppTys for splitting a type application
+-- | Simplified version of splitHsAppTys for splitting a type application
 splitHsAppTysPs :: LHsType GhcPs -> (LHsType GhcPs, [LHsType GhcPs])
 splitHsAppTysPs t = go t []
   where
