@@ -2721,9 +2721,7 @@ mkChoiceDataDecls
 mkChoiceDataDecls tyVars ChoiceData{..} = do
   -- Calculate data constructor info from the choice name and (maybe)
   -- record type.
-  let lname@(L nloc _name) = cdChoiceName
-      choiceName = L nloc (HsTyVar noExt NotPromoted lname)
-  choiceConInfo <- splitCon $ maybeToList cdChoiceFields ++ [choiceName]
+  choiceConInfo <- splitCon $ maybeToList cdChoiceFields ++ [rdrNameToType cdChoiceName]
   let dataDecl = mkTemplateDataDecl
                    (combineLocs cdChoiceName
                      (last (void cdChoiceReturnTy :
