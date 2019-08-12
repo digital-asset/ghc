@@ -2563,15 +2563,9 @@ mkTemplateDataDecl loc lname@(L nloc _name) tyVars (conName, conDetails, conDoc)
         , con_args   = conDetails
         , con_doc    = conDoc
         }
-      eqName = L nloc $ qualifyDesugar $ mkClsOcc "Eq"
-      eqTyCl = mkLHsSigType $ L nloc $ HsTyVar noExt NotPromoted eqName
-      showName = L nloc $ qualifyDesugar $ mkClsOcc "Show"
-      showTyCl = mkLHsSigType $ L nloc $ HsTyVar noExt NotPromoted showName
-      derivingClause = L nloc $ HsDerivingClause
-        { deriv_clause_ext = NoExt
-        , deriv_clause_strategy = Nothing
-        , deriv_clause_tys = L nloc [eqTyCl, showTyCl]
-        }
+      mkTyCl = mkLHsSigType . rdrNameToType . L nloc . qualifyDesugar . mkClsOcc
+      derivingTys = L nloc $ map mkTyCl ["Eq", "Show"]
+      derivingClause = L nloc $ HsDerivingClause noExt Nothing derivingTys
       dataDefn = HsDataDefn
         { dd_ext     = noExt
         , dd_ND      = DataType
