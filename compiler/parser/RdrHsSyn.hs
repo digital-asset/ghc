@@ -2866,7 +2866,8 @@ mkTemplateInstance instName@(L instLoc _) templateApp
       let tInstanceClass = mkUnqualClass $ mkInstanceClassName $ rdrNameToString templateName
           instType = unLoc $ mkHsAppTys tInstanceClass tyArgs
           instDataName = L instLoc $ mkRdrUnqual $ mkDataOcc $ rdrNameToString $ instName
-          newTypeCon = L instLoc $ mkConDeclH98 instDataName Nothing Nothing $ PrefixCon [templateApp]
+          newTypeCon = L instLoc $ (mkConDeclH98 instDataName Nothing Nothing $ PrefixCon [templateApp])
+                         { con_doc = Just $ L instLoc $ mkHsDocString "TEMPLATE_INSTANCE" }
       newTypeDecl <- mkTyData instLoc NewType Nothing (noLoc (Nothing, rdrNameToType instName)) Nothing [newTypeCon] (noLoc [])
       return $ toOL [TyClD noExt <$> newTypeDecl, instDecl $ classInstDecl instType emptyBag]
   | otherwise = addFatalError instLoc $ text $ rdrNameToString instName ++ " is not an application of a generic template"
