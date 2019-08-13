@@ -2136,6 +2136,7 @@ data FlexChoiceData = FlexChoiceData {
 data CombinedChoiceData = CombinedChoiceData {
     ccdControllers :: LHsExpr GhcPs
   , ccdChoiceData  :: ChoiceData
+  , ccdTypeVars    :: [Located RdrName] -- ^ Type variables used in the choice parameter type
   , ccdFlexible    :: Bool
   }
 
@@ -2280,10 +2281,7 @@ mkTemplateType :: String -> [Located RdrName] -> LHsType GhcPs
 mkTemplateType templateName tyVars = mkAppTyArgs (mkUnqualType templateName) tyVars
 
 mkChoiceType :: Located RdrName -> [Located RdrName] -> LHsType GhcPs
-mkChoiceType choiceName tyVars =
-  case rdrNameToString choiceName of
-    "Archive" -> rdrNameToType choiceName
-    _ -> mkAppTyArgs (rdrNameToType choiceName) tyVars
+mkChoiceType choiceName tyVars = mkAppTyArgs (rdrNameToType choiceName) tyVars
 
 -- | Scheme for naming the `TInstance` class from the template name `T`.
 mkInstanceClassName :: String -> String
@@ -2504,8 +2502,8 @@ classInstDecl tyApps funBinds =
 instDecl :: ClsInstDecl GhcPs -> LHsDecl GhcPs
 instDecl cid = noLoc $ InstD noExt $ ClsInstD noExt cid
 
-mkTemplateChoiceSigs :: String -> [Located RdrName] -> ChoiceData -> [LSig GhcPs]
-mkTemplateChoiceSigs templateName tyVars ChoiceData{..} =
+mkTemplateChoiceSigs :: String -> [Located RdrName] -> CombinedChoiceData -> [LSig GhcPs]
+mkTemplateChoiceSigs templateName tyVars (CombinedChoiceData _ ChoiceData{..} choiceTyVars _) =
   map (uncurry mkSig)
     [ ("consumption", consuming `mkAppTy` mbParenTy templateType)
     , ("controller", mkFunTy templateType (mkFunTy choiceType partiesType))
@@ -2518,7 +2516,7 @@ mkTemplateChoiceSigs templateName tyVars ChoiceData{..} =
       let fullMethodName = noLoc $ mkRdrUnqual $ mkVarOcc $ prefixTemplateClassMethod $
                              methodName ++ templateName ++ rdrNameToString cdChoiceName
       in  noLoc $ ClassOpSig noExt False [fullMethodName] (HsIB noExt ty)
-    choiceType = mkChoiceType cdChoiceName tyVars
+    choiceType = mkChoiceType cdChoiceName choiceTyVars
     templateType = mkTemplateType templateName tyVars
     contractId = mkContractId $ mbParenTy templateType
     choiceReturnType = mkUpdate $ mkParenTy cdChoiceReturnTy
@@ -2556,7 +2554,7 @@ mkTemplateChoiceMethods ::
   -> LHsLocalBinds GhcPs         -- ^ local binds
   -> CombinedChoiceData          -- ^ choice data and controllers
   -> [LHsBind GhcPs]             -- ^ function binding
-mkTemplateChoiceMethods conName binds (CombinedChoiceData controllers ChoiceData{..} flexible) =
+mkTemplateChoiceMethods conName binds (CombinedChoiceData controllers ChoiceData{..} _ flexible) =
   [ mkMethod "consumption" []                    False consuming
   , mkMethod "controller"  [this, controllerArg] True  controllers
   , mkMethod "action"      [self, this, arg]     True  cdChoiceBody
@@ -2686,7 +2684,7 @@ mkTemplateInstanceClassDecl templateLoc conName TemplateHeader{..} vtb@ValidTemp
       keyType = kdKeyType . unLoc <$> vtbKeyData
       templateSigs = mkTemplateClassInstanceSigs templateName thTypeVars keyType
       templateMethods = mkTemplateClassInstanceMethods conName vtb
-      choiceSigs = concatMap (mkTemplateChoiceSigs templateName thTypeVars) (map ccdChoiceData vtbChoices)
+      choiceSigs = concatMap (mkTemplateChoiceSigs templateName thTypeVars) vtbChoices
       choiceMethods = concatMap (mkTemplateChoiceMethods conName vtbLetBindings) vtbChoices
       sigs = templateSigs ++ choiceSigs
       methods = listToBag $ templateMethods ++ choiceMethods
@@ -2721,10 +2719,10 @@ mkTemplateInstanceDecl templateName tyVars =
   where
     mbParenTy = if null tyVars then id else mkParenTy
 
-mkChoiceInstanceDecl :: String -> [Located RdrName] -> ChoiceData -> LHsDecl GhcPs
-mkChoiceInstanceDecl templateName tyVars ChoiceData{..} =
+mkChoiceInstanceDecl :: String -> [Located RdrName] -> CombinedChoiceData -> LHsDecl GhcPs
+mkChoiceInstanceDecl templateName tyVars (CombinedChoiceData _ ChoiceData{..} choiceTyVars _) =
   let templateType = mkTemplateType templateName tyVars
-      choiceType = mkChoiceType cdChoiceName tyVars
+      choiceType = mkChoiceType cdChoiceName choiceTyVars
       returnType = mkParenTy cdChoiceReturnTy
       choiceClass = foldl' mkAppTy (mkQualClass "Choice")
                       [mbParenTy templateType, mbParenTy choiceType, returnType]
@@ -2752,14 +2750,11 @@ mkKeyInstanceDecl templateName tyVars keyType =
 
 -- | Contruct a @data S a b c = S {...}@ for a single choice 'S'.
 mkChoiceDataDecls
-  :: [Located RdrName]   -- ^ type variables 'a b c'
-  -> ChoiceData          -- ^ choice data for 'S'
+  :: CombinedChoiceData  -- ^ choice data for 'S' including relevant type variables
   -> P [LHsDecl GhcPs]   -- ^ resulting declarations
-mkChoiceDataDecls tyVars ChoiceData{..} = do
-  -- Calculate data constructor info from the choice name and (maybe)
-  -- record type.
+mkChoiceDataDecls (CombinedChoiceData _ ChoiceData{..} tyVars _) = do
+  -- Calculate data constructor info from the choice name and record type.
   choiceConInfo <- splitCon [cdChoiceFields, rdrNameToType cdChoiceName]
-  -- tyVarsInUse <- filterM (\(L _ tv) -> tvOccursInChoiceType tv cdChoiceFields) tyVars
   let dataLoc = combineLocs cdChoiceName cdChoiceFields
       dataDecl = mkTemplateDataDecl dataLoc cdChoiceName tyVars choiceConInfo
       -- Prepend the choice documentation, if any, as a 'DocNext'.
@@ -2830,11 +2825,19 @@ choiceGroupsToCombinedChoices
 choiceGroupsToCombinedChoices = concatMap distributeController
   where
     distributeController (L _ (controller, L _ choices)) = map (makeCombinedChoice controller) choices
-    makeCombinedChoice controller choice = CombinedChoiceData controller (unLoc choice) False
+    makeCombinedChoice controller choice = CombinedChoiceData controller (unLoc choice) [] False
 
 flexChoiceToCombinedChoice :: FlexChoiceData -> CombinedChoiceData
 flexChoiceToCombinedChoice (FlexChoiceData controller choiceData) =
-  CombinedChoiceData controller choiceData True
+  CombinedChoiceData controller choiceData [] True
+
+-- | Find the type variables which are used in the choice parameter type and
+-- add them into the combined choice data.
+addChoiceTypeVars :: [Located RdrName] -> CombinedChoiceData -> P CombinedChoiceData
+addChoiceTypeVars tyVars CombinedChoiceData{..} = do
+  -- Drop type variables which are not used in the parameter record type.
+  ccdTypeVars <- filterM (\(L _ tv) -> tvOccursInChoiceType tv $ cdChoiceFields ccdChoiceData) tyVars
+  return CombinedChoiceData{..}
 
 -- | Desugar a @template@ declaration into a list of decls (this is
 -- called from 'Parser.y').
@@ -2848,14 +2851,15 @@ mkTemplateDecls (L _ th@(TemplateHeader _ lname@(L nloc _) tyVars)) fields (L _ 
   -- Calculate 'T' data constructor info from 'T' and the record type denoted by 'fields'.
   ci@(conName, _, _) <- splitCon [fields, rdrNameToType lname]
   let templateDataDecl = mkTemplateDataDecl (combineLocs lname fields) lname tyVars ci
-  choiceDataDecls <- concat <$> traverse (mkChoiceDataDecls tyVars) (map ccdChoiceData vtbChoices)
-    -- ^ Do not include Archive data type as it has a shared definition across templates
-  let choicesWithArchive = archiveChoiceData : vtbChoices
+  choices <- mapM (addChoiceTypeVars tyVars) vtbChoices -- fill in relevant type vars in choice data
+  choiceDataDecls <- concat <$> traverse mkChoiceDataDecls choices
+    -- ^ Do not create Archive data type as it has a single definition across templates
+  let choicesWithArchive = archiveChoiceData : choices
       templateInstClassDecl = mkTemplateInstanceClassDecl nloc conName th vtb{vtbChoices = choicesWithArchive}
       -- Automatically create the base class (`TInstance`) instance if the template is not generic (i.e. has no type parameters)
       baseInstance = if null tyVars then [instDecl $ classInstDecl (unLoc tInstanceClass) emptyBag] else []
       templateInstance = mkTemplateInstanceDecl templateName tyVars
-      choiceInstanceDecls = map (mkChoiceInstanceDecl templateName tyVars . ccdChoiceData) choicesWithArchive
+      choiceInstanceDecls = map (mkChoiceInstanceDecl templateName tyVars) choicesWithArchive
       keyInstanceDecl = mkKeyInstanceDecl templateName tyVars <$> kdKeyType . unLoc <$> vtbKeyData
   return $ toOL $ templateDataDecl : choiceDataDecls
                ++ [templateInstClassDecl] ++ baseInstance ++ [templateInstance]
@@ -2875,6 +2879,7 @@ mkTemplateDecls (L _ th@(TemplateHeader _ lname@(L nloc _) tyVars)) fields (L _ 
           , cdChoiceConsuming = noLoc $ Just PreConsuming
           , cdChoiceDoc = Nothing
           }
+      , ccdTypeVars = []
       , ccdFlexible = False
       }
     pureUnit = mkApp (mkUnqualVar $ mkVarOcc "pure") (noLoc $ ExplicitTuple noExt [] Boxed)
