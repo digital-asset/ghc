@@ -1259,11 +1259,11 @@ consuming :: { Located (Maybe ChoiceConsuming) }
  | {- empty -}                                   { sL0 Nothing }
 
 -- This production is only used by choice_decl.
-arecord_with_opt :: { Maybe (LHsType GhcPs)}
-  : arecord_with                                 { Just $1 }
+arecord_with_opt :: { LHsType GhcPs }
+  : arecord_with                                 { $1 }
   -- We want choices without arguments to desugar to records without
   -- fields rather than a variant with one case.
-  | {- empty -}                                  { Just $ noLoc $ HsRecTy noExt [] }
+  | {- empty -}                                  { noLoc $ HsRecTy noExt [] }
 
 ensure_decl :: { LHsExpr GhcPs }
   : 'ensure' exp                                 { sLL $1 $> $ unLoc $2 }

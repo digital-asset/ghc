@@ -2118,7 +2118,7 @@ addFatalError loc msg = parseErrorSDoc loc msg
 
 data ChoiceData = ChoiceData {
     cdChoiceName :: Located RdrName
-  , cdChoiceFields :: Maybe (LHsType GhcPs)
+  , cdChoiceFields :: LHsType GhcPs
   , cdChoiceReturnTy :: LHsType GhcPs
   , cdChoiceBody :: LHsExpr GhcPs
   , cdChoiceConsuming :: Located (Maybe ChoiceConsuming)
@@ -2338,9 +2338,8 @@ asPatRecWild varName conName =
 -- where 'X' is either a record wildcard pattern or a prefix
 -- constructor pattern depending on whether a non-empty record field
 -- list is provided.
-argPatOfChoice :: Located RdrName -> Maybe (LHsType GhcPs) -> Pat GhcPs
-argPatOfChoice choiceConName Nothing = asPatPrefixCon "arg" choiceConName
-argPatOfChoice choiceConName (Just (L _ (HsRecTy _ []))) = asPatPrefixCon "arg" choiceConName
+argPatOfChoice :: Located RdrName -> LHsType GhcPs -> Pat GhcPs
+argPatOfChoice choiceConName (L _ (HsRecTy _ [])) = asPatPrefixCon "arg" choiceConName
 argPatOfChoice choiceConName _ = asPatRecWild "arg" choiceConName
 
 -- | Utility for constructing a match context.
@@ -2759,13 +2758,10 @@ mkChoiceDataDecls
 mkChoiceDataDecls tyVars ChoiceData{..} = do
   -- Calculate data constructor info from the choice name and (maybe)
   -- record type.
-  choiceConInfo <- splitCon $ maybeToList cdChoiceFields ++ [rdrNameToType cdChoiceName]
+  choiceConInfo <- splitCon [cdChoiceFields, rdrNameToType cdChoiceName]
   -- tyVarsInUse <- filterM (\(L _ tv) -> tvOccursInChoiceType tv cdChoiceFields) tyVars
-  let dataDecl = mkTemplateDataDecl
-                   (combineLocs cdChoiceName
-                     (last (void cdChoiceReturnTy :
-                             (map void (maybeToList cdChoiceFields)))))
-                   cdChoiceName tyVars choiceConInfo
+  let dataLoc = combineLocs cdChoiceName cdChoiceFields
+      dataDecl = mkTemplateDataDecl dataLoc cdChoiceName tyVars choiceConInfo
       -- Prepend the choice documentation, if any, as a 'DocNext'.
       mbDocDecl = fmap (fmap (DocD noExt . DocCommentNext)) cdChoiceDoc
   return $ maybeToList mbDocDecl ++ [dataDecl]
@@ -2873,7 +2869,7 @@ mkTemplateDecls (L _ th@(TemplateHeader _ lname@(L nloc _) tyVars)) fields (L _ 
                            (mkUnqualVar $ mkVarOcc "this")
       , ccdChoiceData = ChoiceData {
             cdChoiceName = noLoc $ qualifyDesugar $ mkTcOcc "Archive"
-          , cdChoiceFields = Nothing
+          , cdChoiceFields = noLoc $ HsRecTy noExt []
           , cdChoiceReturnTy = unitType
           , cdChoiceBody = pureUnit
           , cdChoiceConsuming = noLoc $ Just PreConsuming
