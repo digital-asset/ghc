@@ -2394,6 +2394,44 @@ funBind loc tag mg =
             , fun_tick = []
             }
 
+-- | Check if a type variable appears in a type.
+--
+-- Needed for generating choice data types, as we want to drop type variables
+-- which do not occur in the body of the type.
+--
+-- Throws an error in the case we find an unsupported type.
+tvOccursInChoiceType :: RdrName -> LHsType GhcPs -> P Bool
+tvOccursInChoiceType tv = go
+  where
+    gos :: [LHsType GhcPs] -> P Bool
+    gos tys = or <$> mapM go tys
+    go :: LHsType GhcPs -> P Bool
+    go (L loc ty) = case ty of
+      HsForAllTy{} -> addFatalError loc $ text "Forall types not supported in choice argument types"
+      HsQualTy _ _ ty -> go ty
+      HsTyVar _ _ (L _ thisTV) -> return $ tv == thisTV
+      HsAppTy _ ty1 ty2 -> gos [ty1, ty2]
+      HsAppKindTy _ ty _kindArgument -> go ty
+      HsFunTy _ ty1 ty2 -> gos [ty1, ty2]
+      HsListTy _ ty -> go ty
+      HsTupleTy _ _ tys -> gos tys
+      HsSumTy _ tys -> gos tys
+      HsOpTy _ ty1 _ ty2 -> gos [ty1, ty2]
+      HsParTy _ ty -> go ty
+      HsIParamTy _ _ ty -> go ty -- Should fail on implicitly quantified types?
+      HsStarTy{} -> return False
+      HsKindSig _ ty _ -> go ty
+      HsSpliceTy{} -> addFatalError loc $ text "Template Haskell not supported in DAML types"
+      HsDocTy _ ty _ -> go ty
+      HsBangTy _ _ ty -> go ty
+      HsRecTy _ fs -> gos $ map (cd_fld_type . unLoc) fs
+      HsExplicitListTy _ _ tys -> gos tys
+      HsExplicitTupleTy _ tys -> gos tys
+      HsTyLit{} -> return False
+      HsWildCardTy{} -> return False
+      XHsType{} -> return False
+
+
 mkTemplateClassInstanceSigs :: String -> [Located RdrName] -> Maybe (LHsType GhcPs) -> [LSig GhcPs]
 mkTemplateClassInstanceSigs templateName tyVars mbKeyType =
   map (uncurry mkSig) $
@@ -2722,6 +2760,7 @@ mkChoiceDataDecls tyVars ChoiceData{..} = do
   -- Calculate data constructor info from the choice name and (maybe)
   -- record type.
   choiceConInfo <- splitCon $ maybeToList cdChoiceFields ++ [rdrNameToType cdChoiceName]
+  -- tyVarsInUse <- filterM (\(L _ tv) -> tvOccursInChoiceType tv cdChoiceFields) tyVars
   let dataDecl = mkTemplateDataDecl
                    (combineLocs cdChoiceName
                      (last (void cdChoiceReturnTy :
