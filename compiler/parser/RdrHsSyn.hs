@@ -2776,7 +2776,7 @@ validateTemplateBodyDecls TemplateHeader{..} tbd@TemplateBodyDecls{..}
   | null tbdMaintainers && (not . null) tbdKeys = report "Missing 'maintainer' declaration for given 'key'"
   | otherwise = do
       choices <- combineChoices thTypeVars tbd
-      return $ ValidTemplateBody {
+      return ValidTemplateBody {
           vtbEnsure = listToMaybe tbdEnsures
         , vtbSignatories = applyConcat (noLoc tbdSignatories)
         , vtbObservers = allObservers
@@ -2883,7 +2883,7 @@ mkTemplateDecls (L _ th@TemplateHeader{..}) fields (L _ decls) = do
   let choicesWithArchive = mkArchiveChoice templateName : vtbChoices
       templateInstClassDecl = mkTemplateInstanceClassDecl (getLoc thTemplateName) conName th vtb{vtbChoices = choicesWithArchive}
       -- Automatically create the base class (`TInstance`) instance if the template is not generic (i.e. has no type parameters)
-      baseInstance = if null thTypeVars then [instDecl $ classInstDecl (unLoc tInstanceClass) emptyBag] else []
+      baseInstance = if null thTypeVars then [instDecl $ classInstDecl tInstanceClass emptyBag] else []
       templateInstance = mkTemplateInstanceDecl templateName thTypeVars
       choiceInstanceDecls = map (mkChoiceInstanceDecl templateName thTypeVars) choicesWithArchive
       keyInstanceDecl = mkKeyInstanceDecl templateName thTypeVars <$> kdKeyType . unLoc <$> vtbKeyData
@@ -2892,7 +2892,7 @@ mkTemplateDecls (L _ th@TemplateHeader{..}) fields (L _ decls) = do
                ++ choiceInstanceDecls ++ maybeToList keyInstanceDecl
   where
     templateName = rdrNameToString thTemplateName
-    tInstanceClass = mkUnqualClass $ mkInstanceClassName templateName
+    tInstanceClass = unLoc $ mkUnqualClass $ mkInstanceClassName templateName
 
 -- | Generate `newtype` and `instance` declarations corresponding to a
 -- `template instance InstanceName = T Arg1 .. ArgN`.
