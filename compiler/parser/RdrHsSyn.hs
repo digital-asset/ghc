@@ -134,6 +134,7 @@ import Data.Char
 import qualified Data.Monoid as Monoid
 import Data.Data       ( dataTypeOf, fromConstr, dataTypeConstrs )
 import Bag
+import qualified Data.Set as Set
 import Module
 
 #include "HsVersions.h"
@@ -2391,22 +2392,26 @@ funBind loc tag mg =
             , fun_tick = []
             }
 
--- | Check if a type variable appears in a type.
+-- | Compute the free type variables occurring in a choice parameter type.
 --
--- Needed for generating choice data types, as we want to drop type variables
+-- This is needed to generate choice data types, as we want to drop type variables
 -- which do not occur in the body of the type.
 --
--- Throws an error in the case we find an unsupported type.
-tvOccursInChoiceType :: RdrName -> LHsType GhcPs -> P Bool
-tvOccursInChoiceType tv = go
+-- This is a simplistic implementation relying on the fact that we do not support
+-- all types as choice parameters. In particular, we do not support `forall` types
+-- which bind type variables and complicate the calculation.
+--
+-- We throw a parser error if we find an unsupported type.
+freeTypeVarsInChoiceType :: LHsType GhcPs -> P (Set.Set RdrName)
+freeTypeVarsInChoiceType = go
   where
-    gos :: [LHsType GhcPs] -> P Bool
-    gos tys = or <$> mapM go tys
-    go :: LHsType GhcPs -> P Bool
+    gos :: [LHsType GhcPs] -> P (Set.Set RdrName)
+    gos tys = Set.unions <$> mapM go tys
+    go :: LHsType GhcPs -> P (Set.Set RdrName)
     go (L loc ty) = case ty of
       HsForAllTy{} -> addFatalError loc $ text "Forall types not supported in choice argument types"
       HsQualTy _ _ ty -> go ty
-      HsTyVar _ _ (L _ thisTV) -> return $ tv == thisTV
+      HsTyVar _ _ (L _ tv) -> return $ Set.singleton tv
       HsAppTy _ ty1 ty2 -> gos [ty1, ty2]
       HsAppKindTy _ ty _kindArgument -> go ty
       HsFunTy _ ty1 ty2 -> gos [ty1, ty2]
@@ -2416,7 +2421,7 @@ tvOccursInChoiceType tv = go
       HsOpTy _ ty1 _ ty2 -> gos [ty1, ty2]
       HsParTy _ ty -> go ty
       HsIParamTy _ _ ty -> go ty -- Should fail on implicitly quantified types?
-      HsStarTy{} -> return False
+      HsStarTy{} -> return Set.empty
       HsKindSig _ ty _ -> go ty
       HsSpliceTy{} -> addFatalError loc $ text "Template Haskell not supported in DAML types"
       HsDocTy _ ty _ -> go ty
@@ -2424,9 +2429,9 @@ tvOccursInChoiceType tv = go
       HsRecTy _ fs -> gos $ map (cd_fld_type . unLoc) fs
       HsExplicitListTy _ _ tys -> gos tys
       HsExplicitTupleTy _ tys -> gos tys
-      HsTyLit{} -> return False
-      HsWildCardTy{} -> return False
-      XHsType{} -> return False
+      HsTyLit{} -> return Set.empty
+      HsWildCardTy{} -> return Set.empty
+      XHsType{} -> return Set.empty
 
 
 mkTemplateClassInstanceSigs :: String -> [Located RdrName] -> Maybe (LHsType GhcPs) -> [LSig GhcPs]
@@ -2842,8 +2847,9 @@ flexChoiceToCombinedChoice (FlexChoiceData controller choiceData) =
 -- add them into the combined choice data.
 addChoiceTypeVars :: [Located RdrName] -> CombinedChoiceData -> P CombinedChoiceData
 addChoiceTypeVars tyVars CombinedChoiceData{..} = do
+  tyVarsInChoiceType <- freeTypeVarsInChoiceType $ cdChoiceFields ccdChoiceData
   -- Drop type variables which are not used in the parameter record type.
-  ccdTypeVars <- filterM (\(L _ tv) -> tvOccursInChoiceType tv $ cdChoiceFields ccdChoiceData) tyVars
+  let ccdTypeVars = filter (\(L _ tv) -> tv `Set.member` tyVarsInChoiceType) tyVars
   return CombinedChoiceData{..}
 
 mkArchiveChoice :: String -> CombinedChoiceData
