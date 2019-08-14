@@ -2764,9 +2764,10 @@ mkChoiceDataDecls (CombinedChoiceData _ ChoiceData{..} tyVars _) = do
 -- | Validate @template@ multiplicity constraints.
 validateTemplateBodyDecls
   :: SrcSpan             -- ^ location of 'T' in @template T@
+  -> [Located RdrName]   -- ^ type variables
   -> TemplateBodyDecls   -- ^ unvalidated template body
   -> P ValidTemplateBody -- ^ validated template body
-validateTemplateBodyDecls nloc TemplateBodyDecls{..}
+validateTemplateBodyDecls nloc tyVars tbd@TemplateBodyDecls{..}
   | length tbdEnsures > 1 = report "Multiple 'ensure' declarations"
   | null tbdSignatories = report "Missing 'signatory' declaration"
   | length tbdAgreements > 1 = report "Multiple 'agreement' declarations"
@@ -2774,29 +2775,28 @@ validateTemplateBodyDecls nloc TemplateBodyDecls{..}
   | length tbdLetBindings > 1 = report "Multiple 'let' block declarations"
   | null tbdKeys && (not . null) tbdMaintainers = report "Missing 'key' declaration for given 'maintainer'"
   | null tbdMaintainers && (not . null) tbdKeys = report "Missing 'maintainer' declaration for given 'key'"
-  | otherwise = return $
-      ValidTemplateBody {
+  | otherwise = do
+      choices <- combineChoices tyVars tbd
+      return $ ValidTemplateBody {
           vtbEnsure = listToMaybe tbdEnsures
         , vtbSignatories = applyConcat (noLoc tbdSignatories)
         , vtbObservers = allObservers
         , vtbAgreement = listToMaybe tbdAgreements
         , vtbLetBindings = fromMaybe (noLoc emptyLocalBinds) (listToMaybe tbdLetBindings)
-        , vtbChoices = allChoices
+        , vtbChoices = choices
         , vtbKeyData = keyData
       }
   where
     report :: String -> P a
     report = addFatalError nloc . text
 
-    -- | Compute full lists of observers and choices here as it simplifies future processing
-    -- TODO(RJR): Figure out the right place to keep locations
-    allObservers = allTemplateObservers (mergeDecls tbdObservers) $ map (fst . unLoc) tbdControlledChoiceGroups
-    allChoices = choiceGroupsToCombinedChoices tbdControlledChoiceGroups ++ map (flexChoiceToCombinedChoice . unLoc) tbdFlexChoices
-
     -- | We've validated that keys and maintainers must coexist, so combine them into a single data type.
     keyData = (fmap . fmap)
                 (\(keyExpr, keyType) -> KeyData keyExpr keyType (applyConcat $ noLoc tbdMaintainers))
                 (listToMaybe tbdKeys)
+
+    -- | Full list of observers includes all controllers of controlled choice groups.
+    allObservers = allTemplateObservers (mergeDecls tbdObservers) $ map (fst . unLoc) tbdControlledChoiceGroups
 
     -- | Combine support multiple 'observer' and 'maintainer' declarations into
     -- a single list expression.
@@ -2816,9 +2816,16 @@ validateTemplateBodyDecls nloc TemplateBodyDecls{..}
            Nothing -> app
            Just (L loc _) -> L loc (unLoc app)
 
--- | Convert controlled choice groups to a list of individual choices with controllers
--- so they can be combined with flexible choices.
--- Note that controllers in choice groups must also be added as observers of the template.
+combineChoices :: [Located RdrName] -> TemplateBodyDecls -> P [CombinedChoiceData]
+combineChoices tyVars TemplateBodyDecls{..} = do
+  -- Get CombinedChoiceData without type vars filled in
+  let choicesNoTypeVars = choiceGroupsToCombinedChoices tbdControlledChoiceGroups
+                       ++ map (flexChoiceToCombinedChoice . unLoc) tbdFlexChoices
+  -- Fill in relevant type vars for each choice
+  mapM (addChoiceTypeVars tyVars) choicesNoTypeVars
+
+-- | Convert controlled choice groups to a list of individual choices with controllers.
+-- Leave type variable information empty, to be added afterwards.
 choiceGroupsToCombinedChoices
   :: [Located (LHsExpr GhcPs, Located [Located ChoiceData])]
   -> [CombinedChoiceData]
@@ -2827,6 +2834,7 @@ choiceGroupsToCombinedChoices = concatMap distributeController
     distributeController (L _ (controller, L _ choices)) = map (makeCombinedChoice controller) choices
     makeCombinedChoice controller choice = CombinedChoiceData controller (unLoc choice) [] False
 
+-- | Simple type conversion, leaving type variable information empty for now.
 flexChoiceToCombinedChoice :: FlexChoiceData -> CombinedChoiceData
 flexChoiceToCombinedChoice (FlexChoiceData controller choiceData) =
   CombinedChoiceData controller choiceData [] True
@@ -2847,7 +2855,7 @@ mkTemplateDecls
   -> Located [Located TemplateBodyDecl]  -- ^ Template declarations
   -> P (OrdList (LHsDecl GhcPs))         -- ^ Desugared declarations
 mkTemplateDecls (L _ th@(TemplateHeader _ lname@(L nloc _) tyVars)) fields (L _ decls) = do
-  vtb@ValidTemplateBody{..} <- validateTemplateBodyDecls nloc (extractTemplateBodyDecls decls)
+  vtb@ValidTemplateBody{..} <- validateTemplateBodyDecls nloc tyVars (extractTemplateBodyDecls decls)
   -- Calculate 'T' data constructor info from 'T' and the record type denoted by 'fields'.
   ci@(conName, _, _) <- splitCon [fields, rdrNameToType lname]
   let templateDataDecl = mkTemplateDataDecl (combineLocs lname fields) lname tyVars ci
