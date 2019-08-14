@@ -2846,6 +2846,26 @@ addChoiceTypeVars tyVars CombinedChoiceData{..} = do
   ccdTypeVars <- filterM (\(L _ tv) -> tvOccursInChoiceType tv $ cdChoiceFields ccdChoiceData) tyVars
   return CombinedChoiceData{..}
 
+mkArchiveChoice :: String -> CombinedChoiceData
+mkArchiveChoice templateName =
+  CombinedChoiceData
+    { ccdControllers = mkApp
+                          (mkUnqualVar $ mkVarOcc $ prefixTemplateClassMethod $ "signatory" ++ templateName)
+                          (mkUnqualVar $ mkVarOcc "this")
+    , ccdChoiceData = ChoiceData {
+          cdChoiceName = noLoc $ qualifyDesugar $ mkTcOcc "Archive"
+        , cdChoiceFields = noLoc $ HsRecTy noExt []
+        , cdChoiceReturnTy = unitType
+        , cdChoiceBody = pureUnit
+        , cdChoiceConsuming = noLoc $ Just PreConsuming
+        , cdChoiceDoc = Nothing
+        }
+    , ccdTypeVars = []
+    , ccdFlexible = False
+    }
+  where
+    pureUnit = mkApp (mkUnqualVar $ mkVarOcc "pure") (noLoc $ ExplicitTuple noExt [] Boxed)
+
 -- | Desugar a @template@ declaration into a list of decls (this is
 -- called from 'Parser.y').
 mkTemplateDecls
@@ -2860,7 +2880,7 @@ mkTemplateDecls (L _ th@TemplateHeader{..}) fields (L _ decls) = do
   let templateDataDecl = mkTemplateDataDecl (combineLocs thTemplateName fields) thTemplateName thTypeVars ci
   choiceDataDecls <- concat <$> traverse mkChoiceDataDecls vtbChoices
     -- ^ Do not create Archive data type as it has a single definition across templates
-  let choicesWithArchive = archiveChoiceData : vtbChoices
+  let choicesWithArchive = mkArchiveChoice templateName : vtbChoices
       templateInstClassDecl = mkTemplateInstanceClassDecl (getLoc thTemplateName) conName th vtb{vtbChoices = choicesWithArchive}
       -- Automatically create the base class (`TInstance`) instance if the template is not generic (i.e. has no type parameters)
       baseInstance = if null thTypeVars then [instDecl $ classInstDecl (unLoc tInstanceClass) emptyBag] else []
@@ -2873,22 +2893,6 @@ mkTemplateDecls (L _ th@TemplateHeader{..}) fields (L _ decls) = do
   where
     templateName = rdrNameToString thTemplateName
     tInstanceClass = mkUnqualClass $ mkInstanceClassName templateName
-    archiveChoiceData = CombinedChoiceData
-      { ccdControllers = mkApp
-                           (mkUnqualVar $ mkVarOcc $ prefixTemplateClassMethod $ "signatory" ++ templateName)
-                           (mkUnqualVar $ mkVarOcc "this")
-      , ccdChoiceData = ChoiceData {
-            cdChoiceName = noLoc $ qualifyDesugar $ mkTcOcc "Archive"
-          , cdChoiceFields = noLoc $ HsRecTy noExt []
-          , cdChoiceReturnTy = unitType
-          , cdChoiceBody = pureUnit
-          , cdChoiceConsuming = noLoc $ Just PreConsuming
-          , cdChoiceDoc = Nothing
-          }
-      , ccdTypeVars = []
-      , ccdFlexible = False
-      }
-    pureUnit = mkApp (mkUnqualVar $ mkVarOcc "pure") (noLoc $ ExplicitTuple noExt [] Boxed)
 
 -- | Generate `newtype` and `instance` declarations corresponding to a
 -- `template instance InstanceName = T Arg1 .. ArgN`.
