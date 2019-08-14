@@ -134,6 +134,7 @@ import Data.Char
 import qualified Data.Monoid as Monoid
 import Data.Data       ( dataTypeOf, fromConstr, dataTypeConstrs )
 import Bag
+import qualified Data.Set as Set
 import Module
 
 #include "HsVersions.h"
@@ -2118,7 +2119,7 @@ addFatalError loc msg = parseErrorSDoc loc msg
 
 data ChoiceData = ChoiceData {
     cdChoiceName :: Located RdrName
-  , cdChoiceFields :: Maybe (LHsType GhcPs)
+  , cdChoiceFields :: LHsType GhcPs
   , cdChoiceReturnTy :: LHsType GhcPs
   , cdChoiceBody :: LHsExpr GhcPs
   , cdChoiceConsuming :: Located (Maybe ChoiceConsuming)
@@ -2136,6 +2137,7 @@ data FlexChoiceData = FlexChoiceData {
 data CombinedChoiceData = CombinedChoiceData {
     ccdControllers :: LHsExpr GhcPs
   , ccdChoiceData  :: ChoiceData
+  , ccdTypeVars    :: [Located RdrName] -- ^ Type variables used in the choice parameter type
   , ccdFlexible    :: Bool
   }
 
@@ -2181,7 +2183,7 @@ data TemplateBodyDecls = TemplateBodyDecls {
     , tbdMaintainers :: [LHsExpr GhcPs]
     }
 
--- Result of validating TemplateBodyDecls, with stricter types
+-- | Result of validating TemplateBodyDecls, with stricter types
 data ValidTemplateBody = ValidTemplateBody {
       vtbEnsure :: Maybe (LHsExpr GhcPs)
     , vtbSignatories :: LHsExpr GhcPs
@@ -2264,8 +2266,6 @@ unitType = noLoc $ HsTupleTy noExt HsBoxedOrConstraintTuple []
 mkParenTy :: LHsType GhcPs -> LHsType GhcPs
 mkParenTy = noLoc . HsParTy noExt
 
--- Representations of DAML type constructors
-
 mkContractId :: LHsType GhcPs -> LHsType GhcPs
 mkContractId = mkAppTy (mkQualType "ContractId")
 
@@ -2282,10 +2282,7 @@ mkTemplateType :: String -> [Located RdrName] -> LHsType GhcPs
 mkTemplateType templateName tyVars = mkAppTyArgs (mkUnqualType templateName) tyVars
 
 mkChoiceType :: Located RdrName -> [Located RdrName] -> LHsType GhcPs
-mkChoiceType choiceName tyVars =
-  case rdrNameToString choiceName of
-    "Archive" -> rdrNameToType choiceName
-    _ -> mkAppTyArgs (rdrNameToType choiceName) tyVars
+mkChoiceType choiceName tyVars = mkAppTyArgs (rdrNameToType choiceName) tyVars
 
 -- | Scheme for naming the `TInstance` class from the template name `T`.
 mkInstanceClassName :: String -> String
@@ -2294,7 +2291,7 @@ mkInstanceClassName templateName = templateName ++ "Instance"
 mkVarPat :: OccName -> Pat GhcPs
 mkVarPat = XPat . noLoc . VarPat noExt . noLoc . mkRdrUnqual
 
--- Type variable conversions
+-- Name conversions
 
 rdrNameToTyVar :: Located RdrName -> LHsTyVarBndr GhcPs
 rdrNameToTyVar lname@(L loc _) = L loc $ UserTyVar noExt lname
@@ -2340,9 +2337,8 @@ asPatRecWild varName conName =
 -- where 'X' is either a record wildcard pattern or a prefix
 -- constructor pattern depending on whether a non-empty record field
 -- list is provided.
-argPatOfChoice :: Located RdrName -> Maybe (LHsType GhcPs) -> Pat GhcPs
-argPatOfChoice choiceConName Nothing = asPatPrefixCon "arg" choiceConName
-argPatOfChoice choiceConName (Just (L _ (HsRecTy _ []))) = asPatPrefixCon "arg" choiceConName
+argPatOfChoice :: Located RdrName -> LHsType GhcPs -> Pat GhcPs
+argPatOfChoice choiceConName (L _ (HsRecTy _ [])) = asPatPrefixCon "arg" choiceConName
 argPatOfChoice choiceConName _ = asPatRecWild "arg" choiceConName
 
 -- | Utility for constructing a match context.
@@ -2396,6 +2392,48 @@ funBind loc tag mg =
             , fun_tick = []
             }
 
+-- | Compute the free type variables occurring in a choice parameter type.
+--
+-- This is needed to generate choice data types, as we want to drop type variables
+-- which do not occur in the body of the type.
+--
+-- This is a simplistic implementation relying on the fact that we do not support
+-- all types as choice parameters. In particular, we do not support `forall` types
+-- which bind type variables and complicate the calculation.
+--
+-- We throw a parser error if we find an unsupported type.
+freeTypeVarsInChoiceType :: LHsType GhcPs -> P (Set.Set RdrName)
+freeTypeVarsInChoiceType = go
+  where
+    gos :: [LHsType GhcPs] -> P (Set.Set RdrName)
+    gos tys = Set.unions <$> mapM go tys
+    go :: LHsType GhcPs -> P (Set.Set RdrName)
+    go (L loc ty) = case ty of
+      HsForAllTy{} -> addFatalError loc $ text "Forall types not supported in choice argument types"
+      HsQualTy _ _ ty -> go ty
+      HsTyVar _ _ (L _ tv) -> return $ Set.singleton tv
+      HsAppTy _ ty1 ty2 -> gos [ty1, ty2]
+      HsAppKindTy _ ty _kindArgument -> go ty
+      HsFunTy _ ty1 ty2 -> gos [ty1, ty2]
+      HsListTy _ ty -> go ty
+      HsTupleTy _ _ tys -> gos tys
+      HsSumTy _ tys -> gos tys
+      HsOpTy _ ty1 _ ty2 -> gos [ty1, ty2]
+      HsParTy _ ty -> go ty
+      HsIParamTy _ _ ty -> go ty -- Should fail on implicitly quantified types?
+      HsStarTy{} -> return Set.empty
+      HsKindSig _ ty _ -> go ty
+      HsSpliceTy{} -> addFatalError loc $ text "Template Haskell not supported in DAML types"
+      HsDocTy _ ty _ -> go ty
+      HsBangTy _ _ ty -> go ty
+      HsRecTy _ fs -> gos $ map (cd_fld_type . unLoc) fs
+      HsExplicitListTy _ _ tys -> gos tys
+      HsExplicitTupleTy _ tys -> gos tys
+      HsTyLit{} -> return Set.empty
+      HsWildCardTy{} -> return Set.empty
+      XHsType{} -> return Set.empty
+
+
 mkTemplateClassInstanceSigs :: String -> [Located RdrName] -> Maybe (LHsType GhcPs) -> [LSig GhcPs]
 mkTemplateClassInstanceSigs templateName tyVars mbKeyType =
   map (uncurry mkSig) $
@@ -2430,12 +2468,12 @@ mkTemplateClassInstanceSigs templateName tyVars mbKeyType =
 
 -- | Utility for constructing a class declaration.
 classDecl ::
-     Located RdrName   -- class name
-  -> LHsContext GhcPs  -- constraint context
-  -> LHsQTyVars GhcPs  -- type variables
-  -> [LSig GhcPs]      -- method signatures
-  -> LHsBinds GhcPs    -- default method bindings
-  -> TyClDecl GhcPs    -- resulting class declaration
+     Located RdrName   -- ^ class name
+  -> LHsContext GhcPs  -- ^ constraint context
+  -> LHsQTyVars GhcPs  -- ^ type variables
+  -> [LSig GhcPs]      -- ^ method signatures
+  -> LHsBinds GhcPs    -- ^ default method bindings
+  -> TyClDecl GhcPs    -- ^ resulting class declaration
 classDecl className context tyVars sigs methods =
   ClassDecl { tcdCExt = noExt
             , tcdCtxt = context
@@ -2469,8 +2507,8 @@ classInstDecl tyApps funBinds =
 instDecl :: ClsInstDecl GhcPs -> LHsDecl GhcPs
 instDecl cid = noLoc $ InstD noExt $ ClsInstD noExt cid
 
-mkTemplateChoiceSigs :: String -> [Located RdrName] -> ChoiceData -> [LSig GhcPs]
-mkTemplateChoiceSigs templateName tyVars ChoiceData{..} =
+mkTemplateChoiceSigs :: String -> [Located RdrName] -> CombinedChoiceData -> [LSig GhcPs]
+mkTemplateChoiceSigs templateName tyVars (CombinedChoiceData _ ChoiceData{..} choiceTyVars _) =
   map (uncurry mkSig)
     [ ("consumption", consuming `mkAppTy` mbParenTy templateType)
     , ("controller", mkFunTy templateType (mkFunTy choiceType partiesType))
@@ -2483,7 +2521,7 @@ mkTemplateChoiceSigs templateName tyVars ChoiceData{..} =
       let fullMethodName = noLoc $ mkRdrUnqual $ mkVarOcc $ prefixTemplateClassMethod $
                              methodName ++ templateName ++ rdrNameToString cdChoiceName
       in  noLoc $ ClassOpSig noExt False [fullMethodName] (HsIB noExt ty)
-    choiceType = mkChoiceType cdChoiceName tyVars
+    choiceType = mkChoiceType cdChoiceName choiceTyVars
     templateType = mkTemplateType templateName tyVars
     contractId = mkContractId $ mbParenTy templateType
     choiceReturnType = mkUpdate $ mkParenTy cdChoiceReturnTy
@@ -2491,11 +2529,11 @@ mkTemplateChoiceSigs templateName tyVars ChoiceData{..} =
     mbParenTy = if null tyVars then id else mkParenTy
 
 mkTemplateClassMethod ::
-     String                      -- method name
-  -> [Pat GhcPs]                 -- method argument patterns
-  -> LHsExpr GhcPs               -- function body
-  -> Maybe (LHsLocalBinds GhcPs) -- local binds
-  -> LHsBind GhcPs               -- function binding
+     String                      -- ^ method name
+  -> [Pat GhcPs]                 -- ^ method argument patterns
+  -> LHsExpr GhcPs               -- ^ function body
+  -> Maybe (LHsLocalBinds GhcPs) -- ^ local binds
+  -> LHsBind GhcPs               -- ^ function binding
 mkTemplateClassMethod rawMethodName args body mBinds = do
   let fullMethodName = noLoc $ mkRdrUnqual $ mkVarOcc rawMethodName
       ctx = matchContext fullMethodName
@@ -2517,11 +2555,11 @@ mkMagic methodName =
         noLoc $ HsTyLit noExt $ HsStrTy NoSourceText $ mkFastString methodName
 
 mkTemplateChoiceMethods ::
-     Located RdrName             -- template data ctor 'T'
-  -> LHsLocalBinds GhcPs         -- local binds
-  -> CombinedChoiceData          -- choice data and controllers
-  -> [LHsBind GhcPs]             -- function binding
-mkTemplateChoiceMethods conName binds (CombinedChoiceData controllers ChoiceData{..} flexible) =
+     Located RdrName             -- ^ template data ctor 'T'
+  -> LHsLocalBinds GhcPs         -- ^ local binds
+  -> CombinedChoiceData          -- ^ choice data and controllers
+  -> [LHsBind GhcPs]             -- ^ function binding
+mkTemplateChoiceMethods conName binds (CombinedChoiceData controllers ChoiceData{..} _ flexible) =
   [ mkMethod "consumption" []                    False consuming
   , mkMethod "controller"  [this, controllerArg] True  controllers
   , mkMethod "action"      [self, this, arg]     True  cdChoiceBody
@@ -2545,13 +2583,13 @@ mkTemplateChoiceMethods conName binds (CombinedChoiceData controllers ChoiceData
 
 -- | Construct a @data X a b c = X {...} deriving (Eq, Show)@
 mkTemplateDataDecl ::
-     SrcSpan                 -- the span to associate with
-  -> Located RdrName         -- template 'T' (or choice 'S')
-  -> [Located RdrName]       -- type variables 'a b c'
+     SrcSpan                 -- ^ the span to associate with
+  -> Located RdrName         -- ^ template 'T' (or choice 'S')
+  -> [Located RdrName]       -- ^ type variables 'a b c'
   -> (Located RdrName
      , HsConDeclDetails GhcPs
-     , Maybe LHsDocString)   -- result of 'splitCon'
-  -> LHsDecl GhcPs           -- the resulting @data@ declaration
+     , Maybe LHsDocString)   -- ^ result of 'splitCon'
+  -> LHsDecl GhcPs           -- ^ the resulting @data@ declaration
 mkTemplateDataDecl loc lname@(L nloc _name) tyVars (conName, conDetails, conDoc) =
   -- NOTE (SM, SF): We assume that the program does not have any
   -- BangPatterns on the fields here. Otherwise, "re-jigging" with
@@ -2565,15 +2603,9 @@ mkTemplateDataDecl loc lname@(L nloc _name) tyVars (conName, conDetails, conDoc)
         , con_args   = conDetails
         , con_doc    = conDoc
         }
-      eqName = L nloc $ qualifyDesugar $ mkClsOcc "Eq"
-      eqTyCl = mkLHsSigType $ L nloc $ HsTyVar noExt NotPromoted eqName
-      showName = L nloc $ qualifyDesugar $ mkClsOcc "Show"
-      showTyCl = mkLHsSigType $ L nloc $ HsTyVar noExt NotPromoted showName
-      derivingClause = L nloc $ HsDerivingClause
-        { deriv_clause_ext = NoExt
-        , deriv_clause_strategy = Nothing
-        , deriv_clause_tys = L nloc [eqTyCl, showTyCl]
-        }
+      mkTyCl = mkLHsSigType . rdrNameToType . L nloc . qualifyDesugar . mkClsOcc
+      derivingTys = L nloc $ map mkTyCl ["Eq", "Show"]
+      derivingClause = L nloc $ HsDerivingClause noExt Nothing derivingTys
       dataDefn = HsDataDefn
         { dd_ext     = noExt
         , dd_ND      = DataType
@@ -2593,9 +2625,9 @@ mkTemplateDataDecl loc lname@(L nloc _name) tyVars (conName, conDetails, conDoc)
   in L loc $ TyClD noExt dataDecl
 
 mkTemplateClassInstanceMethods ::
-     Located RdrName             -- ctor 'T'
-  -> ValidTemplateBody           -- sanitized template body
-  -> [LHsBind GhcPs]             -- method declarations
+     Located RdrName             -- ^ ctor 'T'
+  -> ValidTemplateBody           -- ^ sanitized template body
+  -> [LHsBind GhcPs]             -- ^ method declarations
 mkTemplateClassInstanceMethods conName ValidTemplateBody{..} =
   [ mkMethod "signatory" [this] True  vtbSignatories
   , mkMethod "observer"  [this] True  vtbObservers
@@ -2644,11 +2676,11 @@ templateConstraintToType (TemplateConstraint constraint tyVars) =
 
 -- | Construct a @class TInstance@.
 mkTemplateInstanceClassDecl ::
-     SrcSpan                     -- location of data 'T'
-  -> Located RdrName             -- constructor 'T'
-  -> TemplateHeader              -- template constraints and type variables
-  -> ValidTemplateBody           -- sanitized template body
-  -> LHsDecl GhcPs               -- resulting declaration
+     SrcSpan                     -- ^ location of data 'T'
+  -> Located RdrName             -- ^ constructor 'T'
+  -> TemplateHeader              -- ^ template constraints and type variables
+  -> ValidTemplateBody           -- ^ sanitized template body
+  -> LHsDecl GhcPs               -- ^ resulting declaration
 mkTemplateInstanceClassDecl templateLoc conName TemplateHeader{..} vtb@ValidTemplateBody{..} =
   let templateName = rdrNameToString conName
       className = L templateLoc $ mkRdrUnqual $ mkClsOcc $ mkInstanceClassName templateName
@@ -2657,15 +2689,15 @@ mkTemplateInstanceClassDecl templateLoc conName TemplateHeader{..} vtb@ValidTemp
       keyType = kdKeyType . unLoc <$> vtbKeyData
       templateSigs = mkTemplateClassInstanceSigs templateName thTypeVars keyType
       templateMethods = mkTemplateClassInstanceMethods conName vtb
-      choiceSigs = concatMap (mkTemplateChoiceSigs templateName thTypeVars) (map ccdChoiceData vtbChoices)
+      choiceSigs = concatMap (mkTemplateChoiceSigs templateName thTypeVars) vtbChoices
       choiceMethods = concatMap (mkTemplateChoiceMethods conName vtbLetBindings) vtbChoices
       sigs = templateSigs ++ choiceSigs
       methods = listToBag $ templateMethods ++ choiceMethods
   in noLoc $ TyClD noExt $ classDecl className context tyVars sigs methods
 
 mkTemplateInstanceMethods ::
-     String            -- template name
-  -> [LHsBind GhcPs]   -- method declarations
+     String            -- ^ template name
+  -> [LHsBind GhcPs]   -- ^ method declarations
 mkTemplateInstanceMethods templateName =
   map mkMethod ["signatory", "observer", "ensure", "agreement", "create", "fetch", "archive"]
   where
@@ -2692,10 +2724,10 @@ mkTemplateInstanceDecl templateName tyVars =
   where
     mbParenTy = if null tyVars then id else mkParenTy
 
-mkChoiceInstanceDecl :: String -> [Located RdrName] -> ChoiceData -> LHsDecl GhcPs
-mkChoiceInstanceDecl templateName tyVars ChoiceData{..} =
+mkChoiceInstanceDecl :: String -> [Located RdrName] -> CombinedChoiceData -> LHsDecl GhcPs
+mkChoiceInstanceDecl templateName tyVars (CombinedChoiceData _ ChoiceData{..} choiceTyVars _) =
   let templateType = mkTemplateType templateName tyVars
-      choiceType = mkChoiceType cdChoiceName tyVars
+      choiceType = mkChoiceType cdChoiceName choiceTyVars
       returnType = mkParenTy cdChoiceReturnTy
       choiceClass = foldl' mkAppTy (mkQualClass "Choice")
                       [mbParenTy templateType, mbParenTy choiceType, returnType]
@@ -2723,30 +2755,23 @@ mkKeyInstanceDecl templateName tyVars keyType =
 
 -- | Contruct a @data S a b c = S {...}@ for a single choice 'S'.
 mkChoiceDataDecls
-  :: [Located RdrName]   -- type variables 'a b c'
-  -> ChoiceData          -- choice data for 'S'
-  -> P [LHsDecl GhcPs]   -- resulting declarations
-mkChoiceDataDecls tyVars ChoiceData{..} = do
-  -- Calculate data constructor info from the choice name and (maybe)
-  -- record type.
-  let lname@(L nloc _name) = cdChoiceName
-      choiceName = L nloc (HsTyVar noExt NotPromoted lname)
-  choiceConInfo <- splitCon $ maybeToList cdChoiceFields ++ [choiceName]
-  let dataDecl = mkTemplateDataDecl
-                   (combineLocs cdChoiceName
-                     (last (void cdChoiceReturnTy :
-                             (map void (maybeToList cdChoiceFields)))))
-                   cdChoiceName tyVars choiceConInfo
+  :: CombinedChoiceData  -- ^ choice data for 'S' including relevant type variables
+  -> P [LHsDecl GhcPs]   -- ^ resulting declarations
+mkChoiceDataDecls (CombinedChoiceData _ ChoiceData{..} tyVars _) = do
+  -- Calculate data constructor info from the choice name and record type.
+  choiceConInfo <- splitCon [cdChoiceFields, rdrNameToType cdChoiceName]
+  let dataLoc = combineLocs cdChoiceName cdChoiceFields
+      dataDecl = mkTemplateDataDecl dataLoc cdChoiceName tyVars choiceConInfo
       -- Prepend the choice documentation, if any, as a 'DocNext'.
       mbDocDecl = fmap (fmap (DocD noExt . DocCommentNext)) cdChoiceDoc
   return $ maybeToList mbDocDecl ++ [dataDecl]
 
 -- | Validate @template@ multiplicity constraints.
 validateTemplateBodyDecls
-  :: SrcSpan             -- location of 'T' in @template T@
-  -> TemplateBodyDecls   -- unvalidated template body
-  -> P ValidTemplateBody -- validated template body
-validateTemplateBodyDecls nloc TemplateBodyDecls{..}
+  :: TemplateHeader      -- ^ location and type variable information for @template T@
+  -> TemplateBodyDecls   -- ^ unvalidated template body
+  -> P ValidTemplateBody -- ^ validated template body
+validateTemplateBodyDecls TemplateHeader{..} tbd@TemplateBodyDecls{..}
   | length tbdEnsures > 1 = report "Multiple 'ensure' declarations"
   | null tbdSignatories = report "Missing 'signatory' declaration"
   | length tbdAgreements > 1 = report "Multiple 'agreement' declarations"
@@ -2754,29 +2779,28 @@ validateTemplateBodyDecls nloc TemplateBodyDecls{..}
   | length tbdLetBindings > 1 = report "Multiple 'let' block declarations"
   | null tbdKeys && (not . null) tbdMaintainers = report "Missing 'key' declaration for given 'maintainer'"
   | null tbdMaintainers && (not . null) tbdKeys = report "Missing 'maintainer' declaration for given 'key'"
-  | otherwise = return $
-      ValidTemplateBody {
+  | otherwise = do
+      choices <- combineChoices thTypeVars tbd
+      return ValidTemplateBody {
           vtbEnsure = listToMaybe tbdEnsures
         , vtbSignatories = applyConcat (noLoc tbdSignatories)
         , vtbObservers = allObservers
         , vtbAgreement = listToMaybe tbdAgreements
         , vtbLetBindings = fromMaybe (noLoc emptyLocalBinds) (listToMaybe tbdLetBindings)
-        , vtbChoices = allChoices
+        , vtbChoices = choices
         , vtbKeyData = keyData
       }
   where
     report :: String -> P a
-    report = addFatalError nloc . text
+    report e = addFatalError (getLoc thTemplateName) (text e)
 
-    -- Compute full lists of observers and choices here as it simplifies future processing
-    -- TODO(RJR): Figure out the right place to keep locations
-    allObservers = allTemplateObservers (mergeDecls tbdObservers) $ map (fst . unLoc) tbdControlledChoiceGroups
-    allChoices = choiceGroupsToCombinedChoices tbdControlledChoiceGroups ++ map (flexChoiceToCombinedChoice . unLoc) tbdFlexChoices
-
-    -- We've validated that keys and maintainers must coexist, so combine them into a single data type.
+    -- | We've validated that keys and maintainers must coexist, so combine them into a single data type.
     keyData = (fmap . fmap)
                 (\(keyExpr, keyType) -> KeyData keyExpr keyType (applyConcat $ noLoc tbdMaintainers))
                 (listToMaybe tbdKeys)
+
+    -- | Full list of observers includes all controllers of controlled choice groups.
+    allObservers = allTemplateObservers (mergeDecls tbdObservers) $ map (fst . unLoc) tbdControlledChoiceGroups
 
     -- | Combine support multiple 'observer' and 'maintainer' declarations into
     -- a single list expression.
@@ -2787,29 +2811,66 @@ validateTemplateBodyDecls nloc TemplateBodyDecls{..}
     -- | Calculate an expression for the full list of a contract's observers.
     -- TODO(RJR): Figure out how to simplify this
     allTemplateObservers
-      :: Maybe (LHsExpr GhcPs) -- Explicit (list of) observers.
-      -> [LHsExpr GhcPs] -- Contract controllers (list of lists).
-      -> LHsExpr GhcPs -- Union (list) of observers and controllers.
+      :: Maybe (LHsExpr GhcPs) -- ^ Explicit (list of) observers.
+      -> [LHsExpr GhcPs]       -- ^ Contract controllers (list of lists).
+      -> LHsExpr GhcPs         -- ^ Union (list) of observers and controllers.
     allTemplateObservers obs controllers =
       let app = applyConcat (L noSrcSpan $ maybeToList obs ++ controllers)
       in case obs of
            Nothing -> app
            Just (L loc _) -> L loc (unLoc app)
 
--- | Convert controlled choice groups to a list of individual choices with controllers
--- so they can be combined with flexible choices.
--- Note that controllers in choice groups must also be added as observers of the template.
+combineChoices :: [Located RdrName] -> TemplateBodyDecls -> P [CombinedChoiceData]
+combineChoices tyVars TemplateBodyDecls{..} = do
+  -- Get CombinedChoiceData without type vars filled in
+  let choicesNoTypeVars = choiceGroupsToCombinedChoices tbdControlledChoiceGroups
+                       ++ map (flexChoiceToCombinedChoice . unLoc) tbdFlexChoices
+  -- Fill in relevant type vars for each choice
+  mapM (addChoiceTypeVars tyVars) choicesNoTypeVars
+
+-- | Convert controlled choice groups to a list of individual choices with controllers.
+-- Leave type variable information empty, to be added afterwards.
 choiceGroupsToCombinedChoices
   :: [Located (LHsExpr GhcPs, Located [Located ChoiceData])]
   -> [CombinedChoiceData]
 choiceGroupsToCombinedChoices = concatMap distributeController
   where
     distributeController (L _ (controller, L _ choices)) = map (makeCombinedChoice controller) choices
-    makeCombinedChoice controller choice = CombinedChoiceData controller (unLoc choice) False
+    makeCombinedChoice controller choice = CombinedChoiceData controller (unLoc choice) [] False
 
+-- | Simple type conversion, leaving type variable information empty for now.
 flexChoiceToCombinedChoice :: FlexChoiceData -> CombinedChoiceData
 flexChoiceToCombinedChoice (FlexChoiceData controller choiceData) =
-  CombinedChoiceData controller choiceData True
+  CombinedChoiceData controller choiceData [] True
+
+-- | Find the type variables which are used in the choice parameter type and
+-- add them into the combined choice data.
+addChoiceTypeVars :: [Located RdrName] -> CombinedChoiceData -> P CombinedChoiceData
+addChoiceTypeVars tyVars CombinedChoiceData{..} = do
+  tyVarsInChoiceType <- freeTypeVarsInChoiceType $ cdChoiceFields ccdChoiceData
+  -- Drop type variables which are not used in the parameter record type.
+  let ccdTypeVars = filter (\(L _ tv) -> tv `Set.member` tyVarsInChoiceType) tyVars
+  return CombinedChoiceData{..}
+
+mkArchiveChoice :: String -> CombinedChoiceData
+mkArchiveChoice templateName =
+  CombinedChoiceData
+    { ccdControllers = mkApp
+                          (mkUnqualVar $ mkVarOcc $ prefixTemplateClassMethod $ "signatory" ++ templateName)
+                          (mkUnqualVar $ mkVarOcc "this")
+    , ccdChoiceData = ChoiceData {
+          cdChoiceName = noLoc $ qualifyDesugar $ mkTcOcc "Archive"
+        , cdChoiceFields = noLoc $ HsRecTy noExt []
+        , cdChoiceReturnTy = unitType
+        , cdChoiceBody = pureUnit
+        , cdChoiceConsuming = noLoc $ Just PreConsuming
+        , cdChoiceDoc = Nothing
+        }
+    , ccdTypeVars = []
+    , ccdFlexible = False
+    }
+  where
+    pureUnit = mkApp (mkUnqualVar $ mkVarOcc "pure") (noLoc $ ExplicitTuple noExt [] Boxed)
 
 -- | Desugar a @template@ declaration into a list of decls (this is
 -- called from 'Parser.y').
@@ -2818,43 +2879,28 @@ mkTemplateDecls
   -> LHsType GhcPs                       -- ^ Template parameter record type
   -> Located [Located TemplateBodyDecl]  -- ^ Template declarations
   -> P (OrdList (LHsDecl GhcPs))         -- ^ Desugared declarations
-mkTemplateDecls (L _ th@(TemplateHeader _ lname@(L nloc _) tyVars)) fields (L _ decls) = do
-  vtb@ValidTemplateBody{..} <- validateTemplateBodyDecls nloc (extractTemplateBodyDecls decls)
+mkTemplateDecls (L _ th@TemplateHeader{..}) fields (L _ decls) = do
+  vtb@ValidTemplateBody{..} <- validateTemplateBodyDecls th (extractTemplateBodyDecls decls)
   -- Calculate 'T' data constructor info from 'T' and the record type denoted by 'fields'.
-  ci@(conName, _, _) <- splitCon [fields, rdrNameToType lname]
-  let templateDataDecl = mkTemplateDataDecl (combineLocs lname fields) lname tyVars ci
-  choiceDataDecls <- concat <$> traverse (mkChoiceDataDecls tyVars) (map ccdChoiceData vtbChoices)
-    -- ^ Do not include Archive data type as it has a shared definition across templates
-  let choicesWithArchive = archiveChoiceData : vtbChoices
-      templateInstClassDecl = mkTemplateInstanceClassDecl nloc conName th vtb{vtbChoices = choicesWithArchive}
+  ci@(conName, _, _) <- splitCon [fields, rdrNameToType thTemplateName]
+  let templateDataDecl = mkTemplateDataDecl (combineLocs thTemplateName fields) thTemplateName thTypeVars ci
+  choiceDataDecls <- concat <$> traverse mkChoiceDataDecls vtbChoices
+    -- ^ Do not create Archive data type as it has a single definition across templates
+  let choicesWithArchive = mkArchiveChoice templateName : vtbChoices
+      templateInstClassDecl = mkTemplateInstanceClassDecl (getLoc thTemplateName) conName th vtb{vtbChoices = choicesWithArchive}
       -- Automatically create the base class (`TInstance`) instance if the template is not generic (i.e. has no type parameters)
-      baseInstance = if null tyVars then [instDecl $ classInstDecl (unLoc tInstanceClass) emptyBag] else []
-      templateInstance = mkTemplateInstanceDecl templateName tyVars
-      choiceInstanceDecls = map (mkChoiceInstanceDecl templateName tyVars . ccdChoiceData) choicesWithArchive
-      keyInstanceDecl = mkKeyInstanceDecl templateName tyVars <$> kdKeyType . unLoc <$> vtbKeyData
+      baseInstance = if null thTypeVars then [instDecl $ classInstDecl tInstanceClass emptyBag] else []
+      templateInstance = mkTemplateInstanceDecl templateName thTypeVars
+      choiceInstanceDecls = map (mkChoiceInstanceDecl templateName thTypeVars) choicesWithArchive
+      keyInstanceDecl = mkKeyInstanceDecl templateName thTypeVars <$> kdKeyType . unLoc <$> vtbKeyData
   return $ toOL $ templateDataDecl : choiceDataDecls
                ++ [templateInstClassDecl] ++ baseInstance ++ [templateInstance]
                ++ choiceInstanceDecls ++ maybeToList keyInstanceDecl
   where
-    templateName = rdrNameToString lname
-    tInstanceClass = mkUnqualClass $ mkInstanceClassName templateName
-    archiveChoiceData = CombinedChoiceData
-      { ccdControllers = mkApp
-                           (mkUnqualVar $ mkVarOcc $ prefixTemplateClassMethod $ "signatory" ++ templateName)
-                           (mkUnqualVar $ mkVarOcc "this")
-      , ccdChoiceData = ChoiceData {
-            cdChoiceName = noLoc $ qualifyDesugar $ mkTcOcc "Archive"
-          , cdChoiceFields = Nothing
-          , cdChoiceReturnTy = unitType
-          , cdChoiceBody = pureUnit
-          , cdChoiceConsuming = noLoc $ Just PreConsuming
-          , cdChoiceDoc = Nothing
-          }
-      , ccdFlexible = False
-      }
-    pureUnit = mkApp (mkUnqualVar $ mkVarOcc "pure") (noLoc $ ExplicitTuple noExt [] Boxed)
+    templateName = rdrNameToString thTemplateName
+    tInstanceClass = unLoc $ mkUnqualClass $ mkInstanceClassName templateName
 
--- Generate `newtype` and `instance` declarations corresponding to a
+-- | Generate `newtype` and `instance` declarations corresponding to a
 -- `template instance InstanceName = T Arg1 .. ArgN`.
 mkTemplateInstance
   :: Located RdrName              -- ^ Name given to template instance
@@ -2866,12 +2912,13 @@ mkTemplateInstance instName@(L instLoc _) templateApp
       let tInstanceClass = mkUnqualClass $ mkInstanceClassName $ rdrNameToString templateName
           instType = unLoc $ mkHsAppTys tInstanceClass tyArgs
           instDataName = L instLoc $ mkRdrUnqual $ mkDataOcc $ rdrNameToString $ instName
-          newTypeCon = L instLoc $ mkConDeclH98 instDataName Nothing Nothing $ PrefixCon [templateApp]
+          newTypeCon = L instLoc $ (mkConDeclH98 instDataName Nothing Nothing $ PrefixCon [templateApp])
+                         { con_doc = Just $ L instLoc $ mkHsDocString "TEMPLATE_INSTANCE" }
       newTypeDecl <- mkTyData instLoc NewType Nothing (noLoc (Nothing, rdrNameToType instName)) Nothing [newTypeCon] (noLoc [])
       return $ toOL [TyClD noExt <$> newTypeDecl, instDecl $ classInstDecl instType emptyBag]
   | otherwise = addFatalError instLoc $ text $ rdrNameToString instName ++ " is not an application of a generic template"
 
--- Simplified version of splitHsAppTys for splitting a type application
+-- | Simplified version of splitHsAppTys for splitting a type application
 splitHsAppTysPs :: LHsType GhcPs -> (LHsType GhcPs, [LHsType GhcPs])
 splitHsAppTysPs t = go t []
   where
