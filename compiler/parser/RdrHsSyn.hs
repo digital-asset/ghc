@@ -2763,11 +2763,10 @@ mkChoiceDataDecls (CombinedChoiceData _ ChoiceData{..} tyVars _) = do
 
 -- | Validate @template@ multiplicity constraints.
 validateTemplateBodyDecls
-  :: SrcSpan             -- ^ location of 'T' in @template T@
-  -> [Located RdrName]   -- ^ type variables
+  :: TemplateHeader      -- ^ location and type variable information for @template T@
   -> TemplateBodyDecls   -- ^ unvalidated template body
   -> P ValidTemplateBody -- ^ validated template body
-validateTemplateBodyDecls nloc tyVars tbd@TemplateBodyDecls{..}
+validateTemplateBodyDecls TemplateHeader{..} tbd@TemplateBodyDecls{..}
   | length tbdEnsures > 1 = report "Multiple 'ensure' declarations"
   | null tbdSignatories = report "Missing 'signatory' declaration"
   | length tbdAgreements > 1 = report "Multiple 'agreement' declarations"
@@ -2776,7 +2775,7 @@ validateTemplateBodyDecls nloc tyVars tbd@TemplateBodyDecls{..}
   | null tbdKeys && (not . null) tbdMaintainers = report "Missing 'key' declaration for given 'maintainer'"
   | null tbdMaintainers && (not . null) tbdKeys = report "Missing 'maintainer' declaration for given 'key'"
   | otherwise = do
-      choices <- combineChoices tyVars tbd
+      choices <- combineChoices thTypeVars tbd
       return $ ValidTemplateBody {
           vtbEnsure = listToMaybe tbdEnsures
         , vtbSignatories = applyConcat (noLoc tbdSignatories)
@@ -2788,7 +2787,7 @@ validateTemplateBodyDecls nloc tyVars tbd@TemplateBodyDecls{..}
       }
   where
     report :: String -> P a
-    report = addFatalError nloc . text
+    report e = addFatalError (getLoc thTemplateName) (text e)
 
     -- | We've validated that keys and maintainers must coexist, so combine them into a single data type.
     keyData = (fmap . fmap)
@@ -2854,26 +2853,25 @@ mkTemplateDecls
   -> LHsType GhcPs                       -- ^ Template parameter record type
   -> Located [Located TemplateBodyDecl]  -- ^ Template declarations
   -> P (OrdList (LHsDecl GhcPs))         -- ^ Desugared declarations
-mkTemplateDecls (L _ th@(TemplateHeader _ lname@(L nloc _) tyVars)) fields (L _ decls) = do
-  vtb@ValidTemplateBody{..} <- validateTemplateBodyDecls nloc tyVars (extractTemplateBodyDecls decls)
+mkTemplateDecls (L _ th@TemplateHeader{..}) fields (L _ decls) = do
+  vtb@ValidTemplateBody{..} <- validateTemplateBodyDecls th (extractTemplateBodyDecls decls)
   -- Calculate 'T' data constructor info from 'T' and the record type denoted by 'fields'.
-  ci@(conName, _, _) <- splitCon [fields, rdrNameToType lname]
-  let templateDataDecl = mkTemplateDataDecl (combineLocs lname fields) lname tyVars ci
-  choices <- mapM (addChoiceTypeVars tyVars) vtbChoices -- fill in relevant type vars in choice data
-  choiceDataDecls <- concat <$> traverse mkChoiceDataDecls choices
+  ci@(conName, _, _) <- splitCon [fields, rdrNameToType thTemplateName]
+  let templateDataDecl = mkTemplateDataDecl (combineLocs thTemplateName fields) thTemplateName thTypeVars ci
+  choiceDataDecls <- concat <$> traverse mkChoiceDataDecls vtbChoices
     -- ^ Do not create Archive data type as it has a single definition across templates
-  let choicesWithArchive = archiveChoiceData : choices
-      templateInstClassDecl = mkTemplateInstanceClassDecl nloc conName th vtb{vtbChoices = choicesWithArchive}
+  let choicesWithArchive = archiveChoiceData : vtbChoices
+      templateInstClassDecl = mkTemplateInstanceClassDecl (getLoc thTemplateName) conName th vtb{vtbChoices = choicesWithArchive}
       -- Automatically create the base class (`TInstance`) instance if the template is not generic (i.e. has no type parameters)
-      baseInstance = if null tyVars then [instDecl $ classInstDecl (unLoc tInstanceClass) emptyBag] else []
-      templateInstance = mkTemplateInstanceDecl templateName tyVars
-      choiceInstanceDecls = map (mkChoiceInstanceDecl templateName tyVars) choicesWithArchive
-      keyInstanceDecl = mkKeyInstanceDecl templateName tyVars <$> kdKeyType . unLoc <$> vtbKeyData
+      baseInstance = if null thTypeVars then [instDecl $ classInstDecl (unLoc tInstanceClass) emptyBag] else []
+      templateInstance = mkTemplateInstanceDecl templateName thTypeVars
+      choiceInstanceDecls = map (mkChoiceInstanceDecl templateName thTypeVars) choicesWithArchive
+      keyInstanceDecl = mkKeyInstanceDecl templateName thTypeVars <$> kdKeyType . unLoc <$> vtbKeyData
   return $ toOL $ templateDataDecl : choiceDataDecls
                ++ [templateInstClassDecl] ++ baseInstance ++ [templateInstance]
                ++ choiceInstanceDecls ++ maybeToList keyInstanceDecl
   where
-    templateName = rdrNameToString lname
+    templateName = rdrNameToString thTemplateName
     tInstanceClass = mkUnqualClass $ mkInstanceClassName templateName
     archiveChoiceData = CombinedChoiceData
       { ccdControllers = mkApp
