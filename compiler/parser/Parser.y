@@ -1163,23 +1163,8 @@ template_decl :: { OrdList (LHsDecl GhcPs) }
     -- ^ parse template application as a single type application
 
 template_header :: { Located TemplateHeader }
-  : qtycon tyvars                                { sLL $1 $> $ TemplateHeader [] $1 (unLoc $2) }
-  | constraint '=>' qtycon tyvars                { sLL $1 $> $ TemplateHeader [$1] $3 (unLoc $4) }
-  | '(' constraints ')' '=>' qtycon tyvars       { sLL $1 $> $ TemplateHeader (unLoc $2) $5 (unLoc $6) }
-
--- NOTE(RJR): Typeclass contexts are parsed as types elsewhere in the parser,
--- but doing that naively here results in failure to parse templates without constraints.
--- Hence we write custom parsing for template constraints here.
-constraints :: { Located [Located TemplateConstraint] }
-  : {- empty -}                                  { noLoc [] }
-  | constraints_one                              { $1 }
-
-constraints_one :: { Located [Located TemplateConstraint] }
-  : constraint                                   { sL1 $1 [$1] }
-  | constraint ',' constraints_one               { sLL $1 $> ($1 : unLoc $3) }
-
-constraint :: { Located TemplateConstraint }
-  : qtycon tyvars                                { sLL $1 $2 $ TemplateConstraint $1 (unLoc $2) }
+  : qtycon tyvars                                { sLL $1 $> $ TemplateHeader (noLoc []) $1 (unLoc $2) }
+  | context_ '=>' qtycon tyvars                  { sLL $1 $> $ TemplateHeader $1 $3 (unLoc $4) }
 
 -- Type variables (in the order the user wrote)
 tyvars :: { Located [Located RdrName] }
@@ -1230,7 +1215,9 @@ choice_decls :: { Located [Located ChoiceData] }
  | {- empty -}                                   { sL0 [] }
 
 choice_decl :: { Located ChoiceData }
-  : consuming qtycon OF_TYPE btype_ maybe_docprev arecord_with_opt doexp -- note the use of 'btype_'
+  : consuming qtycon OF_TYPE btype_ maybe_docprev arecord_with_opt doexp
+      -- NOTE: The use of `btype_` (`btype` excluding record `with` types)
+      -- prevents the choice return type capturing the `with` parameter types.
     { sL (comb3 $1 $2 $>) $
             ChoiceData { cdChoiceName = $2
                        , cdChoiceReturnTy = $4
@@ -1242,6 +1229,8 @@ choice_decl :: { Located ChoiceData }
 
 flex_choice_decl :: { Located FlexChoiceData }
   : consuming 'choice' qtycon OF_TYPE btype_ maybe_docprev arecord_with_opt 'controller' party_list doexp
+      -- NOTE: The use of `btype_` (`btype` excluding record `with` types)
+      -- prevents the choice return type capturing the `with` parameter types.
     { sL (comb3 $1 $2 $>) $
         FlexChoiceData (applyConcat $9)
             ChoiceData { cdChoiceName = $3
@@ -2150,6 +2139,17 @@ ctypedoc :: { LHsType GhcPs }
 
 context :: { LHsContext GhcPs }
         :  btype                        {% do { (anns,ctx) <- checkContext $1
+                                                ; if null (unLoc ctx)
+                                                   then addAnnotation (gl $1) AnnUnit (gl $1)
+                                                   else return ()
+                                                ; ams ctx anns
+                                                } }
+
+-- Parse a context as a btype_ for DAML template contexts.
+-- This is the same as 'context' but does not allow record 'with' types
+-- which interfere with parsing templates without contexts.
+context_ :: { LHsContext GhcPs }
+        :  btype_                       {% do { (anns,ctx) <- checkContext $1
                                                 ; if null (unLoc ctx)
                                                    then addAnnotation (gl $1) AnnUnit (gl $1)
                                                    else return ()
