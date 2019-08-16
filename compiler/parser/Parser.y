@@ -1216,8 +1216,8 @@ choice_decls :: { Located [Located ChoiceData] }
 
 choice_decl :: { Located ChoiceData }
   : consuming qtycon OF_TYPE btype_ maybe_docprev arecord_with_opt doexp
-      -- NOTE: The use of `btype_` (`btype` excluding record `with` types)
-      -- prevents the choice return type capturing the `with` parameter types.
+      -- NOTE: We use `btype_` (`btype` excluding record `with` types) to
+      -- prevent the choice return type capturing the `with` parameter types.
     { sL (comb3 $1 $2 $>) $
             ChoiceData { cdChoiceName = $2
                        , cdChoiceReturnTy = $4
@@ -1229,8 +1229,8 @@ choice_decl :: { Located ChoiceData }
 
 flex_choice_decl :: { Located FlexChoiceData }
   : consuming 'choice' qtycon OF_TYPE btype_ maybe_docprev arecord_with_opt 'controller' party_list doexp
-      -- NOTE: The use of `btype_` (`btype` excluding record `with` types)
-      -- prevents the choice return type capturing the `with` parameter types.
+      -- NOTE: We use `btype_` (`btype` excluding record `with` types) to
+      -- prevent the choice return type capturing the `with` parameter types.
     { sL (comb3 $1 $2 $>) $
         FlexChoiceData (applyConcat $9)
             ChoiceData { cdChoiceName = $3
