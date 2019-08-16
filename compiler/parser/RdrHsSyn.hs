@@ -2403,8 +2403,8 @@ freeTypeVarsInChoiceType = go
     gos tys = Set.unions <$> mapM go tys
     go :: LHsType GhcPs -> P (Set.Set RdrName)
     go (L loc ty) = case ty of
-      HsForAllTy{} -> addFatalError loc $ text "Forall types not supported in choice argument types"
-      HsQualTy _ _ ty -> go ty
+      HsForAllTy{} -> fail "Forall types not supported in choice parameter types"
+      HsQualTy{} -> fail "Typeclass contexts not supported in choice parameter types"
       HsTyVar _ _ (L _ tv) -> return $ Set.singleton tv
       HsAppTy _ ty1 ty2 -> gos [ty1, ty2]
       HsAppKindTy _ ty _kindArgument -> go ty
@@ -2414,10 +2414,12 @@ freeTypeVarsInChoiceType = go
       HsSumTy _ tys -> gos tys
       HsOpTy _ ty1 _ ty2 -> gos [ty1, ty2]
       HsParTy _ ty -> go ty
-      HsIParamTy _ _ ty -> go ty -- Should fail on implicitly quantified types?
+      HsIParamTy{} -> fail "Unexpected implicitly quantified type in choice parameter type"
+        -- ^ This construct is inserted by the renamer and should not appear beforehand.
+        -- See note [HsType binders] in HsTypes.
       HsStarTy{} -> return Set.empty
       HsKindSig _ ty _ -> go ty
-      HsSpliceTy{} -> addFatalError loc $ text "Template Haskell not supported in DAML types"
+      HsSpliceTy{} -> fail "Template Haskell not supported in choice parameter types"
       HsDocTy _ ty _ -> go ty
       HsBangTy _ _ ty -> go ty
       HsRecTy _ fs -> gos $ map (cd_fld_type . unLoc) fs
@@ -2426,6 +2428,8 @@ freeTypeVarsInChoiceType = go
       HsTyLit{} -> return Set.empty
       HsWildCardTy{} -> return Set.empty
       XHsType{} -> return Set.empty
+      where
+        fail = addFatalError loc . text
 
 
 mkTemplateClassInstanceSigs :: String -> [Located RdrName] -> Maybe (LHsType GhcPs) -> [LSig GhcPs]
