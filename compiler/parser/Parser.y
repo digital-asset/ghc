@@ -2147,7 +2147,7 @@ context :: { LHsContext GhcPs }
                                                 } }
 
 -- Parse a context as a btype_ for DAML template contexts.
--- This is the same as 'context' but does not allow record 'with' types
+-- This is the same as `context` but does not allow record `with` types
 -- which interfere with parsing templates without contexts.
 context_ :: { LHsContext GhcPs }
         :  btype_                       {% do { (anns,ctx) <- checkContext $1
