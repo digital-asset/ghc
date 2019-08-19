@@ -2755,10 +2755,12 @@ mkChoiceDataDecls (CombinedChoiceData _ ChoiceData{..} tyVars _) = do
 
 -- | Validate @template@ multiplicity constraints.
 validateTemplateBodyDecls
-  :: TemplateHeader      -- ^ location and type variable information for @template T@
+  :: (Maybe (LHsContext GhcPs), LHsType GhcPs)
+                         -- ^ template constraints, name and type variables
   -> TemplateBodyDecls   -- ^ unvalidated template body
-  -> P ValidTemplateBody -- ^ validated template body
-validateTemplateBodyDecls TemplateHeader{..} tbd@TemplateBodyDecls{..}
+  -> P (TemplateHeader, ValidTemplateBody)
+                         -- ^ validated template header and body
+validateTemplateBodyDecls (mbCtx, templateApp) tbd@TemplateBodyDecls{..}
   | length tbdEnsures > 1 = report "Multiple 'ensure' declarations"
   | null tbdSignatories = report "Missing 'signatory' declaration"
   | length tbdAgreements > 1 = report "Multiple 'agreement' declarations"
@@ -2766,9 +2768,12 @@ validateTemplateBodyDecls TemplateHeader{..} tbd@TemplateBodyDecls{..}
   | length tbdLetBindings > 1 = report "Multiple 'let' block declarations"
   | null tbdKeys && (not . null) tbdMaintainers = report "Missing 'key' declaration for given 'maintainer'"
   | null tbdMaintainers && (not . null) tbdKeys = report "Missing 'maintainer' declaration for given 'key'"
-  | otherwise = do
+  | (L _ (HsTyVar NoExt NotPromoted thTemplateName), tyArgs) <- splitHsAppTysPs templateApp
+  = do
+      let thContext = fromMaybe (noLoc []) mbCtx
+      thTypeVars <- mapM checkTyVar tyArgs
       choices <- combineChoices thTypeVars tbd
-      return ValidTemplateBody {
+      return (TemplateHeader{..}, ValidTemplateBody {
           vtbEnsure = listToMaybe tbdEnsures
         , vtbSignatories = applyConcat (noLoc tbdSignatories)
         , vtbObservers = allObservers
@@ -2776,10 +2781,16 @@ validateTemplateBodyDecls TemplateHeader{..} tbd@TemplateBodyDecls{..}
         , vtbLetBindings = fromMaybe (noLoc emptyLocalBinds) (listToMaybe tbdLetBindings)
         , vtbChoices = choices
         , vtbKeyData = keyData
-      }
+      })
+  | otherwise = report "Invalid type where template name was expected"
   where
     report :: String -> P a
-    report e = addFatalError (getLoc thTemplateName) (text e)
+    report e = addFatalError (getLoc templateApp) (text e)
+
+    -- Check that a type is a type variable and report an error otherwise.
+    checkTyVar :: LHsType GhcPs -> P (Located RdrName)
+    checkTyVar (L _ (HsTyVar NoExt NotPromoted tyVar)) = return tyVar
+    checkTyVar (L loc _) = addFatalError loc $ text "Invalid type where type variable was expected"
 
     -- | We've validated that keys and maintainers must coexist, so combine them into a single data type.
     keyData = (fmap . fmap)
@@ -2862,18 +2873,21 @@ mkArchiveChoice templateName =
 -- | Desugar a @template@ declaration into a list of decls (this is
 -- called from 'Parser.y').
 mkTemplateDecls
-  :: Located TemplateHeader              -- ^ Template constraints, name and type variables
+  :: (Maybe (LHsContext GhcPs), LHsType GhcPs)
+                                         -- ^ Template constraints, name and type variables
   -> LHsType GhcPs                       -- ^ Template parameter record type
   -> Located [Located TemplateBodyDecl]  -- ^ Template declarations
   -> P (OrdList (LHsDecl GhcPs))         -- ^ Desugared declarations
-mkTemplateDecls (L _ th@TemplateHeader{..}) fields (L _ decls) = do
-  vtb@ValidTemplateBody{..} <- validateTemplateBodyDecls th (extractTemplateBodyDecls decls)
+mkTemplateDecls header fields (L _ decls) = do
+  (th@TemplateHeader{..}, vtb@ValidTemplateBody{..}) <- validateTemplateBodyDecls header (extractTemplateBodyDecls decls)
   -- Calculate 'T' data constructor info from 'T' and the record type denoted by 'fields'.
   ci@(conName, _, _) <- splitCon [fields, rdrNameToType thTemplateName]
-  let templateDataDecl = mkTemplateDataDecl (combineLocs thTemplateName fields) thTemplateName thTypeVars ci
+  -- Create choice data types except for Archive, which has a single definition across templates
   choiceDataDecls <- concat <$> traverse mkChoiceDataDecls vtbChoices
-    -- ^ Do not create Archive data type as it has a single definition across templates
-  let choicesWithArchive = mkArchiveChoice templateName : vtbChoices
+  let templateName = rdrNameToString thTemplateName
+      tInstanceClass = unLoc $ mkUnqualClass $ mkInstanceClassName templateName
+      templateDataDecl = mkTemplateDataDecl (combineLocs thTemplateName fields) thTemplateName thTypeVars ci
+      choicesWithArchive = mkArchiveChoice templateName : vtbChoices
       templateInstClassDecl = mkTemplateInstanceClassDecl (getLoc thTemplateName) conName th vtb{vtbChoices = choicesWithArchive}
       -- Automatically create the base class (`TInstance`) instance if the template is not generic (i.e. has no type parameters)
       baseInstance = if null thTypeVars then [instDecl $ classInstDecl tInstanceClass emptyBag] else []
@@ -2883,9 +2897,6 @@ mkTemplateDecls (L _ th@TemplateHeader{..}) fields (L _ decls) = do
   return $ toOL $ templateDataDecl : choiceDataDecls
                ++ [templateInstClassDecl] ++ baseInstance ++ [templateInstance]
                ++ choiceInstanceDecls ++ maybeToList keyInstanceDecl
-  where
-    templateName = rdrNameToString thTemplateName
-    tInstanceClass = unLoc $ mkUnqualClass $ mkInstanceClassName templateName
 
 -- | Generate `newtype` and `instance` declarations corresponding to a
 -- `template instance InstanceName = T Arg1 .. ArgN`.

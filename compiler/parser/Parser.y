@@ -1158,13 +1158,14 @@ topdecl :: { LHsDecl GhcPs }
 --
 template_decl :: { OrdList (LHsDecl GhcPs) }
   : 'template' template_header arecord_with 'where' template_body
-                                                 {% mkTemplateDecls $2 $3 $5 }
+                                                 {% mkTemplateDecls (unLoc $2) $3 $5 }
   | 'template' 'instance' qtycon '=' btype_      {% mkTemplateInstance $3 $5 }
     -- ^ parse template application as a single type application
 
-template_header :: { Located TemplateHeader }
-  : qtycon tyvars                                { sLL $1 $> $ TemplateHeader (noLoc []) $1 (unLoc $2) }
-  | context_ '=>' qtycon tyvars                  { sLL $1 $> $ TemplateHeader $1 $3 (unLoc $4) }
+template_header :: { Located (Maybe (LHsContext GhcPs), LHsType GhcPs) }
+  : tycl_hdr_                                      { $1 }
+  --: qtycon tyvars                                { sLL $1 $> $ TemplateHeader (noLoc []) $1 (unLoc $2) }
+  --| context_ '=>' qtycon tyvars                  { sLL $1 $> $ TemplateHeader $1 $3 (unLoc $4) }
 
 -- Type variables (in the order the user wrote)
 tyvars :: { Located [Located RdrName] }
@@ -1613,6 +1614,15 @@ tycl_hdr :: { Located (Maybe (LHsContext GhcPs), LHsType GhcPs) }
                                        >> (return (sLL $1 $> (Just $1, $3)))
                                     }
         | type                      { sL1 $1 (Nothing, $1) }
+
+-- Version of `tycl_hdr` for parsing a DAML template header.
+-- Same as `tycl_hdr` but disallows `arecord_with` which interferes with
+-- parsing template parameters.
+tycl_hdr_ :: { Located (Maybe (LHsContext GhcPs), LHsType GhcPs) }
+        : context_ '=>' btype_      {% addAnnotation (gl $1) (toUnicodeAnn AnnDarrow $2) (gl $2)
+                                       >> (return (sLL $1 $> (Just $1, $3)))
+                                    }
+        | btype_                    { sL1 $1 (Nothing, $1) }
 
 tycl_hdr_inst :: { Located ([AddAnn],(Maybe (LHsContext GhcPs), Maybe [LHsTyVarBndr GhcPs], LHsType GhcPs)) }
         : 'forall' tv_bndrs '.' context '=>' type   {% hintExplicitForall $1
