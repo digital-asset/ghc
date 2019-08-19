@@ -1157,19 +1157,10 @@ topdecl :: { LHsDecl GhcPs }
 -- Templates
 --
 template_decl :: { OrdList (LHsDecl GhcPs) }
-  : 'template' template_header arecord_with 'where' template_body
-                                                 {% mkTemplateDecls (unLoc $2) $3 $5 }
+  : 'template' tycl_hdr_ arecord_with 'where' template_body
+                                                 {% mkTemplateDecls (unLoc $2) $3 (unLoc $5) }
   | 'template' 'instance' qtycon '=' btype_      {% mkTemplateInstance $3 $5 }
     -- ^ parse template application as a single type application
-
-template_header :: { Located (Maybe (LHsContext GhcPs), LHsType GhcPs) }
-  : tycl_hdr_                                      { $1 }
-  --: qtycon tyvars                                { sLL $1 $> $ TemplateHeader (noLoc []) $1 (unLoc $2) }
-  --| context_ '=>' qtycon tyvars                  { sLL $1 $> $ TemplateHeader $1 $3 (unLoc $4) }
-
--- Type variables (in the order the user wrote)
-tyvars :: { Located [Located RdrName] }
-  : varids0                                      { fmap reverse $1 }
 
 template_body :: { Located [Located TemplateBodyDecl] }
   : '{' template_body_decls '}'                  { sLL $1 $3 (reverse (unLoc $2)) }

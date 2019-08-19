@@ -2874,11 +2874,11 @@ mkArchiveChoice templateName =
 -- called from 'Parser.y').
 mkTemplateDecls
   :: (Maybe (LHsContext GhcPs), LHsType GhcPs)
-                                         -- ^ Template constraints, name and type variables
-  -> LHsType GhcPs                       -- ^ Template parameter record type
-  -> Located [Located TemplateBodyDecl]  -- ^ Template declarations
-  -> P (OrdList (LHsDecl GhcPs))         -- ^ Desugared declarations
-mkTemplateDecls header fields (L _ decls) = do
+                                  -- ^ Template constraints, name and type variables
+  -> LHsType GhcPs                -- ^ Template parameter record type
+  -> [Located TemplateBodyDecl]   -- ^ Template declarations
+  -> P (OrdList (LHsDecl GhcPs))  -- ^ Desugared declarations
+mkTemplateDecls header fields decls = do
   (th@TemplateHeader{..}, vtb@ValidTemplateBody{..}) <- validateTemplateBodyDecls header (extractTemplateBodyDecls decls)
   -- Calculate 'T' data constructor info from 'T' and the record type denoted by 'fields'.
   ci@(conName, _, _) <- splitCon [fields, rdrNameToType thTemplateName]
