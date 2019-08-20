@@ -11,6 +11,7 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE NamedFieldPuns #-}
 
 module   RdrHsSyn (
         mkHsOpApp,
@@ -39,9 +40,6 @@ module   RdrHsSyn (
         ChoiceData(..),
         ChoiceConsuming(..),
         FlexChoiceData(..),
-        KeyData(..),
-        TemplateConstraint(..),
-        TemplateHeader(..),
         TemplateBodyDecl(..),
         mkTemplateDecls,
         mkTemplateInstance,
@@ -2147,17 +2145,6 @@ data KeyData = KeyData {
   , kdMaintainers :: LHsExpr GhcPs
   }
 
-data TemplateConstraint = TemplateConstraint {
-    tcConstraintName :: Located RdrName
-  , tcTypeVars :: [Located RdrName]
-  }
-
-data TemplateHeader = TemplateHeader {
-    thConstraints :: [Located TemplateConstraint]
-  , thTemplateName :: Located RdrName
-  , thTypeVars :: [Located RdrName]
-  }
-
 -- | Any declaration that can appear within a template
 data TemplateBodyDecl
   = EnsureDecl (LHsExpr GhcPs)
@@ -2183,15 +2170,19 @@ data TemplateBodyDecls = TemplateBodyDecls {
     , tbdMaintainers :: [LHsExpr GhcPs]
     }
 
--- | Result of validating TemplateBodyDecls, with stricter types
-data ValidTemplateBody = ValidTemplateBody {
-      vtbEnsure :: Maybe (LHsExpr GhcPs)
-    , vtbSignatories :: LHsExpr GhcPs
-    , vtbObservers :: LHsExpr GhcPs
-    , vtbAgreement :: Maybe (LHsExpr GhcPs)
-    , vtbLetBindings :: LHsLocalBinds GhcPs
-    , vtbChoices :: [CombinedChoiceData]
-    , vtbKeyData :: Maybe (Located KeyData)
+-- | Result of validating the template header and body declarations,
+-- with more precise types
+data ValidTemplate = ValidTemplate {
+      vtContext :: LHsContext GhcPs
+    , vtTemplateName :: Located RdrName
+    , vtTypeVars :: [Located RdrName]
+    , vtEnsure :: Maybe (LHsExpr GhcPs)
+    , vtSignatories :: LHsExpr GhcPs
+    , vtObservers :: LHsExpr GhcPs
+    , vtAgreement :: Maybe (LHsExpr GhcPs)
+    , vtLetBindings :: LHsLocalBinds GhcPs
+    , vtChoices :: [CombinedChoiceData]
+    , vtKeyData :: Maybe (Located KeyData)
     }
 
 instance Semigroup TemplateBodyDecls where
@@ -2409,8 +2400,8 @@ freeTypeVarsInChoiceType = go
     gos tys = Set.unions <$> mapM go tys
     go :: LHsType GhcPs -> P (Set.Set RdrName)
     go (L loc ty) = case ty of
-      HsForAllTy{} -> addFatalError loc $ text "Forall types not supported in choice argument types"
-      HsQualTy _ _ ty -> go ty
+      HsForAllTy{} -> fail "Forall types not supported in choice parameter types"
+      HsQualTy{} -> fail "Typeclass contexts not supported in choice parameter types"
       HsTyVar _ _ (L _ tv) -> return $ Set.singleton tv
       HsAppTy _ ty1 ty2 -> gos [ty1, ty2]
       HsAppKindTy _ ty _kindArgument -> go ty
@@ -2420,10 +2411,12 @@ freeTypeVarsInChoiceType = go
       HsSumTy _ tys -> gos tys
       HsOpTy _ ty1 _ ty2 -> gos [ty1, ty2]
       HsParTy _ ty -> go ty
-      HsIParamTy _ _ ty -> go ty -- Should fail on implicitly quantified types?
+      HsIParamTy{} -> fail "Unexpected implicitly quantified type in choice parameter type"
+        -- ^ This construct is inserted by the renamer and should not appear beforehand.
+        -- See note [HsType binders] in HsTypes.
       HsStarTy{} -> return Set.empty
       HsKindSig _ ty _ -> go ty
-      HsSpliceTy{} -> addFatalError loc $ text "Template Haskell not supported in DAML types"
+      HsSpliceTy{} -> fail "Template Haskell not supported in choice parameter types"
       HsDocTy _ ty _ -> go ty
       HsBangTy _ _ ty -> go ty
       HsRecTy _ fs -> gos $ map (cd_fld_type . unLoc) fs
@@ -2432,6 +2425,8 @@ freeTypeVarsInChoiceType = go
       HsTyLit{} -> return Set.empty
       HsWildCardTy{} -> return Set.empty
       XHsType{} -> return Set.empty
+      where
+        fail = addFatalError loc . text
 
 
 mkTemplateClassInstanceSigs :: String -> [Located RdrName] -> Maybe (LHsType GhcPs) -> [LSig GhcPs]
@@ -2626,19 +2621,19 @@ mkTemplateDataDecl loc lname@(L nloc _name) tyVars (conName, conDetails, conDoc)
 
 mkTemplateClassInstanceMethods ::
      Located RdrName             -- ^ ctor 'T'
-  -> ValidTemplateBody           -- ^ sanitized template body
+  -> ValidTemplate               -- ^ sanitized template body
   -> [LHsBind GhcPs]             -- ^ method declarations
-mkTemplateClassInstanceMethods conName ValidTemplateBody{..} =
-  [ mkMethod "signatory" [this] True  vtbSignatories
-  , mkMethod "observer"  [this] True  vtbObservers
-  , mkMethod "ensure"    [this] True  (fromMaybe (mkQualVar $ mkDataOcc "True") vtbEnsure)
-  , mkMethod "agreement" [this] True  (fromMaybe emptyString vtbAgreement)
+mkTemplateClassInstanceMethods conName ValidTemplate{..} =
+  [ mkMethod "signatory" [this] True  vtSignatories
+  , mkMethod "observer"  [this] True  vtObservers
+  , mkMethod "ensure"    [this] True  (fromMaybe (mkQualVar $ mkDataOcc "True") vtEnsure)
+  , mkMethod "agreement" [this] True  (fromMaybe emptyString vtAgreement)
   , mkMethod "create"    []     False (mkMagic "create")
   , mkMethod "fetch"     []     False (mkMagic "fetch")
   , mkMethod "archive"   [cid]  False archiveBody
   ] ++ keyMethods
   where
-    keyMethods = case vtbKeyData of
+    keyMethods = case vtKeyData of
       Nothing -> []
       Just (L _ KeyData{..}) ->
         [ mkMethod "hasKey"      []               False (mkQualVar $ mkDataOcc "HasKey")
@@ -2652,7 +2647,7 @@ mkTemplateClassInstanceMethods conName ValidTemplateBody{..} =
       let fullMethodName = prefixTemplateClassMethod $ methodName ++ templateName
       in  mkTemplateClassMethod fullMethodName args methodBody $
             -- General rule: only include template bindings for methods with `this` in scope
-            if includeBindings then Just vtbLetBindings else Nothing
+            if includeBindings then Just vtLetBindings else Nothing
     templateName = rdrNameToString conName
     this = asPatRecWild "this" conName
     cid = mkVarPat $ mkVarOcc "cid"
@@ -2664,36 +2659,24 @@ mkTemplateClassInstanceMethods conName ValidTemplateBody{..} =
                           (mkUnqualVar $ mkVarOcc "cid"))
                         (mkQualVar $ mkDataOcc "Archive")
 
-templateConstraintsToContext :: [Located TemplateConstraint] -> LHsContext GhcPs
-templateConstraintsToContext constraints =
-  let loc = foldl' combineSrcSpans noSrcSpan $ map getLoc constraints
-      ctx = map (fmap templateConstraintToType) constraints
-  in  L loc ctx
-
-templateConstraintToType :: TemplateConstraint -> HsType GhcPs
-templateConstraintToType (TemplateConstraint constraint tyVars) =
-  unLoc $ mkAppTyArgs (rdrNameToType constraint) tyVars
-
 -- | Construct a @class TInstance@.
 mkTemplateInstanceClassDecl ::
      SrcSpan                     -- ^ location of data 'T'
   -> Located RdrName             -- ^ constructor 'T'
-  -> TemplateHeader              -- ^ template constraints and type variables
-  -> ValidTemplateBody           -- ^ sanitized template body
+  -> ValidTemplate               -- ^ sanitized template body
   -> LHsDecl GhcPs               -- ^ resulting declaration
-mkTemplateInstanceClassDecl templateLoc conName TemplateHeader{..} vtb@ValidTemplateBody{..} =
+mkTemplateInstanceClassDecl templateLoc conName vt@ValidTemplate{..} =
   let templateName = rdrNameToString conName
       className = L templateLoc $ mkRdrUnqual $ mkClsOcc $ mkInstanceClassName templateName
-      context = templateConstraintsToContext thConstraints
-      tyVars = mkHsQTvs $ map rdrNameToTyVar thTypeVars
-      keyType = kdKeyType . unLoc <$> vtbKeyData
-      templateSigs = mkTemplateClassInstanceSigs templateName thTypeVars keyType
-      templateMethods = mkTemplateClassInstanceMethods conName vtb
-      choiceSigs = concatMap (mkTemplateChoiceSigs templateName thTypeVars) vtbChoices
-      choiceMethods = concatMap (mkTemplateChoiceMethods conName vtbLetBindings) vtbChoices
+      tyVars = mkHsQTvs $ map rdrNameToTyVar vtTypeVars
+      keyType = kdKeyType . unLoc <$> vtKeyData
+      templateSigs = mkTemplateClassInstanceSigs templateName vtTypeVars keyType
+      templateMethods = mkTemplateClassInstanceMethods conName vt
+      choiceSigs = concatMap (mkTemplateChoiceSigs templateName vtTypeVars) vtChoices
+      choiceMethods = concatMap (mkTemplateChoiceMethods conName vtLetBindings) vtChoices
       sigs = templateSigs ++ choiceSigs
       methods = listToBag $ templateMethods ++ choiceMethods
-  in noLoc $ TyClD noExt $ classDecl className context tyVars sigs methods
+  in noLoc $ TyClD noExt $ classDecl className vtContext tyVars sigs methods
 
 mkTemplateInstanceMethods ::
      String            -- ^ template name
@@ -2766,12 +2749,14 @@ mkChoiceDataDecls (CombinedChoiceData _ ChoiceData{..} tyVars _) = do
       mbDocDecl = fmap (fmap (DocD noExt . DocCommentNext)) cdChoiceDoc
   return $ maybeToList mbDocDecl ++ [dataDecl]
 
--- | Validate @template@ multiplicity constraints.
-validateTemplateBodyDecls
-  :: TemplateHeader      -- ^ location and type variable information for @template T@
-  -> TemplateBodyDecls   -- ^ unvalidated template body
-  -> P ValidTemplateBody -- ^ validated template body
-validateTemplateBodyDecls TemplateHeader{..} tbd@TemplateBodyDecls{..}
+-- | Perform preliminary checks on template header and body declarations.
+-- Return consolidated data structure with more precise types.
+validateTemplate
+  :: (Maybe (LHsContext GhcPs), LHsType GhcPs)
+                        -- ^ template constraints, name and type variables
+  -> TemplateBodyDecls  -- ^ unvalidated template body
+  -> P ValidTemplate    -- ^ validated template header and body
+validateTemplate (mbCtx, templateApp) tbd@TemplateBodyDecls{..}
   | length tbdEnsures > 1 = report "Multiple 'ensure' declarations"
   | null tbdSignatories = report "Missing 'signatory' declaration"
   | length tbdAgreements > 1 = report "Multiple 'agreement' declarations"
@@ -2779,28 +2764,38 @@ validateTemplateBodyDecls TemplateHeader{..} tbd@TemplateBodyDecls{..}
   | length tbdLetBindings > 1 = report "Multiple 'let' block declarations"
   | null tbdKeys && (not . null) tbdMaintainers = report "Missing 'key' declaration for given 'maintainer'"
   | null tbdMaintainers && (not . null) tbdKeys = report "Missing 'maintainer' declaration for given 'key'"
-  | otherwise = do
-      choices <- combineChoices thTypeVars tbd
-      return ValidTemplateBody {
-          vtbEnsure = listToMaybe tbdEnsures
-        , vtbSignatories = applyConcat (noLoc tbdSignatories)
-        , vtbObservers = allObservers
-        , vtbAgreement = listToMaybe tbdAgreements
-        , vtbLetBindings = fromMaybe (noLoc emptyLocalBinds) (listToMaybe tbdLetBindings)
-        , vtbChoices = choices
-        , vtbKeyData = keyData
+  | (L _ (HsTyVar NoExt NotPromoted vtTemplateName), tyArgs) <- splitHsAppTysPs templateApp
+  = do
+      vtTypeVars <- mapM checkTyVar tyArgs
+      vtChoices <- combineChoices vtTypeVars tbd
+      return ValidTemplate {
+          vtContext = fromMaybe (noLoc []) mbCtx
+        , vtTemplateName
+        , vtTypeVars
+        , vtEnsure = listToMaybe tbdEnsures
+        , vtSignatories = applyConcat (noLoc tbdSignatories)
+        , vtObservers
+        , vtAgreement = listToMaybe tbdAgreements
+        , vtLetBindings = fromMaybe (noLoc emptyLocalBinds) (listToMaybe tbdLetBindings)
+        , vtChoices
+        , vtKeyData
       }
+  | otherwise = report "Invalid type where template name was expected"
   where
     report :: String -> P a
-    report e = addFatalError (getLoc thTemplateName) (text e)
+    report e = addFatalError (getLoc templateApp) (text e)
 
-    -- | We've validated that keys and maintainers must coexist, so combine them into a single data type.
-    keyData = (fmap . fmap)
-                (\(keyExpr, keyType) -> KeyData keyExpr keyType (applyConcat $ noLoc tbdMaintainers))
-                (listToMaybe tbdKeys)
+    -- Check that a type is a type variable and report an error otherwise.
+    checkTyVar :: LHsType GhcPs -> P (Located RdrName)
+    checkTyVar (L _ (HsTyVar NoExt NotPromoted tyVar)) = return tyVar
+    checkTyVar (L loc _) = addFatalError loc $ text "Invalid type where type variable was expected"
+
+    -- | We validate that keys and maintainers must coexist, so combine them into a single data type.
+    vtKeyData = (fmap . fmap) (\(kdKeyExpr, kdKeyType) -> KeyData{..}) (listToMaybe tbdKeys)
+    kdMaintainers = applyConcat $ noLoc tbdMaintainers
 
     -- | Full list of observers includes all controllers of controlled choice groups.
-    allObservers = allTemplateObservers (mergeDecls tbdObservers) $ map (fst . unLoc) tbdControlledChoiceGroups
+    vtObservers = allTemplateObservers (mergeDecls tbdObservers) $ map (fst . unLoc) tbdControlledChoiceGroups
 
     -- | Combine support multiple 'observer' and 'maintainer' declarations into
     -- a single list expression.
@@ -2875,30 +2870,30 @@ mkArchiveChoice templateName =
 -- | Desugar a @template@ declaration into a list of decls (this is
 -- called from 'Parser.y').
 mkTemplateDecls
-  :: Located TemplateHeader              -- ^ Template constraints, name and type variables
-  -> LHsType GhcPs                       -- ^ Template parameter record type
-  -> Located [Located TemplateBodyDecl]  -- ^ Template declarations
-  -> P (OrdList (LHsDecl GhcPs))         -- ^ Desugared declarations
-mkTemplateDecls (L _ th@TemplateHeader{..}) fields (L _ decls) = do
-  vtb@ValidTemplateBody{..} <- validateTemplateBodyDecls th (extractTemplateBodyDecls decls)
+  :: (Maybe (LHsContext GhcPs), LHsType GhcPs)
+                                  -- ^ Template constraints, name and type variables
+  -> LHsType GhcPs                -- ^ Template parameter record type
+  -> [Located TemplateBodyDecl]   -- ^ Template declarations
+  -> P (OrdList (LHsDecl GhcPs))  -- ^ Desugared declarations
+mkTemplateDecls header fields decls = do
+  vt@ValidTemplate{..} <- validateTemplate header (extractTemplateBodyDecls decls)
   -- Calculate 'T' data constructor info from 'T' and the record type denoted by 'fields'.
-  ci@(conName, _, _) <- splitCon [fields, rdrNameToType thTemplateName]
-  let templateDataDecl = mkTemplateDataDecl (combineLocs thTemplateName fields) thTemplateName thTypeVars ci
-  choiceDataDecls <- concat <$> traverse mkChoiceDataDecls vtbChoices
-    -- ^ Do not create Archive data type as it has a single definition across templates
-  let choicesWithArchive = mkArchiveChoice templateName : vtbChoices
-      templateInstClassDecl = mkTemplateInstanceClassDecl (getLoc thTemplateName) conName th vtb{vtbChoices = choicesWithArchive}
+  ci@(conName, _, _) <- splitCon [fields, rdrNameToType vtTemplateName]
+  -- Create choice data types except for Archive, which has a single definition across templates
+  choiceDataDecls <- concat <$> traverse mkChoiceDataDecls vtChoices
+  let templateName = rdrNameToString vtTemplateName
+      tInstanceClass = unLoc $ mkUnqualClass $ mkInstanceClassName templateName
+      templateDataDecl = mkTemplateDataDecl (combineLocs vtTemplateName fields) vtTemplateName vtTypeVars ci
+      choicesWithArchive = mkArchiveChoice templateName : vtChoices
+      templateInstClassDecl = mkTemplateInstanceClassDecl (getLoc vtTemplateName) conName vt{vtChoices = choicesWithArchive}
       -- Automatically create the base class (`TInstance`) instance if the template is not generic (i.e. has no type parameters)
-      baseInstance = if null thTypeVars then [instDecl $ classInstDecl tInstanceClass emptyBag] else []
-      templateInstance = mkTemplateInstanceDecl templateName thTypeVars
-      choiceInstanceDecls = map (mkChoiceInstanceDecl templateName thTypeVars) choicesWithArchive
-      keyInstanceDecl = mkKeyInstanceDecl templateName thTypeVars <$> kdKeyType . unLoc <$> vtbKeyData
+      baseInstance = if null vtTypeVars then [instDecl $ classInstDecl tInstanceClass emptyBag] else []
+      templateInstance = mkTemplateInstanceDecl templateName vtTypeVars
+      choiceInstanceDecls = map (mkChoiceInstanceDecl templateName vtTypeVars) choicesWithArchive
+      keyInstanceDecl = mkKeyInstanceDecl templateName vtTypeVars <$> kdKeyType . unLoc <$> vtKeyData
   return $ toOL $ templateDataDecl : choiceDataDecls
                ++ [templateInstClassDecl] ++ baseInstance ++ [templateInstance]
                ++ choiceInstanceDecls ++ maybeToList keyInstanceDecl
-  where
-    templateName = rdrNameToString thTemplateName
-    tInstanceClass = unLoc $ mkUnqualClass $ mkInstanceClassName templateName
 
 -- | Generate `newtype` and `instance` declarations corresponding to a
 -- `template instance InstanceName = T Arg1 .. ArgN`.

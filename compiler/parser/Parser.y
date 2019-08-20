@@ -1157,33 +1157,10 @@ topdecl :: { LHsDecl GhcPs }
 -- Templates
 --
 template_decl :: { OrdList (LHsDecl GhcPs) }
-  : 'template' template_header arecord_with 'where' template_body
-                                                 {% mkTemplateDecls $2 $3 $5 }
+  : 'template' tycl_hdr_ arecord_with 'where' template_body
+                                                 {% mkTemplateDecls (unLoc $2) $3 (unLoc $5) }
   | 'template' 'instance' qtycon '=' btype_      {% mkTemplateInstance $3 $5 }
-    -- ^ parse template application as a single type application
-
-template_header :: { Located TemplateHeader }
-  : qtycon tyvars                                { sLL $1 $> $ TemplateHeader [] $1 (unLoc $2) }
-  | constraint '=>' qtycon tyvars                { sLL $1 $> $ TemplateHeader [$1] $3 (unLoc $4) }
-  | '(' constraints ')' '=>' qtycon tyvars       { sLL $1 $> $ TemplateHeader (unLoc $2) $5 (unLoc $6) }
-
--- NOTE(RJR): Typeclass contexts are parsed as types elsewhere in the parser,
--- but doing that naively here results in failure to parse templates without constraints.
--- Hence we write custom parsing for template constraints here.
-constraints :: { Located [Located TemplateConstraint] }
-  : {- empty -}                                  { noLoc [] }
-  | constraints_one                              { $1 }
-
-constraints_one :: { Located [Located TemplateConstraint] }
-  : constraint                                   { sL1 $1 [$1] }
-  | constraint ',' constraints_one               { sLL $1 $> ($1 : unLoc $3) }
-
-constraint :: { Located TemplateConstraint }
-  : qtycon tyvars                                { sLL $1 $2 $ TemplateConstraint $1 (unLoc $2) }
-
--- Type variables (in the order the user wrote)
-tyvars :: { Located [Located RdrName] }
-  : varids0                                      { fmap reverse $1 }
+      -- ^ parse template application as a single type application
 
 template_body :: { Located [Located TemplateBodyDecl] }
   : '{' template_body_decls '}'                  { sLL $1 $3 (reverse (unLoc $2)) }
@@ -1230,7 +1207,9 @@ choice_decls :: { Located [Located ChoiceData] }
  | {- empty -}                                   { sL0 [] }
 
 choice_decl :: { Located ChoiceData }
-  : consuming qtycon OF_TYPE btype_ maybe_docprev arecord_with_opt doexp -- note the use of 'btype_'
+  : consuming qtycon OF_TYPE btype_ maybe_docprev arecord_with_opt doexp
+      -- NOTE: We use `btype_` (`btype` excluding record `with` types) to
+      -- prevent the choice return type capturing the `with` parameter types.
     { sL (comb3 $1 $2 $>) $
             ChoiceData { cdChoiceName = $2
                        , cdChoiceReturnTy = $4
@@ -1242,6 +1221,8 @@ choice_decl :: { Located ChoiceData }
 
 flex_choice_decl :: { Located FlexChoiceData }
   : consuming 'choice' qtycon OF_TYPE btype_ maybe_docprev arecord_with_opt 'controller' party_list doexp
+      -- NOTE: We use `btype_` (`btype` excluding record `with` types) to
+      -- prevent the choice return type capturing the `with` parameter types.
     { sL (comb3 $1 $2 $>) $
         FlexChoiceData (applyConcat $9)
             ChoiceData { cdChoiceName = $3
@@ -1624,6 +1605,15 @@ tycl_hdr :: { Located (Maybe (LHsContext GhcPs), LHsType GhcPs) }
                                        >> (return (sLL $1 $> (Just $1, $3)))
                                     }
         | type                      { sL1 $1 (Nothing, $1) }
+
+-- Version of `tycl_hdr` for parsing a DAML template header.
+-- Same as `tycl_hdr` but disallows `arecord_with` which interferes with
+-- parsing template parameters.
+tycl_hdr_ :: { Located (Maybe (LHsContext GhcPs), LHsType GhcPs) }
+        : context_ '=>' btype_      {% addAnnotation (gl $1) (toUnicodeAnn AnnDarrow $2) (gl $2)
+                                       >> (return (sLL $1 $> (Just $1, $3)))
+                                    }
+        | btype_                    { sL1 $1 (Nothing, $1) }
 
 tycl_hdr_inst :: { Located ([AddAnn],(Maybe (LHsContext GhcPs), Maybe [LHsTyVarBndr GhcPs], LHsType GhcPs)) }
         : 'forall' tv_bndrs '.' context '=>' type   {% hintExplicitForall $1
@@ -2150,6 +2140,17 @@ ctypedoc :: { LHsType GhcPs }
 
 context :: { LHsContext GhcPs }
         :  btype                        {% do { (anns,ctx) <- checkContext $1
+                                                ; if null (unLoc ctx)
+                                                   then addAnnotation (gl $1) AnnUnit (gl $1)
+                                                   else return ()
+                                                ; ams ctx anns
+                                                } }
+
+-- Parse a context as a btype_ for DAML template contexts.
+-- This is the same as `context` but does not allow record `with` types
+-- which interfere with parsing templates without contexts.
+context_ :: { LHsContext GhcPs }
+        :  btype_                       {% do { (anns,ctx) <- checkContext $1
                                                 ; if null (unLoc ctx)
                                                    then addAnnotation (gl $1) AnnUnit (gl $1)
                                                    else return ()
