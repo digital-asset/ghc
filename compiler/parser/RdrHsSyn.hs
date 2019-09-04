@@ -2927,11 +2927,11 @@ mkTemplateInstance instName@(L instLoc _) templateApp
   | (templateType, tyArgs) <- splitHsAppTysPs templateApp
   , L _ (HsTyVar NoExt NotPromoted templateName) <- templateType = do
       let instType = unLoc $ mkHsAppTys (mkInstanceClass templateName) tyArgs
-          instDataName = L instLoc $ mkRdrUnqual $ mkDataOcc $ rdrNameToString $ instName
-          newTypeCon = L instLoc $ (mkConDeclH98 instDataName Nothing Nothing $ PrefixCon [templateApp])
-                         { con_doc = Just $ L instLoc $ mkHsDocString "TEMPLATE_INSTANCE" }
-      newTypeDecl <- mkTyData instLoc NewType Nothing (noLoc (Nothing, rdrNameToType instName)) Nothing [newTypeCon] (noLoc [])
-      return $ toOL [TyClD noExt <$> newTypeDecl, instDecl $ classInstDecl instType emptyBag]
+      let tInstanceClass = mkUnqualClass $ mkInstanceClassName . occNameString . rdrNameOcc <$> templateName
+          instType = unLoc $ mkHsAppTys tInstanceClass tyArgs
+          inst = instDecl $ classInstDecl instType emptyBag
+      synDecl <- mkTySynonym instLoc (rdrNameToType instName) templateApp
+      return $ toOL [TyClD noExt <$> synDecl, inst]
   | otherwise = addFatalError instLoc $ text $ rdrNameToString instName ++ " is not an application of a generic template"
 
 -- | Simplified version of splitHsAppTys for splitting a type application
