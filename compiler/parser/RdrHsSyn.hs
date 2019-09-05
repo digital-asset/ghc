@@ -2239,8 +2239,8 @@ mkUnqualType = noLoc . HsTyVar NoExt NotPromoted . noLoc . mkRdrUnqual . mkTcOcc
 mkQualType :: String -> LHsType GhcPs
 mkQualType = noLoc . HsTyVar NoExt NotPromoted . noLoc . qualifyDesugar . mkTcOcc
 
-mkUnqualClass :: String -> LHsType GhcPs
-mkUnqualClass = noLoc . HsTyVar NoExt NotPromoted . noLoc . mkRdrUnqual . mkClsOcc
+mkUnqualClass :: SrcSpan -> String -> LHsType GhcPs
+mkUnqualClass loc = L loc . HsTyVar NoExt NotPromoted . L loc . mkRdrUnqual . mkClsOcc
 
 mkQualClass :: String -> LHsType GhcPs
 mkQualClass = noLoc . HsTyVar NoExt NotPromoted . noLoc . qualifyDesugar . mkClsOcc
@@ -2691,7 +2691,7 @@ mkTemplateInstanceMethods templateName =
 
 withInstanceContext :: String -> [Located RdrName] -> LHsType GhcPs -> HsType GhcPs
 withInstanceContext templateName tyVars =
-  let tInstanceClass = mkUnqualClass $ mkInstanceClassName templateName
+  let tInstanceClass = mkUnqualClass noSrcSpan $ mkInstanceClassName templateName
       tInstanceConstraint = mkAppTyArgs tInstanceClass tyVars
   in  HsQualTy noExt (noLoc [tInstanceConstraint])
 
@@ -2882,10 +2882,11 @@ mkTemplateDecls header fields decls = do
   -- Create choice data types except for Archive, which has a single definition across templates
   choiceDataDecls <- concat <$> traverse mkChoiceDataDecls vtChoices
   let templateName = rdrNameToString vtTemplateName
-      tInstanceClass = unLoc $ mkUnqualClass $ mkInstanceClassName templateName
+      templateLoc = getLoc vtTemplateName
+      tInstanceClass = unLoc $ mkUnqualClass templateLoc $ mkInstanceClassName templateName
       templateDataDecl = mkTemplateDataDecl (combineLocs vtTemplateName fields) vtTemplateName vtTypeVars ci
       choicesWithArchive = mkArchiveChoice templateName : vtChoices
-      templateInstClassDecl = mkTemplateInstanceClassDecl (getLoc vtTemplateName) conName vt{vtChoices = choicesWithArchive}
+      templateInstClassDecl = mkTemplateInstanceClassDecl templateLoc conName vt{vtChoices = choicesWithArchive}
       -- Automatically create the base class (`TInstance`) instance if the template is not generic (i.e. has no type parameters)
       baseInstance = if null vtTypeVars then [instDecl $ classInstDecl tInstanceClass emptyBag] else []
       templateInstance = mkTemplateInstanceDecl templateName vtTypeVars
@@ -2903,8 +2904,8 @@ mkTemplateInstance
   -> P (OrdList (LHsDecl GhcPs))  -- ^ Resulting declarations (`newtype` and `instance` of `TInstance` class)
 mkTemplateInstance instName@(L instLoc _) templateApp
   | (templateType, tyArgs) <- splitHsAppTysPs templateApp
-  , L _ (HsTyVar NoExt NotPromoted templateName) <- templateType = do
-      let tInstanceClass = mkUnqualClass $ mkInstanceClassName $ rdrNameToString templateName
+  , L templateLoc (HsTyVar NoExt NotPromoted templateName) <- templateType = do
+      let tInstanceClass = mkUnqualClass templateLoc $ mkInstanceClassName $ rdrNameToString templateName
           instType = unLoc $ mkHsAppTys tInstanceClass tyArgs
           instDataName = L instLoc $ mkRdrUnqual $ mkDataOcc $ rdrNameToString $ instName
           newTypeCon = L instLoc $ (mkConDeclH98 instDataName Nothing Nothing $ PrefixCon [templateApp])
