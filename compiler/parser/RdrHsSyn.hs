@@ -2930,8 +2930,10 @@ mkTemplateInstance instName@(L instLoc _) templateApp
       let tInstanceClass = mkUnqualClass $ mkInstanceClassName . occNameString . rdrNameOcc <$> templateName
           instType = unLoc $ mkHsAppTys tInstanceClass tyArgs
           inst = instDecl $ classInstDecl instType emptyBag
+          doc = L instLoc $ DocD noExt $ DocCommentNext $ mkHsDocString "TEMPLATE_INSTANCE"
+            -- ^ Marker for DAML-Doc to recognise that a type synonym comes from a template instance
       synDecl <- mkTySynonym instLoc (rdrNameToType instName) templateApp
-      return $ toOL [TyClD noExt <$> synDecl, inst]
+      return $ toOL [doc, TyClD noExt <$> synDecl, inst]
   | otherwise = addFatalError instLoc $ text $ rdrNameToString instName ++ " is not an application of a generic template"
 
 -- | Simplified version of splitHsAppTys for splitting a type application
