@@ -2676,7 +2676,7 @@ mkTemplateInstanceClassDecl templateLoc conName vt@ValidTemplate{..} =
       choiceMethods = concatMap (mkTemplateChoiceMethods conName vtLetBindings) vtChoices
       sigs = templateSigs ++ choiceSigs
       methods = listToBag $ templateMethods ++ choiceMethods
-  in noLoc $ TyClD noExt $ classDecl className vtContext tyVars sigs methods
+  in L templateLoc $ TyClD noExt $ classDecl className vtContext tyVars sigs methods
 
 mkTemplateInstanceMethods ::
      String            -- ^ template name
