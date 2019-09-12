@@ -2254,8 +2254,9 @@ mkAppTy ty1 ty2 = noLoc $ HsAppTy noExt ty1 ty2
 unitType :: LHsType GhcPs
 unitType = noLoc $ HsTupleTy noExt HsBoxedOrConstraintTuple []
 
+-- Wrap a type in parentheses, preserving the location of the original type.
 mkParenTy :: LHsType GhcPs -> LHsType GhcPs
-mkParenTy = noLoc . HsParTy noExt
+mkParenTy ty = L (getLoc ty) (HsParTy noExt ty)
 
 mkContractId :: LHsType GhcPs -> LHsType GhcPs
 mkContractId = mkAppTy (mkQualType "ContractId")
