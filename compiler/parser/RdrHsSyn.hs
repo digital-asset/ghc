@@ -2897,15 +2897,15 @@ mkTemplateDecls header fields decls = do
   -- Create choice data types except for Archive, which has a single definition across templates
   choiceDataDecls <- concat <$> traverse mkChoiceDataDecls vtChoices
   let templateName = occNameString . rdrNameOcc <$> vtTemplateName
-      tInstanceClass = unLoc $ mkInstanceClass vtTemplateName
       templateDataDecl = mkTemplateDataDecl (combineLocs vtTemplateName fields) vtTemplateName vtTypeVars ci
       choicesWithArchive = mkArchiveChoice (unLoc templateName) : vtChoices
       templateInstClassDecl = mkTemplateInstanceClassDecl (getLoc templateName) conName vt{vtChoices = choicesWithArchive}
-      -- Automatically create the base class (`TInstance`) instance if the template is not generic (i.e. has no type parameters)
-      baseInstance = if null vtTypeVars then [instDecl $ classInstDecl tInstanceClass emptyBag] else []
       templateInstance = mkTemplateInstanceDecl templateName vtTypeVars
       choiceInstanceDecls = map (mkChoiceInstanceDecl templateName vtTypeVars) choicesWithArchive
       keyInstanceDecl = mkKeyInstanceDecl templateName vtTypeVars <$> kdKeyType . unLoc <$> vtKeyData
+      -- Automatically create the base class (`TInstance`) instance if the template is not generic (i.e. has no type parameters)
+      tInstanceClass = unLoc $ mkInstanceClass vtTemplateName
+      baseInstance = if null vtTypeVars then [instDecl $ classInstDecl tInstanceClass emptyBag] else []
   return $ toOL $ templateDataDecl : choiceDataDecls
                ++ [templateInstClassDecl] ++ baseInstance ++ [templateInstance]
                ++ choiceInstanceDecls ++ maybeToList keyInstanceDecl
