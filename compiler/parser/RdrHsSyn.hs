@@ -2235,14 +2235,14 @@ mkApp e1 e2 = noLoc $ HsApp noExt e1 e2
 
 mkUnqualType :: Located String -> LHsType GhcPs
 mkUnqualType (L loc tyName) =
-  L loc $ HsTyVar NoExt NotPromoted $ L loc $ mkRdrUnqual $ mkTcOcc tyName
+  rdrNameToType $ L loc $ mkRdrUnqual $ mkTcOcc tyName
 
 mkQualType :: String -> LHsType GhcPs
 mkQualType = noLoc . HsTyVar NoExt NotPromoted . noLoc . qualifyDesugar . mkTcOcc
 
 mkUnqualClass :: Located String -> LHsType GhcPs
 mkUnqualClass (L loc className) =
-  L loc $ HsTyVar NoExt NotPromoted $ L loc $ mkRdrUnqual $ mkClsOcc className
+  rdrNameToType $ L loc $ mkRdrUnqual $ mkClsOcc className
 
 mkQualClass :: String -> LHsType GhcPs
 mkQualClass = noLoc . HsTyVar NoExt NotPromoted . noLoc . qualifyDesugar . mkClsOcc
@@ -2281,6 +2281,18 @@ mkChoiceType choiceName tyVars = mkAppTyArgs (rdrNameToType choiceName) tyVars
 -- | Scheme for naming the `TInstance` class from the template name `T`.
 mkInstanceClassName :: String -> String
 mkInstanceClassName templateName = templateName ++ "Instance"
+
+mkInstanceClassOccName :: OccName -> OccName
+mkInstanceClassOccName = mkClsOcc . mkInstanceClassName . occNameString
+
+mkInstanceClassRdrName :: RdrName -> RdrName
+mkInstanceClassRdrName (Unqual occ) = Unqual $ mkInstanceClassOccName occ
+mkInstanceClassRdrName (Qual m occ) = Qual m $ mkInstanceClassOccName occ
+mkInstanceClassRdrName Orig{}  = panic "mkInstanceClassRdrName: unexpected original name"
+mkInstanceClassRdrName Exact{} = panic "mkInstanceClassRdrName: unexpected exact name"
+
+mkInstanceClass :: Located RdrName -> LHsType GhcPs
+mkInstanceClass = rdrNameToType . fmap mkInstanceClassRdrName
 
 mkVarPat :: OccName -> Pat GhcPs
 mkVarPat = XPat . noLoc . VarPat noExt . noLoc . mkRdrUnqual
@@ -2885,15 +2897,15 @@ mkTemplateDecls header fields decls = do
   -- Create choice data types except for Archive, which has a single definition across templates
   choiceDataDecls <- concat <$> traverse mkChoiceDataDecls vtChoices
   let templateName = occNameString . rdrNameOcc <$> vtTemplateName
-      tInstanceClass = unLoc $ mkUnqualClass $ mkInstanceClassName <$> templateName
       templateDataDecl = mkTemplateDataDecl (combineLocs vtTemplateName fields) vtTemplateName vtTypeVars ci
       choicesWithArchive = mkArchiveChoice (unLoc templateName) : vtChoices
       templateInstClassDecl = mkTemplateInstanceClassDecl (getLoc templateName) conName vt{vtChoices = choicesWithArchive}
-      -- Automatically create the base class (`TInstance`) instance if the template is not generic (i.e. has no type parameters)
-      baseInstance = if null vtTypeVars then [instDecl $ classInstDecl tInstanceClass emptyBag] else []
       templateInstance = mkTemplateInstanceDecl templateName vtTypeVars
       choiceInstanceDecls = map (mkChoiceInstanceDecl templateName vtTypeVars) choicesWithArchive
       keyInstanceDecl = mkKeyInstanceDecl templateName vtTypeVars <$> kdKeyType . unLoc <$> vtKeyData
+      -- Automatically create the base class (`TInstance`) instance if the template is not generic (i.e. has no type parameters)
+      tInstanceClass = unLoc $ mkInstanceClass vtTemplateName
+      baseInstance = if null vtTypeVars then [instDecl $ classInstDecl tInstanceClass emptyBag] else []
   return $ toOL $ templateDataDecl : choiceDataDecls
                ++ [templateInstClassDecl] ++ baseInstance ++ [templateInstance]
                ++ choiceInstanceDecls ++ maybeToList keyInstanceDecl
@@ -2907,8 +2919,7 @@ mkTemplateInstance
 mkTemplateInstance instName@(L instLoc _) templateApp
   | (templateType, tyArgs) <- splitHsAppTysPs templateApp
   , L _ (HsTyVar NoExt NotPromoted templateName) <- templateType = do
-      let tInstanceClass = mkUnqualClass $ mkInstanceClassName . occNameString . rdrNameOcc <$> templateName
-          instType = unLoc $ mkHsAppTys tInstanceClass tyArgs
+      let instType = unLoc $ mkHsAppTys (mkInstanceClass templateName) tyArgs
           instDataName = L instLoc $ mkRdrUnqual $ mkDataOcc $ rdrNameToString $ instName
           newTypeCon = L instLoc $ (mkConDeclH98 instDataName Nothing Nothing $ PrefixCon [templateApp])
                          { con_doc = Just $ L instLoc $ mkHsDocString "TEMPLATE_INSTANCE" }
