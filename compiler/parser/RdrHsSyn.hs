@@ -2269,6 +2269,9 @@ mkUpdate = mkAppTy (mkQualType "Update")
 partiesType :: LHsType GhcPs
 partiesType = noLoc $ HsListTy noExt $ mkQualType "Party"
 
+anyTemplateType :: LHsType GhcPs
+anyTemplateType = mkQualType "AnyTemplate"
+
 mkAppTyArgs :: LHsType GhcPs -> [Located RdrName] -> LHsType GhcPs
 mkAppTyArgs tyCon tyVars = mkHsAppTys tyCon $ map rdrNameToType tyVars
 
@@ -2454,6 +2457,8 @@ mkTemplateClassInstanceSigs templateName tyVars mbKeyType =
     , ("create",    templateType `mkFunTy` mkUpdate (mkParenTy contractId))
     , ("fetch",     contractId `mkFunTy` mkUpdate (mbParenTy templateType))
     , ("archive",   contractId `mkFunTy` mkUpdate unitType)
+    , ("toAnyTemplate", templateType `mkFunTy` anyTemplateType)
+    , ("fromAnyTemplate", anyTemplateType `mkFunTy` mkParenTy (mkQualType "Optional" `mkAppTy` templateType))
     ]
     ++ keySigs
   where
@@ -2646,6 +2651,8 @@ mkTemplateClassInstanceMethods conName ValidTemplate{..} =
   , mkMethod "create"    []     False (mkMagic "create")
   , mkMethod "fetch"     []     False (mkMagic "fetch")
   , mkMethod "archive"   [cid]  False archiveBody
+  , mkMethod "toAnyTemplate" [] False (mkMagic "toAnyTemplate")
+  , mkMethod "fromAnyTemplate" [] False (mkMagic "fromAnyTemplate")
   ] ++ keyMethods
   where
     keyMethods = case vtKeyData of
@@ -2697,7 +2704,7 @@ mkTemplateInstanceMethods ::
      String            -- ^ template name
   -> [LHsBind GhcPs]   -- ^ method declarations
 mkTemplateInstanceMethods templateName =
-  map mkMethod ["signatory", "observer", "ensure", "agreement", "create", "fetch", "archive"]
+  map mkMethod ["signatory", "observer", "ensure", "agreement", "create", "fetch", "archive", "toAnyTemplate", "fromAnyTemplate"]
   where
     mkMethod :: String -> LHsBind GhcPs
     mkMethod methodName =
