@@ -2917,23 +2917,32 @@ mkTemplateDecls header fields decls = do
                ++ [templateInstClassDecl] ++ baseInstance ++ [templateInstance]
                ++ choiceInstanceDecls ++ maybeToList keyInstanceDecl
 
--- | Generate `newtype` and `instance` declarations corresponding to a
--- `template instance InstanceName = T Arg1 .. ArgN`.
+-- | Desugar a template instance of the form
+--
+-- @template instance InstanceName = T Arg1 .. ArgN@
+--
+-- to the following:
+--
+-- @-- | TEMPLATE_INSTANCE@
+-- @type InstanceName = T Arg1 .. ArgN@
+-- @instance TInstance Arg1 .. ArgN@
+--
+-- The documentation annotation is needed for damldocs to recognise that the
+-- resulting type synonym corresponds to a template instance.
 mkTemplateInstance
   :: Located RdrName              -- ^ Name given to template instance
   -> LHsType GhcPs                -- ^ Application of generic template to type arguments
-  -> P (OrdList (LHsDecl GhcPs))  -- ^ Resulting declarations (`newtype` and `instance` of `TInstance` class)
+  -> P (OrdList (LHsDecl GhcPs))  -- ^ Resulting `type` (with doc marker) and `instance` declarations
 mkTemplateInstance instName@(L instLoc _) templateApp
   | (templateType, tyArgs) <- splitHsAppTysPs templateApp
-  , L _ (HsTyVar NoExt NotPromoted templateName) <- templateType = do
-      let instType = unLoc $ mkHsAppTys (mkInstanceClass templateName) tyArgs
-      let tInstanceClass = mkUnqualClass $ mkInstanceClassName . occNameString . rdrNameOcc <$> templateName
-          instType = unLoc $ mkHsAppTys tInstanceClass tyArgs
-          inst = instDecl $ classInstDecl instType emptyBag
-          doc = L instLoc $ DocD noExt $ DocCommentNext $ mkHsDocString "TEMPLATE_INSTANCE"
-            -- ^ Marker for DAML-Doc to recognise that a type synonym comes from a template instance
+  , L _ (HsTyVar NoExt NotPromoted templateName) <- templateType
+  = do
       synDecl <- mkTySynonym instLoc (rdrNameToType instName) templateApp
-      return $ toOL [doc, TyClD noExt <$> synDecl, inst]
+      let syn = TyClD noExt <$> synDecl
+          doc = L instLoc $ DocD noExt $ DocCommentNext $ mkHsDocString "TEMPLATE_INSTANCE"
+          instType = unLoc $ mkHsAppTys (mkInstanceClass templateName) tyArgs
+          inst = instDecl $ classInstDecl instType emptyBag
+      return $ toOL [doc, syn, inst]
   | otherwise = addFatalError instLoc $ text $ rdrNameToString instName ++ " is not an application of a generic template"
 
 -- | Simplified version of splitHsAppTys for splitting a type application
