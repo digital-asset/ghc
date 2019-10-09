@@ -2272,6 +2272,9 @@ partiesType = noLoc $ HsListTy noExt $ mkQualType "Party"
 anyTemplateType :: LHsType GhcPs
 anyTemplateType = mkQualType "AnyTemplate"
 
+anyChoiceType :: LHsType GhcPs
+anyChoiceType = mkQualType "AnyChoice"
+
 mkAppTyArgs :: LHsType GhcPs -> [Located RdrName] -> LHsType GhcPs
 mkAppTyArgs tyCon tyVars = mkHsAppTys tyCon $ map rdrNameToType tyVars
 
@@ -2529,6 +2532,8 @@ mkTemplateChoiceSigs templateName tyVars (CombinedChoiceData _ ChoiceData{..} ch
     , ("controller", mkFunTy templateType (mkFunTy choiceType partiesType))
     , ("action", mkFunTy contractId (mkFunTy templateType (mkFunTy choiceType choiceReturnType)))
     , ("exercise", mkFunTy contractId (mkFunTy choiceType choiceReturnType))
+    , ("toAnyChoice", choiceType `mkFunTy` anyChoiceType)
+    , ("fromAnyChoice", anyChoiceType `mkFunTy` (mkQualType "Optional" `mkAppTy` mbChoiceParenTy choiceType))
     ]
   where
     mkSig :: String -> LHsType GhcPs -> LSig GhcPs
@@ -2542,6 +2547,7 @@ mkTemplateChoiceSigs templateName tyVars (CombinedChoiceData _ ChoiceData{..} ch
     choiceReturnType = mkUpdate $ mkParenTy cdChoiceReturnTy
     consuming = unLoc . mkQualType . show . fromMaybe PreConsuming <$> cdChoiceConsuming
     mbParenTy = if null tyVars then id else mkParenTy
+    mbChoiceParenTy = if null choiceTyVars then id else mkParenTy
 
 mkTemplateClassMethod ::
      String                      -- ^ method name
@@ -2579,6 +2585,8 @@ mkTemplateChoiceMethods conName binds (CombinedChoiceData controllers ChoiceData
   , mkMethod "controller"  [this, controllerArg] True  controllers
   , mkMethod "action"      [self, this, arg]     True  cdChoiceBody
   , mkMethod "exercise"    []                    False magicExercise
+  , mkMethod "toAnyChoice" []                    False magicToAnyChoice
+  , mkMethod "fromAnyChoice" []                  False magicFromAnyChoice
   ]
   where
     mkMethod :: String -> [Pat GhcPs] -> Bool -> LHsExpr GhcPs -> LHsBind GhcPs
@@ -2595,6 +2603,8 @@ mkTemplateChoiceMethods conName binds (CombinedChoiceData controllers ChoiceData
     controllerArg = if flexible then arg else WildPat noExt
     consuming = unLoc . mkQualVar . mkDataOcc . show . fromMaybe PreConsuming <$> cdChoiceConsuming
     magicExercise = mkMagic $ if choiceName == "Archive" then "archive" else "exercise"
+    magicToAnyChoice = mkMagic "toAnyChoice"
+    magicFromAnyChoice = mkMagic "fromAnyChoice"
 
 -- | Construct a @data X a b c = X {...} deriving (Eq, Show)@
 mkTemplateDataDecl ::
