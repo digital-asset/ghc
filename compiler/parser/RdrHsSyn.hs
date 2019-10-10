@@ -2247,6 +2247,7 @@ mkUnqualClass (L loc className) =
 mkQualClass :: String -> LHsType GhcPs
 mkQualClass = noLoc . HsTyVar NoExt NotPromoted . noLoc . qualifyDesugar . mkClsOcc
 
+infixr 3 `mkFunTy` -- Associates to the right
 mkFunTy :: LHsType GhcPs -> LHsType GhcPs -> LHsType GhcPs
 mkFunTy funTy argTy = noLoc $ HsFunTy noExt funTy argTy
 
