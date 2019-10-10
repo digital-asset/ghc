@@ -2250,6 +2250,9 @@ mkQualClass = noLoc . HsTyVar NoExt NotPromoted . noLoc . qualifyDesugar . mkCls
 mkFunTy :: LHsType GhcPs -> LHsType GhcPs -> LHsType GhcPs
 mkFunTy funTy argTy = noLoc $ HsFunTy noExt funTy argTy
 
+mkTyVar :: String -> LHsType GhcPs
+mkTyVar = noLoc . HsTyVar NoExt NotPromoted . noLoc . mkRdrUnqual . mkTyVarOcc
+
 mkAppTy :: LHsType GhcPs -> LHsType GhcPs -> LHsType GhcPs
 mkAppTy ty1 ty2 = noLoc $ HsAppTy noExt ty1 ty2
 
@@ -2532,8 +2535,9 @@ mkTemplateChoiceSigs templateName tyVars (CombinedChoiceData _ ChoiceData{..} ch
     , ("controller", mkFunTy templateType (mkFunTy choiceType partiesType))
     , ("action", mkFunTy contractId (mkFunTy templateType (mkFunTy choiceType choiceReturnType)))
     , ("exercise", mkFunTy contractId (mkFunTy choiceType choiceReturnType))
-    , ("toAnyChoice", choiceType `mkFunTy` anyChoiceType)
-    , ("fromAnyChoice", anyChoiceType `mkFunTy` (mkQualType "Optional" `mkAppTy` mbChoiceParenTy choiceType))
+    -- We add a proxy with the template type to avoid forcing users to enable AllowAmbigousTypes
+    , ("toAnyChoice", (mkTyVar "proxy" `mkAppTy` templateType) `mkFunTy` choiceType `mkFunTy` anyChoiceType)
+    , ("fromAnyChoice", (mkTyVar "proxy" `mkAppTy` templateType) `mkFunTy` anyChoiceType `mkFunTy` (mkQualType "Optional" `mkAppTy` mbChoiceParenTy choiceType))
     ]
   where
     mkSig :: String -> LHsType GhcPs -> LSig GhcPs
@@ -2747,11 +2751,13 @@ mkChoiceInstanceDecl templateName tyVars (CombinedChoiceData _ ChoiceData{..} ch
       choiceClass = foldl' mkAppTy (mkQualClass "Choice")
                       [mbParenTy templateType, mbParenTy choiceType, returnType]
       instanceType = withInstanceContext templateName tyVars choiceClass
-      exerciseMethodBody =
-        mkUnqualVar $ mkVarOcc $ prefixTemplateClassMethod $
-          "exercise" ++ unLoc templateName ++ rdrNameToString cdChoiceName
-      exerciseMethod = mkTemplateClassMethod "exercise" [] exerciseMethodBody Nothing
-  in instDecl $ classInstDecl instanceType $ listToBag [exerciseMethod]
+      mkMethod name prefix =
+        let methodBody = mkUnqualVar $ mkVarOcc $ prefixTemplateClassMethod $ name ++ unLoc templateName ++ rdrNameToString cdChoiceName
+        in mkTemplateClassMethod (prefix ++ name) [] methodBody Nothing
+      exerciseMethod = mkMethod "exercise" ""
+      toAnyChoiceMethod = mkMethod "toAnyChoice" "_"
+      fromAnyChoiceMethod = mkMethod "fromAnyChoice" "_"
+  in instDecl $ classInstDecl instanceType $ listToBag [exerciseMethod, toAnyChoiceMethod, fromAnyChoiceMethod]
   where
     mbParenTy = if null tyVars then id else mkParenTy
 
