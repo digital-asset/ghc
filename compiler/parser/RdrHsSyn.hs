@@ -2249,7 +2249,7 @@ mkQualClass = noLoc . HsTyVar NoExt NotPromoted . noLoc . qualifyDesugar . mkCls
 
 infixr 3 `mkFunTy` -- Associates to the right
 mkFunTy :: LHsType GhcPs -> LHsType GhcPs -> LHsType GhcPs
-mkFunTy funTy argTy = noLoc $ HsFunTy noExt funTy argTy
+funTy `mkFunTy` argTy = noLoc $ HsFunTy noExt funTy argTy
 
 mkTyVar :: String -> LHsType GhcPs
 mkTyVar = noLoc . HsTyVar NoExt NotPromoted . noLoc . mkRdrUnqual . mkTyVarOcc
