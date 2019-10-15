@@ -2279,6 +2279,9 @@ anyTemplateType = mkQualType "AnyTemplate"
 anyChoiceType :: LHsType GhcPs
 anyChoiceType = mkQualType "AnyChoice"
 
+templateTypeRepType :: LHsType GhcPs
+templateTypeRepType = mkQualType "TemplateTypeRep"
+
 mkAppTyArgs :: LHsType GhcPs -> [Located RdrName] -> LHsType GhcPs
 mkAppTyArgs tyCon tyVars = mkHsAppTys tyCon $ map rdrNameToType tyVars
 
@@ -2466,6 +2469,9 @@ mkTemplateClassInstanceSigs templateName tyVars mbKeyType =
     , ("archive",   contractId `mkFunTy` mkUpdate unitType)
     , ("toAnyTemplate", templateType `mkFunTy` anyTemplateType)
     , ("fromAnyTemplate", anyTemplateType `mkFunTy` mkParenTy (mkQualType "Optional" `mkAppTy` templateType))
+      -- The proxy argument is to avoid ambiguous types. Otherwise, users would
+      -- have to enable -XAllowAmbiguousTypes anywhere they define a template.
+    , ("_templateTypeRep", (mkTyVar "proxy" `mkAppTy` templateType) `mkFunTy` templateTypeRepType)
     ]
     ++ keySigs
   where
@@ -2668,6 +2674,7 @@ mkTemplateClassInstanceMethods conName ValidTemplate{..} =
   , mkMethod "archive"   [cid]  False archiveBody
   , mkMethod "toAnyTemplate" [] False (mkMagic "toAnyTemplate")
   , mkMethod "fromAnyTemplate" [] False (mkMagic "fromAnyTemplate")
+  , mkMethod "_templateTypeRep" [proxy] False (mkMagic "_templateTypeRep")
   ] ++ keyMethods
   where
     keyMethods = case vtKeyData of
@@ -2688,6 +2695,7 @@ mkTemplateClassInstanceMethods conName ValidTemplate{..} =
     templateName = rdrNameToString conName
     this = asPatRecWild "this" conName
     cid = mkVarPat $ mkVarOcc "cid"
+    proxy = mkVarPat $ mkVarOcc "proxy"
     key = mkVarPat $ mkVarOcc "key"
     hasKeyPat = mkVarPat $ mkDataOcc "HasKey"
     emptyString = noLoc $ HsLit noExt $ HsString NoSourceText $ fsLit ""
@@ -2719,7 +2727,7 @@ mkTemplateInstanceMethods ::
      String            -- ^ template name
   -> [LHsBind GhcPs]   -- ^ method declarations
 mkTemplateInstanceMethods templateName =
-  map mkMethod ["signatory", "observer", "ensure", "agreement", "create", "fetch", "archive", "toAnyTemplate", "fromAnyTemplate"]
+  map mkMethod ["signatory", "observer", "ensure", "agreement", "create", "fetch", "archive", "toAnyTemplate", "fromAnyTemplate", "_templateTypeRep"]
   where
     mkMethod :: String -> LHsBind GhcPs
     mkMethod methodName =
