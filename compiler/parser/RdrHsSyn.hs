@@ -46,6 +46,9 @@ module   RdrHsSyn (
         applyToParties,
         applyConcat,
 
+        -- Module declaration
+        mkHsModule,
+
         -- Stuff to do with Foreign declarations
         mkImport,
         parseCImport,
@@ -126,6 +129,7 @@ import Util
 import ApiAnnotation
 import Data.List
 import DynFlags ( WarningFlag(..) )
+import Control.Applicative (liftA2)
 import Control.Monad
 import Text.ParserCombinators.ReadP as ReadP
 import Data.Char
@@ -134,6 +138,7 @@ import Data.Data       ( dataTypeOf, fromConstr, dataTypeConstrs )
 import Bag
 import qualified Data.Set as Set
 import Module
+import System.FilePath (splitDirectories)
 
 #include "HsVersions.h"
 
@@ -2980,6 +2985,28 @@ splitHsAppTysPs t = go t []
 
 
 -----------------------------------------------------------------------------
+-- module declaration
+
+-- construct a module declaration
+--
+mkHsModule :: SrcSpan
+           -> Maybe (Located ModuleName)
+           -> Maybe (Located [LIE GhcPs])
+           -> [LImportDecl GhcPs]
+           -> [LHsDecl GhcPs]
+           -> Maybe (Located WarningTxt)
+           -> Maybe LHsDocString
+           -> P (Located (HsModule GhcPs))
+mkHsModule loc mbModName mbExports imports decls mbDeprecMsg mbHaddock = do
+    case liftA2 (,) mbModName (srcSpanFileName_maybe loc) of
+      Just (L nameLoc modName, fileName)
+        | expected <- moduleNameSlashes modName ++ ".daml"
+        , not (splitDirectories expected `isSuffixOf` splitDirectories (unpackFS fileName))
+        -> warnWrongModuleName nameLoc expected
+      _ -> pure ()
+    pure (cL loc (HsModule mbModName mbExports imports decls mbDeprecMsg mbHaddock))
+
+-----------------------------------------------------------------------------
 -- utilities for foreign declarations
 
 -- construct a foreign import declaration
@@ -3203,6 +3230,14 @@ isImpExpQcWildcard _                = False
 
 -----------------------------------------------------------------------------
 -- Warnings and failures
+
+warnWrongModuleName :: SrcSpan -> String -> P ()
+warnWrongModuleName loc expected = addWarning Opt_WarnWrongModuleName loc msg
+  where
+    msg =  text "Module names should always match file names,"
+           <+> text "as per [documentation|https://docs.daml.com/daml/reference/file-structure.html]."
+        $$ text "This rule will be enforced in a future SDK version."
+           <+> text "Please change the filename to" <+> text expected <+> text "in preparation."
 
 warnStarIsType :: SrcSpan -> P ()
 warnStarIsType span = addWarning Opt_WarnStarIsType span msg
