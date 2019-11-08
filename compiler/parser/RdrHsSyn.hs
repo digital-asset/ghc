@@ -2782,11 +2782,14 @@ mkKeyInstanceDecl templateName tyVars keyType =
       maintainerMethod =
         let methodBody =
                 mkApp (mkUnqualVar $ mkVarOcc $ prefixTemplateClassMethod $ "maintainer" ++ unLoc templateName)
-                      (mkUnqualVar $ mkVarOcc $ prefixTemplateClassMethod $ "hasKey" ++ unLoc templateName)
+                -- We need the type annotation to make sure that this is not ambiguous in the case of generic templates.
+                      (noLoc $ ExprWithTySig noExt (mkUnqualVar $ mkVarOcc $ prefixTemplateClassMethod $ "hasKey" ++ unLoc templateName) (mkLHsSigWcType hasKeyType))
         in mkTemplateClassMethod "maintainer" [] methodBody Nothing
       methods = map mkMethod ["key", "fetchByKey", "lookupByKey" ] ++ [ maintainerMethod ]
   in instDecl $ classInstDecl instanceType $ listToBag methods
   where
+    templateType = mkTemplateType templateName tyVars
+    hasKeyType = mkQualType "HasKey" `mkAppTy` mbParenTy templateType
     mbParenTy = if null tyVars then id else mkParenTy
 
 -- | Contruct a @data S a b c = S {...}@ for a single choice 'S'.
