@@ -2770,6 +2770,7 @@ mkChoiceInstanceDecl templateName tyVars (CombinedChoiceData _ ChoiceData{..} ch
   where
     mbParenTy = if null tyVars then id else mkParenTy
 
+-- | Create an instance of `TemplateKey`.
 mkKeyInstanceDecl :: Located String -> [Located RdrName] -> LHsType GhcPs -> LHsDecl GhcPs
 mkKeyInstanceDecl templateName tyVars keyType =
   let templateType = mkTemplateType templateName tyVars
@@ -2778,7 +2779,12 @@ mkKeyInstanceDecl templateName tyVars keyType =
       mkMethod methodName =
         let methodBody = mkUnqualVar $ mkVarOcc $ prefixTemplateClassMethod $ methodName ++ unLoc templateName
         in  mkTemplateClassMethod methodName [] methodBody Nothing
-      methods = map mkMethod ["key", "fetchByKey", "lookupByKey"]
+      maintainerMethod =
+        let methodBody =
+                mkApp (mkUnqualVar $ mkVarOcc $ prefixTemplateClassMethod $ "maintainer" ++ unLoc templateName)
+                      (mkUnqualVar $ mkVarOcc $ prefixTemplateClassMethod $ "hasKey" ++ unLoc templateName)
+        in mkTemplateClassMethod "maintainer" [] methodBody Nothing
+      methods = map mkMethod ["key", "fetchByKey", "lookupByKey" ] ++ [ maintainerMethod ]
   in instDecl $ classInstDecl instanceType $ listToBag methods
   where
     mbParenTy = if null tyVars then id else mkParenTy
