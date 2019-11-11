@@ -2279,6 +2279,9 @@ anyTemplateType = mkQualType "AnyTemplate"
 anyChoiceType :: LHsType GhcPs
 anyChoiceType = mkQualType "AnyChoice"
 
+anyContractKeyType :: LHsType GhcPs
+anyContractKeyType = mkQualType "AnyContractKey"
+
 templateTypeRepType :: LHsType GhcPs
 templateTypeRepType = mkQualType "TemplateTypeRep"
 
@@ -2483,6 +2486,8 @@ mkTemplateClassInstanceSigs templateName tyVars mbKeyType =
         , ("maintainer",  mkFunTy hasKeyType (mkFunTy keyType partiesType))
         , ("fetchByKey",  keyType `mkFunTy` mkUpdate (pairType contractId templateType))
         , ("lookupByKey", keyType `mkFunTy` mkUpdate (mkParenTy $ mkQualType "Optional" `mkAppTy` mkParenTy contractId))
+        , ("toAnyContractKey", (mkParenTy $ mkTyVar "proxy" `mkAppTy` templateType) `mkFunTy` keyType `mkFunTy` anyContractKeyType)
+        , ("fromAnyContractKey", (mkParenTy $ mkTyVar "proxy" `mkAppTy` templateType) `mkFunTy` anyContractKeyType `mkFunTy` mkParenTy (mkQualType "Optional" `mkAppTy` keyType))
         ]
     mkSig :: String -> LHsType GhcPs -> LSig GhcPs
     mkSig methodName ty =
@@ -2685,6 +2690,8 @@ mkTemplateClassInstanceMethods conName ValidTemplate{..} =
         , mkMethod "maintainer"  [hasKeyPat, key] False kdMaintainers
         , mkMethod "fetchByKey"  []               False (mkMagic "fetchByKey")
         , mkMethod "lookupByKey" []               False (mkMagic "lookupByKey")
+        , mkMethod "toAnyContractKey" []          False (mkMagic "toAnyContractKey")
+        , mkMethod "fromAnyContractKey" []        False (mkMagic "fromAnyContractKey")
         ]
     mkMethod :: String -> [Pat GhcPs] -> Bool -> LHsExpr GhcPs -> LHsBind GhcPs
     mkMethod methodName args includeBindings methodBody =
@@ -2776,16 +2783,16 @@ mkKeyInstanceDecl templateName tyVars keyType =
   let templateType = mkTemplateType templateName tyVars
       keyClass = mkQualClass "TemplateKey" `mkAppTy` mbParenTy templateType `mkAppTy` keyType
       instanceType = withInstanceContext templateName tyVars keyClass
-      mkMethod methodName =
+      mkMethod prefix methodName =
         let methodBody = mkUnqualVar $ mkVarOcc $ prefixTemplateClassMethod $ methodName ++ unLoc templateName
-        in  mkTemplateClassMethod methodName [] methodBody Nothing
+        in  mkTemplateClassMethod (prefix ++ methodName) [] methodBody Nothing
       maintainerMethod =
         let methodBody =
                 mkApp (mkUnqualVar $ mkVarOcc $ prefixTemplateClassMethod $ "maintainer" ++ unLoc templateName)
                 -- We need the type annotation to make sure that this is not ambiguous in the case of generic templates.
                       (noLoc $ ExprWithTySig noExt (mkUnqualVar $ mkVarOcc $ prefixTemplateClassMethod $ "hasKey" ++ unLoc templateName) (mkLHsSigWcType hasKeyType))
         in mkTemplateClassMethod "maintainer" [] methodBody Nothing
-      methods = map mkMethod ["key", "fetchByKey", "lookupByKey" ] ++ [ maintainerMethod ]
+      methods = map (mkMethod "") ["key", "fetchByKey", "lookupByKey" ] ++ map (mkMethod "_") ["toAnyContractKey", "fromAnyContractKey"] ++ [ maintainerMethod ]
   in instDecl $ classInstDecl instanceType $ listToBag methods
   where
     templateType = mkTemplateType templateName tyVars
