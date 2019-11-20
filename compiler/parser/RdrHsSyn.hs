@@ -2276,11 +2276,8 @@ partiesType = noLoc $ HsListTy noExt $ mkQualType "Party"
 anyTemplateType :: LHsType GhcPs
 anyTemplateType = mkQualType "AnyTemplate"
 
-anyChoiceType :: LHsType GhcPs
-anyChoiceType = mkQualType "AnyChoice"
-
-anyContractKeyType :: LHsType GhcPs
-anyContractKeyType = mkQualType "AnyContractKey"
+anyType :: LHsType GhcPs
+anyType = mkQualType "Any"
 
 templateTypeRepType :: LHsType GhcPs
 templateTypeRepType = mkQualType "TemplateTypeRep"
@@ -2486,8 +2483,8 @@ mkTemplateClassInstanceSigs templateName tyVars mbKeyType =
         , ("maintainer",  mkFunTy hasKeyType (mkFunTy keyType partiesType))
         , ("fetchByKey",  keyType `mkFunTy` mkUpdate (pairType contractId templateType))
         , ("lookupByKey", keyType `mkFunTy` mkUpdate (mkParenTy $ mkQualType "Optional" `mkAppTy` mkParenTy contractId))
-        , ("toAnyContractKey", (mkParenTy $ mkTyVar "proxy" `mkAppTy` templateType) `mkFunTy` keyType `mkFunTy` anyContractKeyType)
-        , ("fromAnyContractKey", (mkParenTy $ mkTyVar "proxy" `mkAppTy` templateType) `mkFunTy` anyContractKeyType `mkFunTy` mkParenTy (mkQualType "Optional" `mkAppTy` keyType))
+        , ("toAnyContractKey", (mkParenTy $ mkTyVar "proxy" `mkAppTy` templateType) `mkFunTy` keyType `mkFunTy` anyType)
+        , ("fromAnyContractKey", (mkParenTy $ mkTyVar "proxy" `mkAppTy` templateType) `mkFunTy` anyType `mkFunTy` mkParenTy (mkQualType "Optional" `mkAppTy` keyType))
         ]
     mkSig :: String -> LHsType GhcPs -> LSig GhcPs
     mkSig methodName ty =
@@ -2548,8 +2545,8 @@ mkTemplateChoiceSigs templateName tyVars (CombinedChoiceData _ ChoiceData{..} ch
     , ("action", mkFunTy contractId (mkFunTy templateType (mkFunTy choiceType choiceReturnType)))
     , ("exercise", mkFunTy contractId (mkFunTy choiceType choiceReturnType))
     -- We add a proxy with the template type to avoid forcing users to enable AllowAmbigousTypes
-    , ("toAnyChoice", (mkTyVar "proxy" `mkAppTy` templateType) `mkFunTy` choiceType `mkFunTy` anyChoiceType)
-    , ("fromAnyChoice", (mkTyVar "proxy" `mkAppTy` templateType) `mkFunTy` anyChoiceType `mkFunTy` (mkQualType "Optional" `mkAppTy` mbChoiceParenTy choiceType))
+    , ("toAnyChoice", (mkTyVar "proxy" `mkAppTy` templateType) `mkFunTy` choiceType `mkFunTy` anyType)
+    , ("fromAnyChoice", (mkTyVar "proxy" `mkAppTy` templateType) `mkFunTy` anyType `mkFunTy` (mkQualType "Optional" `mkAppTy` mbChoiceParenTy choiceType))
     ]
   where
     mkSig :: String -> LHsType GhcPs -> LSig GhcPs
