@@ -2377,7 +2377,7 @@ matchGroup
    -> MatchGroup GhcPs (LHsExpr GhcPs)
 matchGroup loc m = MG { mg_ext = noExt
                       , mg_alts = L loc $ [L loc $ m]
-                      , mg_origin = FromSource
+                      , mg_origin = Generated
                       }
 
 -- | Utility for constructing a function binding.
