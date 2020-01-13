@@ -2475,12 +2475,16 @@ mkTemplateClassMethod rawMethodName args body mBinds = do
       match_group = matchGroup loc match
   funBind loc fullMethodName match_group
 
-mkMagic :: String -> LHsExpr GhcPs
-mkMagic methodName =
+mkPrimitive :: String -> LHsExpr GhcPs
+mkPrimitive methodName =
   let mkAppType :: LHsExpr GhcPs -> LHsType GhcPs -> LHsExpr GhcPs
       mkAppType e ty = noLoc $ HsAppType noExt e (mkHsWildCardBndrs ty)
-  in  mkAppType (mkQualVar $ mkVarOcc "magic") $
+  in  mkAppType (noLoc $ HsVar noExt $ noLoc $ mkRdrQual (mkModuleName "GHC.Types") $ mkVarOcc "primitive") $
         noLoc $ HsTyLit noExt $ HsStrTy NoSourceText $ mkFastString methodName
+
+mkPrimMethod :: String -> String -> LHsBind GhcPs
+mkPrimMethod methodName primArg =
+  mkTemplateClassMethod methodName [] (mkPrimitive primArg) Nothing
 
 -- | Construct a @data X a b c = X {...} deriving (Eq, Show)@
 mkTemplateDataDecl ::
@@ -2576,8 +2580,12 @@ mkTemplateInstanceDecl templateName conName ValidTemplate{..} =
   , ensureInstance
   , agreementInstance
   , archiveInstance
+  , mkInstance "HasCreate" $ mkPrimMethod "create" "UCreate"
+  , mkInstance "HasFetch" $ mkPrimMethod "fetch" "UFetch"
+  , mkInstance "HasToAnyTemplate" $ mkPrimMethod "_toAnyTemplate" "EToAnyTemplate"
+  , mkInstance "HasFromAnyTemplate" $ mkPrimMethod "_fromAnyTemplate" "EFromAnyTemplate"
+  , mkInstance "HasTemplateTypeRep" $ mkPrimMethod "_templateTypeRep" "ETemplateTypeRep"
   ]
-  ++ emptyInstances
   where
     templateType = mkTemplateType templateName vtTypeVars
 
@@ -2589,11 +2597,6 @@ mkTemplateInstanceDecl templateName conName ValidTemplate{..} =
       mkApp (mkApp (mkQualVar $ mkVarOcc "exercise") (mkUnqualVar $ mkVarOcc "cid"))
             (mkQualVar $ mkDataOcc "Archive")
 
-
-    emptyInstances = map mkEmptyInstance ["HasCreate", "HasFetch", "HasToAnyTemplate", "HasFromAnyTemplate", "HasTemplateTypeRep"]
-
-    mkEmptyInstance name =
-        instDecl $ classInstDecl (mkQualClass name `mkAppTy` templateType) emptyBag
     mkInstance name method =
         instDecl $ classInstDecl (mkQualClass name `mkAppTy` templateType) $ unitBag method
     mkMethod :: String -> [Pat GhcPs] -> Bool -> LHsExpr GhcPs -> LHsBind GhcPs
@@ -2608,16 +2611,16 @@ mkTemplateInstanceDecl templateName conName ValidTemplate{..} =
 -- that constitute the `Choice` constraint synonym.
 mkChoiceInstanceDecl :: Located String -> [Located RdrName] -> CombinedChoiceData -> [LHsDecl GhcPs]
 mkChoiceInstanceDecl templateName tyVars (CombinedChoiceData _ ChoiceData{..} choiceTyVars _) =
-  [ mkInstance "HasExercise"
-  , mkInstance "HasToAnyChoice"
-  , mkInstance "HasFromAnyChoice"
+  [ mkInstance "HasExercise" (mkPrimMethod "exercise" "UExercise")
+  , mkInstance "HasToAnyChoice" (mkPrimMethod "_toAnyChoice" "EToAnyChoice")
+  , mkInstance "HasFromAnyChoice" (mkPrimMethod "_fromAnyChoice" "EFromAnyChoice")
   ]
   where
     templateType = mkTemplateType templateName tyVars
     choiceType = mkChoiceType cdChoiceName choiceTyVars
     returnType = mkParenTy cdChoiceReturnTy
     mkClass name = foldl' mkAppTy (mkQualClass name) [templateType, choiceType, returnType]
-    mkInstance name = instDecl $ classInstDecl (mkClass name) emptyBag
+    mkInstance name method = instDecl $ classInstDecl (mkClass name) $ unitBag method
 
 -- | Construct instances for the split-up `TemplateKey` typeclass, i.e., instances fr all single-method typeclasses
 -- that constitute the `Choice` constraint synonym.
@@ -2631,14 +2634,17 @@ mkKeyInstanceDecl templateName conName ValidTemplate{..}
           mkTemplateClassMethod methodName args methodBody $
            -- General rule: only include template bindings for methods with `this` in scope
           if includeBindings then Just vtLetBindings else Nothing
-        mkEmptyInstance name = instDecl $ classInstDecl (mkClass name) emptyBag
         mkInstance name method = instDecl $ classInstDecl (mkClass name) (unitBag method)
 
         keyInstance = mkInstance "HasKey" $ mkMethod "key" [this] True kdKeyExpr
         maintainerInstance = mkInstance "HasMaintainer" $ mkMethod "_maintainer" [proxy, key] False kdMaintainers
     in [ keyInstance
        , maintainerInstance
-       ] ++ map mkEmptyInstance ["HasFetchByKey", "HasLookupByKey", "HasToAnyContractKey", "HasFromAnyContractKey"]
+       , mkInstance "HasFetchByKey" $ mkPrimMethod "fetchByKey" "UFetchByKey"
+       , mkInstance "HasLookupByKey" $ mkPrimMethod "lookupByKey" "ULookupByKey"
+       , mkInstance "HasToAnyContractKey" $ mkPrimMethod "_toAnyContractKey" "EToAnyContractKey"
+       , mkInstance "HasFromAnyContractKey" $ mkPrimMethod "_fromAnyContractKey" "EFromAnyContractKey"
+       ]
   | otherwise = []
   where
     proxy = WildPat noExt
