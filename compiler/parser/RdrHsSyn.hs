@@ -2124,7 +2124,7 @@ data ChoiceData = ChoiceData {
   , cdChoiceDoc :: Maybe LHsDocString
   }
 
-data ChoiceConsuming = PreConsuming | PostConsuming | NonConsuming
+data ChoiceConsuming = PreConsuming | Consuming | PostConsuming | NonConsuming
   deriving Show -- for creating type/data names from these constructors
 
 data FlexChoiceData = FlexChoiceData {
@@ -2549,8 +2549,8 @@ mkChoiceDecls templateLoc conName binds (CombinedChoiceData controllers ChoiceDa
     ]
     where
         name = mkRdrUnqual $ mkVarOcc ("_choice_" ++ rdrNameToString conName ++ rdrNameToString cdChoiceName)
-        consumingSig = (unLoc . mkQualType . show . fromMaybe PreConsuming <$> cdChoiceConsuming) `mkAppTy` templateType
-        consumingDef = unLoc . mkQualVar . mkDataOcc . show . fromMaybe PreConsuming <$> cdChoiceConsuming
+        consumingSig = (unLoc . mkQualType . show . fromMaybe Consuming <$> cdChoiceConsuming) `mkAppTy` templateType
+        consumingDef = unLoc . mkQualVar . mkDataOcc . show . fromMaybe Consuming <$> cdChoiceConsuming
         controllerSig = mkFunTy templateType (mkFunTy choiceType partiesType)
         controllerDef = mkLambda [this, controllerArg] controllers (Just binds)
         actionSig = mkFunTy contractIdType (mkFunTy templateType (mkFunTy choiceType choiceReturnType))
@@ -2774,7 +2774,7 @@ mkArchiveChoice =
         , cdChoiceFields = noLoc $ HsRecTy noExt []
         , cdChoiceReturnTy = unitType
         , cdChoiceBody = pureUnit
-        , cdChoiceConsuming = noLoc $ Just PreConsuming
+        , cdChoiceConsuming = noLoc $ Just Consuming
         , cdChoiceDoc = Nothing
         }
     , ccdTypeVars = []
