@@ -2582,6 +2582,7 @@ mkTemplateInstanceDecl templateName conName ValidTemplate{..} =
   , archiveInstance
   , mkInstance "HasCreate" $ mkPrimMethod "create" "UCreate"
   , mkInstance "HasFetch" $ mkPrimMethod "fetch" "UFetch"
+  , mkInstance "HasFetchSome" $ mkPrimMethod "fetchSome" "UFetchSome"
   , mkInstance "HasToAnyTemplate" $ mkPrimMethod "_toAnyTemplate" "EToAnyTemplate"
   , mkInstance "HasFromAnyTemplate" $ mkPrimMethod "_fromAnyTemplate" "EFromAnyTemplate"
   , mkInstance "HasTemplateTypeRep" $ mkPrimMethod "_templateTypeRep" "ETemplateTypeRep"
