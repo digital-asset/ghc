@@ -797,17 +797,8 @@ module :: { Located (HsModule GhcPs) }
                        (fst $2) }
 
 daml_version :: { () }
-  : daml version     { ()
-                       -- No need to check that damlVersionRequiredEnabled
-                       -- as 'daml' is only parsed as a keyword if it is.
-                     }
-
-  | {- empty  -}     {% do
-                          required <- extension damlSyntaxEnabled
-                          when required $ do
-                            loc <- fileSrcSpan
-                            parseErrorSDoc loc $ text "Missing daml version"
-                     }
+  : daml version     { () }
+  | {- empty  -}     { () }
 
 
 daml :: { () }
