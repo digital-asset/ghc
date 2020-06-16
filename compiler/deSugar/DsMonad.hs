@@ -86,6 +86,7 @@ import Var (EvVar)
 import UniqFM ( lookupWithDefaultUFM )
 import Literal ( mkLitString )
 import CostCentreState
+import InstEnv (emptyInstEnv)
 
 import Data.IORef
 
@@ -254,13 +255,19 @@ initTcDsForSolver :: TcM a -> DsM (Messages, Maybe a)
 initTcDsForSolver thing_inside
   = do { (gbl, lcl) <- getEnvs
        ; hsc_env    <- getTopEnv
-
+       -- NOTE (MK) We reset the instance env to avoid slowing down
+       -- the pattern match checker unnecessarily. See
+       -- https://github.com/digital-asset/daml/pull/6350 for
+       -- details.
+       ; oldEPS <- liftIO $ readIORef (hsc_EPS hsc_env)
+       ; newEPS <- liftIO $ newIORef oldEPS { eps_inst_env = emptyInstEnv }
+       ; let hsc_env' = hsc_env { hsc_EPS = newEPS }
        ; let DsGblEnv { ds_mod = mod
                       , ds_fam_inst_env = fam_inst_env } = gbl
 
              DsLclEnv { dsl_loc = loc }                  = lcl
 
-       ; liftIO $ initTc hsc_env HsSrcFile False mod loc $
+       ; liftIO $ initTc hsc_env' HsSrcFile False mod loc $
          updGblEnv (\tc_gbl -> tc_gbl { tcg_fam_inst_env = fam_inst_env }) $
          thing_inside }
 
