@@ -2328,6 +2328,32 @@ asPatPrefixCon varName conName =
     (noLoc $ mkRdrUnqual (mkVarOcc varName))
     (noLoc $ XPat (noLoc $ ConPatIn conName $ PrefixCon [])))
 
+-- | The "-Wunused-matches hack." Construct dummy bindings of the form
+-- '_ = this@T{..}' or '_ = self'. We use this hack to suppress
+-- warnings of the form "Defined but not used: ‘this’".
+dummyBinds :: [Pat GhcPs] -> Bag (LHsBind GhcPs)
+dummyBinds args = listToBag [dummyBind n | Just n <- map patToRdrName args]
+  where
+    dummyBind :: Located RdrName -> LHsBind GhcPs
+    dummyBind n =
+      let grhss = GRHSs noExt [noLoc $ GRHS noExt [] (noLoc (HsVar noExt n))] (noLoc emptyLocalBinds)
+      in noLoc $ PatBind noExt wildCard grhss ([], [])
+    patToRdrName :: Pat GhcPs -> Maybe (Located RdrName)
+    patToRdrName (dL -> L _ (VarPat _ n)) = Just n
+    patToRdrName (dL -> L _ (AsPat _ n _)) = Just n
+    patToRdrName _ = Nothing
+    wildCard :: Pat GhcPs
+    wildCard = XPat $ (noLoc (WildPat noExt))
+-- | Part of the -Wunused-matches hack.
+mkLetBindings :: Bag (LHsBind GhcPs) -> LHsLocalBinds GhcPs
+mkLetBindings binds = noLoc $ HsValBinds noExt (ValBinds noExt binds [])
+-- | Yet more of the -Wunused-matches hack.
+extendLetBindings :: LHsLocalBinds GhcPs -> Bag (LHsBind GhcPs) -> LHsLocalBinds GhcPs
+extendLetBindings (L _ (HsValBinds _ (ValBinds _ orig _))) new =
+  noLoc $ HsValBinds noExt (ValBinds noExt (unionBags orig new) [])
+extendLetBindings (L _ (EmptyLocalBinds _)) new = mkLetBindings new
+extendLetBindings _ _ = error "unexpected: extendLetBindings"
+
 -- | Utility for constructing patterns of the form 'arg@T{..}'.
 asPatRecWild :: String -> Located RdrName -> Pat GhcPs
 asPatRecWild varName conName =
@@ -2552,9 +2578,11 @@ mkChoiceDecls templateLoc conName binds (CombinedChoiceData controllers ChoiceDa
         consumingSig = (unLoc . mkQualType . show . fromMaybe Consuming <$> cdChoiceConsuming) `mkAppTy` templateType
         consumingDef = unLoc . mkQualVar . mkDataOcc . show . fromMaybe Consuming <$> cdChoiceConsuming
         controllerSig = mkFunTy templateType (mkFunTy choiceType partiesType)
-        controllerDef = mkLambda [this, controllerArg] controllers (Just binds)
+        controllerDef = mkLambda controllerDefArgs controllers (Just (extendLetBindings binds (dummyBinds controllerDefArgs)))
+        controllerDefArgs = [this, controllerArg] 
         actionSig = mkFunTy contractIdType (mkFunTy templateType (mkFunTy choiceType choiceReturnType))
-        actionDef = mkLambda [self, this, arg] cdChoiceBody (Just binds)
+        actionDef = mkLambda actionDefArgs cdChoiceBody (Just (extendLetBindings binds (dummyBinds actionDefArgs)))
+        actionDefArgs = [self, this, arg]
         arg = argPatOfChoice (noLoc $ choiceNameToRdrName $ mkDataOcc choiceName) cdChoiceFields
         choiceName = rdrNameToString cdChoiceName
         choiceNameToRdrName = if choiceName == "Archive" then qualifyDesugar else mkRdrUnqual
@@ -2570,6 +2598,15 @@ mkChoiceDecls templateLoc conName binds (CombinedChoiceData controllers ChoiceDa
 emptyString :: LHsExpr GhcPs
 emptyString = noLoc $ HsLit noExt $ HsString NoSourceText $ fsLit ""
 
+-- Tiny utility to reduce code duplication.
+allLetBindings :: Bool -> [Pat GhcPs] -> LHsLocalBinds GhcPs -> Maybe (LHsLocalBinds GhcPs)
+allLetBindings includeBindings args vtLetBindings =
+  -- General rule: only include template bindings for methods
+  -- with `this` in scope.
+  if not includeBindings then
+    Just $ mkLetBindings (dummyBinds args)
+  else
+    Just $ extendLetBindings vtLetBindings (dummyBinds args)
 
 -- | Construct instances for split-up Template typeclass, i.e., instances for all the single-method typeclasses
 -- that constitute the Template constraint synonym.
@@ -2602,8 +2639,8 @@ mkTemplateInstanceDecl templateName conName ValidTemplate{..} =
     mkMethod :: String -> [Pat GhcPs] -> Bool -> LHsExpr GhcPs -> LHsBind GhcPs
     mkMethod methodName args includeBindings methodBody =
       mkTemplateClassMethod methodName args methodBody $
-          -- General rule: only include template bindings for methods with `this` in scope
-          if includeBindings then Just vtLetBindings else Nothing
+      allLetBindings includeBindings args vtLetBindings
+
     this = asPatRecWild "this" conName
     cid = mkVarPat $ mkVarOcc "cid"
 
@@ -2632,10 +2669,8 @@ mkKeyInstanceDecl templateName conName ValidTemplate{..}
         mkMethod :: String -> [Pat GhcPs] -> Bool -> LHsExpr GhcPs -> LHsBind GhcPs
         mkMethod methodName args includeBindings methodBody =
           mkTemplateClassMethod methodName args methodBody $
-           -- General rule: only include template bindings for methods with `this` in scope
-          if includeBindings then Just vtLetBindings else Nothing
+          allLetBindings includeBindings args vtLetBindings
         mkInstance name method = instDecl $ classInstDecl (mkClass name) (unitBag method)
-
         keyInstance = mkInstance "HasKey" $ mkMethod "key" [this] True kdKeyExpr
         maintainerInstance = mkInstance "HasMaintainer" $ mkMethod "_maintainer" [proxy, key] False kdMaintainers
     in [ keyInstance
@@ -2680,7 +2715,7 @@ validateTemplate (mbCtx, templateApp) tbd@TemplateBodyDecls{..}
   | null tbdKeys && (not . null) tbdMaintainers = report "Missing 'key' declaration for given 'maintainer'"
   | null tbdMaintainers && (not . null) tbdKeys = report "Missing 'maintainer' declaration for given 'key'"
   | (L _ (HsTyVar NoExt NotPromoted vtTemplateName), tyArgs) <- splitHsAppTysPs templateApp
-  = if not (null tyArgs) then report "Generic templates are no longer supported"
+  = if not (null tyArgs) then report "Generic templates are not supported"
     else do
       vtTypeVars <- mapM checkTyVar tyArgs
       vtChoices <- combineChoices vtTypeVars tbd
