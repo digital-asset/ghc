@@ -2329,8 +2329,8 @@ asPatPrefixCon varName conName =
     (noLoc $ XPat (noLoc $ ConPatIn conName $ PrefixCon [])))
 
 -- | The "-Wunused-matches hack." Construct dummy bindings of the form
--- '_ = this@T{..}' or '_ = self'. We use this hack to suppress
--- warnings of the form "Defined but not used: ‘this’".
+-- @_ = this@ or @_ = self@. We use this hack to suppress warnings of
+-- the form "Defined but not used: ‘this’".
 dummyBinds :: [Pat GhcPs] -> Bag (LHsBind GhcPs)
 dummyBinds args = listToBag [dummyBind n | Just n <- map patToRdrName args]
   where
@@ -2579,7 +2579,7 @@ mkChoiceDecls templateLoc conName binds (CombinedChoiceData controllers ChoiceDa
         consumingDef = unLoc . mkQualVar . mkDataOcc . show . fromMaybe Consuming <$> cdChoiceConsuming
         controllerSig = mkFunTy templateType (mkFunTy choiceType partiesType)
         controllerDef = mkLambda controllerDefArgs controllers (Just (extendLetBindings binds (dummyBinds controllerDefArgs)))
-        controllerDefArgs = [this, controllerArg] 
+        controllerDefArgs = [this, controllerArg]
         actionSig = mkFunTy contractIdType (mkFunTy templateType (mkFunTy choiceType choiceReturnType))
         actionDef = mkLambda actionDefArgs cdChoiceBody (Just (extendLetBindings binds (dummyBinds actionDefArgs)))
         actionDefArgs = [self, this, arg]
