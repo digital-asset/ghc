@@ -1713,8 +1713,8 @@ stmtTreeToStmts monad_names ctxt (StmtTreeApplicative trees) tail tail_fvs = do
         if | L _ ApplicativeStmt{} <- last stmts' ->
              return (unLoc tup, emptyNameSet)
            | otherwise -> do
-             (ret,fvs) <- lookupStmtNamePoly ctxt returnMName
-             return (HsApp noExt (noLoc ret) tup, fvs)
+             (ret,fvs) <- lookupStmtName ctxt returnMName
+             return (HsApp noExt (noLoc $ syn_expr ret) tup, fvs)
      return ( ApplicativeArgMany noExt stmts' mb_ret pat
             , fvs1 `plusFV` fvs2)
 
