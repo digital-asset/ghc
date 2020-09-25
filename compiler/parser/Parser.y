@@ -797,7 +797,9 @@ module :: { Located (HsModule GhcPs) }
                        (fst $2) }
 
 daml_version :: { Maybe LHsDocString }
-  : daml version     { Just (sL1 $1 (mkHsDocString "[HAS_DAML_VERSION_HEADER]")) }
+  : daml version     {% do
+                          loc <- fileSrcSpan
+                          return (Just (L loc (mkHsDocString "[HAS_DAML_VERSION_HEADER]"))) }
   | {- empty  -}     { Nothing }
 
 daml :: { () }
