@@ -36,7 +36,7 @@ import Control.Monad    ( unless, liftM, when, void )
 import GHC.Exts
 import Data.Char
 import Control.Monad    ( mplus )
-import Control.Applicative ((<$), (<|>))
+import Control.Applicative ((<$))
 
 -- compiler/hsSyn
 import HsSyn
@@ -787,7 +787,7 @@ module :: { Located (HsModule GhcPs) }
        : daml_version maybedocheader 'module' modid maybemodwarning maybeexports 'where' body
              {% fileSrcSpan >>= \ loc ->
                 ams (L loc (HsModule (Just $4) $6 (fst $ snd $8)
-                              (snd $ snd $8) $5 ($1 <|> $2))
+                              (snd $ snd $8) $5 ($1 $2))
                     )
                     ([mj AnnModule $3, mj AnnWhere $7] ++ fst $8) }
         | daml_version body2
@@ -796,11 +796,15 @@ module :: { Located (HsModule GhcPs) }
                                (fst $ snd $2) (snd $ snd $2) Nothing Nothing))
                        (fst $2) }
 
-daml_version :: { Maybe LHsDocString }
+daml_version :: { Maybe LHsDocString -> Maybe LHsDocString }
   : daml version     {% do
                           loc <- fileSrcSpan
-                          return (Just (L loc (mkHsDocString "[HAS_DAML_VERSION_HEADER]"))) }
-  | {- empty  -}     { Nothing }
+                          let doc = mkHsDocString "HAS_DAML_VERSION_HEADER"
+                          return $ \mdoc ->
+                            case mdoc of
+                              Nothing -> Just (L loc doc)
+                              Just (L _ doc') -> Just (L loc (appendDocs doc doc')) }
+  | {- empty  -}     { id }
 
 daml :: { () }
   : 'daml'           {}
