@@ -787,19 +787,24 @@ module :: { Located (HsModule GhcPs) }
        : daml_version maybedocheader 'module' modid maybemodwarning maybeexports 'where' body
              {% fileSrcSpan >>= \ loc ->
                 ams (L loc (HsModule (Just $4) $6 (fst $ snd $8)
-                              (snd $ snd $8) $5 $2)
+                              (snd $ snd $8) $5 ($1 $2))
                     )
                     ([mj AnnModule $3, mj AnnWhere $7] ++ fst $8) }
         | daml_version body2
                 {% fileSrcSpan >>= \ loc ->
                    ams (L loc (HsModule Nothing Nothing
-                               (fst $ snd $2) (snd $ snd $2) Nothing Nothing))
+                               (fst $ snd $2) (snd $ snd $2) Nothing ($1 Nothing)))
                        (fst $2) }
 
-daml_version :: { () }
-  : daml version     { () }
-  | {- empty  -}     { () }
-
+daml_version :: { Maybe LHsDocString -> Maybe LHsDocString }
+  : daml version     {% do
+                          loc <- fileSrcSpan
+                          let doc = mkHsDocString "HAS_DAML_VERSION_HEADER"
+                          return $ \mdoc ->
+                            case mdoc of
+                              Nothing -> Just (L loc doc)
+                              Just (L _ doc') -> Just (L loc (appendDocs doc doc')) }
+  | {- empty  -}     { id }
 
 daml :: { () }
   : 'daml'           {}
@@ -866,7 +871,7 @@ top1    :: { ([LImportDecl GhcPs], [LHsDecl GhcPs]) }
 header  :: { Located (HsModule GhcPs) }
         : daml_version maybedocheader 'module' modid maybemodwarning maybeexports 'where' header_body
                 {% fileSrcSpan >>= \ loc ->
-                   ams (L loc (HsModule (Just $4) $6 $8 [] $5 $2
+                   ams (L loc (HsModule (Just $4) $6 $8 [] $5 ($1 $2)
                           )) [mj AnnModule $3,mj AnnWhere $7] }
         | maybedocheader 'signature' modid maybemodwarning maybeexports 'where' header_body
                 {% fileSrcSpan >>= \ loc ->
@@ -875,7 +880,7 @@ header  :: { Located (HsModule GhcPs) }
         | daml_version header_body2
                 {% fileSrcSpan >>= \ loc ->
                    return (L loc (HsModule Nothing Nothing $2 [] Nothing
-                          Nothing)) }
+                          ($1 Nothing))) }
 
 header_body :: { [LImportDecl GhcPs] }
         :  '{'            header_top            { $2 }
