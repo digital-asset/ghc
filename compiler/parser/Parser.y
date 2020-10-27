@@ -1216,18 +1216,23 @@ choice_decl :: { Located ChoiceData }
     }
 
 flex_choice_decl :: { Located FlexChoiceData }
-  : consuming 'choice' qtycon OF_TYPE btype_ maybe_docprev arecord_with_opt 'controller' party_list doexp
+  : consuming 'choice' qtycon OF_TYPE btype_ maybe_docprev arecord_with_opt observer_and_controller doexp
       -- NOTE: We use `btype_` (`btype` excluding record `with` types) to
       -- prevent the choice return type capturing the `with` parameter types.
     { sL (comb3 $1 $2 $>) $
-        FlexChoiceData (applyConcat $9)
+        FlexChoiceData (fst $8) (snd $8)
             ChoiceData { cdChoiceName = $3
                        , cdChoiceReturnTy = $5
                        , cdChoiceFields = $7
-                       , cdChoiceBody = $10
+                       , cdChoiceBody = $9
                        , cdChoiceConsuming = $1
                        , cdChoiceDoc = $6 }
     }
+
+observer_and_controller :: { (LHsExpr GhcPs, Maybe (LHsExpr GhcPs)) }
+  : 'controller' party_list { (applyConcat $2, Nothing) }
+  -- we currently only support an optional observer clause *before* the controller clause
+  | 'observer' parties 'controller' party_list  { (applyConcat $4, Just (applyConcat $2)) }
 
 consuming :: { Located (Maybe ChoiceConsuming) }
  : 'preconsuming'                                { sL1 $1 (Just PreConsuming)  }

@@ -2129,11 +2129,13 @@ data ChoiceConsuming = PreConsuming | Consuming | PostConsuming | NonConsuming
 
 data FlexChoiceData = FlexChoiceData {
     fcdControllers :: LHsExpr GhcPs
+  , fcdObservers   :: Maybe (LHsExpr GhcPs)
   , fcdChoiceData  :: ChoiceData
   }
 
 data CombinedChoiceData = CombinedChoiceData {
     ccdControllers :: LHsExpr GhcPs
+  , ccdObservers   :: Maybe (LHsExpr GhcPs)
   , ccdChoiceData  :: ChoiceData
   , ccdTypeVars    :: [Located RdrName] -- ^ Type variables used in the choice parameter type
   , ccdFlexible    :: Bool
@@ -2252,6 +2254,16 @@ mkAppTy ty1 ty2 = noLoc $ HsAppTy noExt ty1 ty2
 
 unitType :: LHsType GhcPs
 unitType = noLoc $ HsTupleTy noExt HsBoxedOrConstraintTuple []
+
+-- Optional type and constructors
+mkOptional :: LHsType GhcPs -> LHsType GhcPs
+mkOptional = mkAppTy (mkQualType "Optional")
+
+mkSome :: LHsExpr GhcPs -> LHsExpr GhcPs
+mkSome e = mkQualVar (mkDataOcc "Some") `mkApp` e
+
+mkNone :: LHsExpr GhcPs
+mkNone = mkQualVar $ mkDataOcc "None"
 
 -- Wrap a type in parentheses, preserving the location of the original type.
 mkParenTy :: LHsType GhcPs -> LHsType GhcPs
@@ -2569,9 +2581,9 @@ mkLambda args body mBinds =
 
 
 mkChoiceDecls :: SrcSpan -> Located RdrName -> LHsLocalBinds GhcPs -> CombinedChoiceData -> [LHsDecl GhcPs]
-mkChoiceDecls templateLoc conName binds (CombinedChoiceData controllers ChoiceData{..} choiceTyVars flexible) =
-    [ noLoc (SigD noExt (TypeSig noExt [noLoc name] (mkHsWildCardBndrs (mkHsImplicitBndrs $ noLoc $ HsTupleTy noExt HsBoxedOrConstraintTuple [controllerSig, actionSig, consumingSig]))))
-    , noLoc (ValD noExt (FunBind noExt (noLoc name) (matchGroup noSrcSpan $ matchWithBinds (matchContext $ noLoc name) [] noSrcSpan (noLoc $ ExplicitTuple noExt (map (noLoc . Present noExt) [controllerDef, actionDef, consumingDef]) Boxed) (noLoc emptyLocalBinds)) WpHole []))
+mkChoiceDecls templateLoc conName binds (CombinedChoiceData controllers observersM ChoiceData{..} choiceTyVars flexible) =
+    [ noLoc (SigD noExt (TypeSig noExt [noLoc name] (mkHsWildCardBndrs (mkHsImplicitBndrs $ noLoc $ HsTupleTy noExt HsBoxedOrConstraintTuple [controllerSig, actionSig, consumingSig, observersSig]))))
+    , noLoc (ValD noExt (FunBind noExt (noLoc name) (matchGroup noSrcSpan $ matchWithBinds (matchContext $ noLoc name) [] noSrcSpan (noLoc $ ExplicitTuple noExt (map (noLoc . Present noExt) [controllerDef, actionDef, consumingDef, observersDef]) Boxed) (noLoc emptyLocalBinds)) WpHole []))
     ]
     where
         name = mkRdrUnqual $ mkVarOcc ("_choice_" ++ rdrNameToString conName ++ rdrNameToString cdChoiceName)
@@ -2579,14 +2591,19 @@ mkChoiceDecls templateLoc conName binds (CombinedChoiceData controllers ChoiceDa
         consumingDef = unLoc . mkQualVar . mkDataOcc . show . fromMaybe Consuming <$> cdChoiceConsuming
         controllerSig = mkFunTy templateType (mkFunTy choiceType partiesType)
         controllerDef = mkLambda controllerDefArgs controllers (Just (extendLetBindings binds (dummyBinds controllerDefArgs)))
-        controllerDefArgs = [this, controllerArg]
+        controllerDefArgs = [this, if flexible then arg else WildPat noExt]
+        observersSig = mkOptional (mkFunTy templateType (mkFunTy choiceType partiesType))
+        observersDef = case observersM of
+          Nothing -> mkNone
+          Just observers ->
+            mkSome $ mkLambda observerDefArgs observers (Just (extendLetBindings binds (dummyBinds observerDefArgs)))
+        observerDefArgs = [this, arg]
         actionSig = mkFunTy contractIdType (mkFunTy templateType (mkFunTy choiceType choiceReturnType))
         actionDef = mkLambda actionDefArgs cdChoiceBody (Just (extendLetBindings binds (dummyBinds actionDefArgs)))
         actionDefArgs = [self, this, arg]
         arg = argPatOfChoice (noLoc $ choiceNameToRdrName $ mkDataOcc choiceName) cdChoiceFields
         choiceName = rdrNameToString cdChoiceName
         choiceNameToRdrName = if choiceName == "Archive" then qualifyDesugar else mkRdrUnqual
-        controllerArg = if flexible then arg else WildPat noExt
         self = mkVarPat $ mkVarOcc "self"
         this = asPatRecWild "this" conName
         templateType = mkTemplateType templateName []
@@ -2647,7 +2664,7 @@ mkTemplateInstanceDecl templateName conName ValidTemplate{..} =
 -- | Construct instances for split-up `Choice` typeclass, i.e., instances for all single-method typeclasses
 -- that constitute the `Choice` constraint synonym.
 mkChoiceInstanceDecl :: Located String -> [Located RdrName] -> CombinedChoiceData -> [LHsDecl GhcPs]
-mkChoiceInstanceDecl templateName tyVars (CombinedChoiceData _ ChoiceData{..} choiceTyVars _) =
+mkChoiceInstanceDecl templateName tyVars (CombinedChoiceData _ _ ChoiceData{..} choiceTyVars _) =
   [ mkInstance "HasExercise" (mkPrimMethod "exercise" "UExercise")
   , mkInstance "HasToAnyChoice" (mkPrimMethod "_toAnyChoice" "EToAnyChoice")
   , mkInstance "HasFromAnyChoice" (mkPrimMethod "_fromAnyChoice" "EFromAnyChoice")
@@ -2690,7 +2707,7 @@ mkKeyInstanceDecl templateName conName ValidTemplate{..}
 mkChoiceDataDecls
   :: CombinedChoiceData  -- ^ choice data for 'S' including relevant type variables
   -> P [LHsDecl GhcPs]   -- ^ resulting declarations
-mkChoiceDataDecls (CombinedChoiceData _ ChoiceData{..} tyVars _) = do
+mkChoiceDataDecls (CombinedChoiceData _ _ ChoiceData{..} tyVars _) = do
   -- Calculate data constructor info from the choice name and record type.
   choiceConInfo <- splitCon [cdChoiceFields, rdrNameToType cdChoiceName]
   let dataLoc = combineLocs cdChoiceName cdChoiceFields
@@ -2782,12 +2799,12 @@ choiceGroupsToCombinedChoices
 choiceGroupsToCombinedChoices = concatMap distributeController
   where
     distributeController (L _ (controller, L _ choices)) = map (makeCombinedChoice controller) choices
-    makeCombinedChoice controller choice = CombinedChoiceData controller (unLoc choice) [] False
+    makeCombinedChoice controller choice = CombinedChoiceData controller Nothing (unLoc choice) [] False
 
 -- | Simple type conversion, leaving type variable information empty for now.
 flexChoiceToCombinedChoice :: FlexChoiceData -> CombinedChoiceData
-flexChoiceToCombinedChoice (FlexChoiceData controller choiceData) =
-  CombinedChoiceData controller choiceData [] True
+flexChoiceToCombinedChoice FlexChoiceData{..} =
+  CombinedChoiceData fcdControllers fcdObservers fcdChoiceData [] True
 
 -- | Find the type variables which are used in the choice parameter type and
 -- add them into the combined choice data.
@@ -2804,6 +2821,7 @@ mkArchiveChoice =
     { ccdControllers = mkApp
                           (mkQualVar $ mkVarOcc "signatory")
                           (mkUnqualVar $ mkVarOcc "this")
+    , ccdObservers = Nothing
     , ccdChoiceData = ChoiceData {
           cdChoiceName = noLoc $ qualifyDesugar $ mkTcOcc "Archive"
         , cdChoiceFields = noLoc $ HsRecTy noExt []
