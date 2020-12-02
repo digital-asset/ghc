@@ -2361,8 +2361,8 @@ mkLetBindings :: Bag (LHsBind GhcPs) -> LHsLocalBinds GhcPs
 mkLetBindings binds = noLoc $ HsValBinds noExt (ValBinds noExt binds [])
 -- | Yet more of the -Wunused-matches hack.
 extendLetBindings :: LHsLocalBinds GhcPs -> Bag (LHsBind GhcPs) -> LHsLocalBinds GhcPs
-extendLetBindings (L _ (HsValBinds _ (ValBinds _ orig _))) new =
-  noLoc $ HsValBinds noExt (ValBinds noExt (unionBags orig new) [])
+extendLetBindings (L _ (HsValBinds _ (ValBinds _ orig sigs))) new =
+  noLoc $ HsValBinds noExt (ValBinds noExt (unionBags orig new) sigs)
 extendLetBindings (L _ (EmptyLocalBinds _)) new = mkLetBindings new
 extendLetBindings _ _ = error "unexpected: extendLetBindings"
 
