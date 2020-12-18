@@ -2222,6 +2222,20 @@ extractTemplateBodyDecls = foldMap templateBodyDeclToDecls
 --------------------------------------------------------------------------------
 -- Utilities for constructing types and values
 
+mkTupleExp :: [LHsExpr GhcPs] -> LHsExpr GhcPs
+mkTupleExp [e] = e
+mkTupleExp es = noLoc $ ExplicitTuple noExt (map (noLoc . Present noExt) es) Boxed
+
+mkTuplePat :: [Pat GhcPs] -> Pat GhcPs
+mkTuplePat [p] = p
+mkTuplePat ps = TuplePat noExt ps Boxed
+
+mkRdrPat :: RdrName -> Pat GhcPs
+mkRdrPat = XPat . noLoc . VarPat noExt . noLoc
+
+mkRdrExp :: RdrName -> LHsExpr GhcPs
+mkRdrExp = noLoc . HsVar noExt . noLoc
+
 -- | Qualify names with the 'DA.Internal.Desugar' desugaring module.
 qualifyDesugar :: OccName -> RdrName
 qualifyDesugar = mkRdrQual (mkModuleName "DA.Internal.Desugar")
@@ -2420,12 +2434,10 @@ matchGroup loc m = MG { mg_ext = noExt
 
 -- | Utility for constructing a function binding.
 funBind
-  :: SrcSpan
-  -> Located RdrName
+  :: Located RdrName
   -> MatchGroup GhcPs (LHsExpr GhcPs)
-  -> LHsBind GhcPs
-funBind loc tag mg =
-  L loc $
+  -> HsBind GhcPs
+funBind tag mg =
     FunBind { fun_ext = noExt
             , fun_id = tag
             , fun_matches = mg
@@ -2511,7 +2523,7 @@ mkTemplateClassMethod rawMethodName args body mBinds = do
       binds = fromMaybe (noLoc emptyLocalBinds) mBinds
       match = matchWithBinds ctx args loc body binds
       match_group = matchGroup loc match
-  funBind loc fullMethodName match_group
+  L loc $ funBind fullMethodName match_group
 
 mkPrimitive :: String -> LHsExpr GhcPs
 mkPrimitive methodName =
@@ -2627,8 +2639,8 @@ allLetBindings includeBindings args vtLetBindings =
 
 -- | Construct instances for split-up Template typeclass, i.e., instances for all the single-method typeclasses
 -- that constitute the Template constraint synonym.
-mkTemplateInstanceDecl :: Located String -> Located RdrName -> ValidTemplate -> [LHsDecl GhcPs]
-mkTemplateInstanceDecl templateName conName ValidTemplate{..} =
+mkTemplateInstanceDecl :: LHsLocalBinds GhcPs -> Located String -> Located RdrName -> ValidTemplate -> [LHsDecl GhcPs]
+mkTemplateInstanceDecl sharedBinds templateName conName ValidTemplate{..} =
   [ signatoryInstance
   , observerInstance
   , ensureInstance
@@ -2656,7 +2668,7 @@ mkTemplateInstanceDecl templateName conName ValidTemplate{..} =
     mkMethod :: String -> [Pat GhcPs] -> Bool -> LHsExpr GhcPs -> LHsBind GhcPs
     mkMethod methodName args includeBindings methodBody =
       mkTemplateClassMethod methodName args methodBody $
-      allLetBindings includeBindings args vtLetBindings
+      allLetBindings includeBindings args sharedBinds
 
     this = asPatRecWild "this" conName
     cid = mkVarPat $ mkVarOcc "cid"
@@ -2678,15 +2690,15 @@ mkChoiceInstanceDecl templateName tyVars (CombinedChoiceData _ _ ChoiceData{..} 
 
 -- | Construct instances for the split-up `TemplateKey` typeclass, i.e., instances fr all single-method typeclasses
 -- that constitute the `Choice` constraint synonym.
-mkKeyInstanceDecl :: Located String -> Located RdrName -> ValidTemplate -> [LHsDecl GhcPs]
-mkKeyInstanceDecl templateName conName ValidTemplate{..}
+mkKeyInstanceDecl :: LHsLocalBinds GhcPs -> Located String -> Located RdrName -> ValidTemplate -> [LHsDecl GhcPs]
+mkKeyInstanceDecl sharedBinds templateName conName ValidTemplate{..}
   | Just (L _ KeyData{..}) <- vtKeyData =
     let templateType = mkTemplateType templateName []
         mkClass name = mkQualClass name `mkAppTy` templateType `mkAppTy` kdKeyType
         mkMethod :: String -> [Pat GhcPs] -> Bool -> LHsExpr GhcPs -> LHsBind GhcPs
         mkMethod methodName args includeBindings methodBody =
           mkTemplateClassMethod methodName args methodBody $
-          allLetBindings includeBindings args vtLetBindings
+          allLetBindings includeBindings args sharedBinds
         mkInstance name method = instDecl $ classInstDecl (mkClass name) (unitBag method)
         keyInstance = mkInstance "HasKey" $ mkMethod "key" [this] True kdKeyExpr
         maintainerInstance = mkInstance "HasMaintainer" $ mkMethod "_maintainer" [proxy, key] False kdMaintainers
@@ -2852,13 +2864,63 @@ mkTemplateDecls header fields decls = do
   choiceDataDecls <- concat <$> traverse mkChoiceDataDecls vtChoices
   let templateName = occNameString . rdrNameOcc <$> vtTemplateName
       templateDataDecl = mkTemplateDataDecl (combineLocs vtTemplateName fields) vtTemplateName vtTypeVars ci
+      (letDecls,sharedBinds) = shareTemplateLetBindings conName vtLetBindings
       choicesWithArchive = mkArchiveChoice : vtChoices
-      templateInstances = mkTemplateInstanceDecl templateName conName vt
+      templateInstances = mkTemplateInstanceDecl sharedBinds templateName conName vt
       choiceInstanceDecls = concatMap (mkChoiceInstanceDecl templateName vtTypeVars) choicesWithArchive
-      choiceDecls = concatMap (mkChoiceDecls (getLoc templateName) conName vtLetBindings) choicesWithArchive
-      keyInstanceDecl = mkKeyInstanceDecl templateName conName vt -- <$> kdKeyType . unLoc <$> vtKeyData
-  return $ toOL $ templateDataDecl : choiceDataDecls
+      choiceDecls = concatMap (mkChoiceDecls (getLoc templateName) conName sharedBinds) choicesWithArchive
+      keyInstanceDecl = mkKeyInstanceDecl sharedBinds templateName conName vt
+
+  return $ toOL $ templateDataDecl : choiceDataDecls ++ letDecls
                ++ templateInstances ++ (choiceInstanceDecls ++ choiceDecls ++ keyInstanceDecl)
+
+
+shareTemplateLetBindings :: Located RdrName -> LHsLocalBinds GhcPs -> ([LHsDecl GhcPs], LHsLocalBinds GhcPs)
+shareTemplateLetBindings conName vtLetBindings =
+  case vars of
+    [] -> ([],noLoc emptyLocalBinds)
+    _ -> ([letDecl],sharedBinds)
+  where
+    letFnName :: RdrName
+    letFnName = mkRdrUnqual $ mkVarOcc ("_templateLet_" ++ rdrNameToString conName)
+
+    vars :: [RdrName]
+    vars = collectLocalBinders (unLoc vtLetBindings)
+
+    letDecl :: LHsDecl GhcPs
+    letDecl = functionBind letFnName defArgs (noLoc $ HsLet noExt binds body)
+      where
+        defArgs = [this]
+        this = asPatRecWild "this" conName
+        binds = extendLetBindings vtLetBindings (dummyBinds defArgs)
+
+        body :: LHsExpr GhcPs
+        body = mkTupleExp (map mkRdrExp vars)
+
+    sharedBinds :: LHsLocalBinds GhcPs
+    sharedBinds = extendLetBindings (mkLetBindings (listToBag [bind])) (dummyBinds (map mkRdrPat vars))
+      where
+        bind :: LHsBind GhcPs
+        bind = noLoc $ PatBind noExt lhs rhs ([], [])
+
+        lhs :: Pat GhcPs
+        lhs = mkTuplePat (map mkRdrPat vars)
+
+        rhs :: GRHSs GhcPs (LHsExpr GhcPs)
+        rhs = GRHSs noExt [noLoc $ GRHS noExt [] exp] (noLoc emptyLocalBinds)
+
+        exp :: LHsExpr GhcPs
+        exp = mkApp (mkRdrExp letFnName) (mkUnqualVar $ mkVarOcc "this")
+
+
+functionBind :: RdrName -> [Pat GhcPs] -> LHsExpr GhcPs -> LHsDecl GhcPs
+functionBind name args body = do
+  let mc = matchContext $ noLoc name
+  let match = matchWithBinds mc args noSrcSpan body (noLoc emptyLocalBinds)
+  let mg = matchGroup noSrcSpan $ match
+  let bind = funBind (noLoc name) mg
+  noLoc (ValD noExt bind)
+
 
 -- | Desugar a template instance of the form
 --
