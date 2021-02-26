@@ -896,7 +896,7 @@ reservedWordsFM = listToUFM $
          ( "key",            ITkey,           xbit DamlSyntaxBit),
          ( "maintainer",     ITmaintainer,    xbit DamlSyntaxBit),
          ( "exception",      ITexception,     xbit DamlSyntaxBit),
-         ( "message",        ITmessage,       xbit DamlSyntaxBit),
+         ( "message",        ITmessage,       xbit DamlSyntaxBit)
      ]
 
 {-----------------------------------
