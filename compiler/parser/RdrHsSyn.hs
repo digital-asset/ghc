@@ -2885,7 +2885,7 @@ validateException name ExceptionBodyDecls{..}
         }
   where
     report :: String -> P a
-    report e = addFatalError (getLoc templateApp) (text e)
+    report e = addFatalError (getLoc name) (text e)
 
 -- | Desugar an @exception@ declaration into a list of decls (called from 'Parser.y')
 mkExceptionDecls
@@ -2914,7 +2914,7 @@ mkExceptionInstanceDecls
   :: ValidException
   -> [LHsDecl GhcPs]
 mkExceptionInstanceDecls _
-  = pure [] -- TODO https://github.com/digital-asset/daml/issues/8020
+  = [] -- TODO https://github.com/digital-asset/daml/issues/8020
 
 -- | Desugar a @template@ declaration into a list of decls (this is
 -- called from 'Parser.y').
