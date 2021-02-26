@@ -46,6 +46,10 @@ module   RdrHsSyn (
         applyToParties,
         applyConcat,
 
+        -- DAML Exception Syntax
+        ExceptionBodyDecl(..),
+        mkExceptionDecls
+
         -- Stuff to do with Foreign declarations
         mkImport,
         parseCImport,
@@ -2219,6 +2223,26 @@ templateBodyDeclToDecls (L _ decl) = case decl of
 extractTemplateBodyDecls :: [Located TemplateBodyDecl] -> TemplateBodyDecls
 extractTemplateBodyDecls = foldMap templateBodyDeclToDecls
 
+data ValidException = ValidException
+  { veName :: Located RdrName
+  , veMessage :: Maybe (LHsExpr GhcPs) }
+
+data ExceptionBodyDecl
+  = ExceptionMessage (LHsExpr GhcPs)
+
+data ExceptionBodyDecls = ExceptionBodyDecls
+  { ebdMessage :: [LHsExpr GhcPs] }
+
+extractExceptionBodyDecls :: [ExceptionBodyDecl] -> ExceptionBodyDecls
+extractExceptionBodyDecls = foldr addExceptionBodyDecl emptyExceptionBodyDecls
+
+emptyExceptionBodyDecls :: ExceptionBodyDecls
+emptyExceptionBodyDecls = ExceptionBodyDecls []
+
+addExceptionBodyDecl :: ExceptionBodyDecl -> ExceptionBodyDecls -> ExceptionBodyDecls
+addExceptionBodyDecl ebd ebds@ExceptionBodyDecls{..} = case ebd of
+  ExceptionMessage m -> ebds { ebdMessage = m : ebdMessage }
+
 --------------------------------------------------------------------------------
 -- Utilities for constructing types and values
 
@@ -2847,6 +2871,47 @@ mkArchiveChoice =
     }
   where
     pureUnit = mkApp (mkUnqualVar $ mkVarOcc "pure") (noLoc $ ExplicitTuple noExt [] Boxed)
+
+validateException
+  :: Located RdrName
+  -> ExceptionBodyDecls
+  -> P ValidException
+validateException name ExceptionBodyDecls{..}
+  | length ebdMessage > 1 = report "Multiple 'message' declarations"
+  | otherwise =
+      pure ValidException
+        { veName = name
+        , veMessage = listToMaybe ebdMessage
+        }
+
+-- | Desugar an @exception@ declaration into a list of decls (called from 'Parser.y')
+mkExceptionDecls
+  :: Located RdrName                -- ^ Name of exception type
+  -> LHsType GhcPs                  -- ^ Exception record fields
+  -> [ExceptionBodyDecl]            -- ^ Exception body declarations
+  -> P (OrdList (LHsDecl GhcPs))    -- ^ Desugared declarations
+mkExceptionDecls name fields decls = do
+  ve@ValidException{..} <- validateException name (extractExceptionBodyDecls decls)
+  ci@(conNamee, _, _) <- splitCon [fields, rdrNameToType veName]
+  let exceptionName = occNameString . rdrNameOcc <$> name
+      exceptionDataDecl = mkExceptionDataDecl (combineLocs name fields) name ci
+      exceptionInstanceDecls = mkExceptionInstanceDecls ve
+  return $ toOL (exceptionDataDecl : exceptionInstanceDecls)
+
+-- Make the exception data decl, @data DamlException => E = E {...} deriving (Eq, Show)@
+mkExceptionDataDecl
+  :: SrcSpan -- ^ combined source location
+  -> Located RdrName -- ^ exception name
+  -> (Located RdrName, HsConDeclDetails GhcPs, Maybe LHsDocString) -- ^ result of 'splitCon'
+  -> LHsDecl GhcPs -- ^ @data@ declaration
+mkExceptionDataDecl srcSpan name ci
+  = error "undefined: mkExceptionDataDecl" -- TODO https://github.com/digital-asset/daml/issues/8020
+
+mkExceptionInstanceDecls
+  :: ValidException
+  -> [LHsDecl GhcPs]
+mkExceptionInstanceDecls _
+  = pure [] -- TODO https://github.com/digital-asset/daml/issues/8020
 
 -- | Desugar a @template@ declaration into a list of decls (this is
 -- called from 'Parser.y').

@@ -518,6 +518,8 @@ are the most common patterns, rewritten as regular expressions for clarity:
  'postconsuming'{ L _ ITpostconsuming }
  'key'          { L _ ITkey }
  'maintainer'   { L _ ITmaintainer }
+ 'exception'    { L _ ITexception }
+ 'message'      { L _ ITmessage }
 
  '{-# INLINE'             { L _ (ITinline_prag _ _ _) } -- INLINE or INLINABLE
  '{-# SPECIALISE'         { L _ (ITspec_prag _) }
@@ -1110,19 +1112,20 @@ ops     :: { Located (OrdList (Located RdrName)) }
 
 -- No trailing semicolons, non-empty
 topdecls :: { OrdList (LHsDecl GhcPs) }
-        : topdecls_semi topdeclWithTemplate        { $1 `appOL` $2 }
+        : topdecls_semi daml_topdecl        { $1 `appOL` $2 }
 
 -- May have trailing semicolons, can be empty
 topdecls_semi :: { OrdList (LHsDecl GhcPs) }
         -- FIXME (SM, SF): properly handle the 'ams' location annotation here
-        -- : topdecls_semi topdeclWithTemplate semis1 {% ams $2 $3 >> return ($1 `appOL` $2) }
-        : topdecls_semi topdeclWithTemplate semis1 {% return ($1 `appOL` $2) }
+        -- : topdecls_semi daml_topdecl semis1 {% ams $2 $3 >> return ($1 `appOL` $2) }
+        : topdecls_semi daml_topdecl semis1 {% return ($1 `appOL` $2) }
         | {- empty -}                              { nilOL }
 
-topdeclWithTemplate :: { OrdList (LHsDecl GhcPs) }
-topdeclWithTemplate : topdecl                               { unitOL $1 }
-                      -- Templates: we desugar to multiple decls right in the parser
-                    | template_decl                         { $1 }
+daml_topdecl :: { OrdList (LHsDecl GhcPs) }
+daml_topdecl : topdecl                               { unitOL $1 }
+             -- Templates: we desugar to multiple decls right in the parser
+             | template_decl                         { $1 }
+             | exception_decl                        { $1 }
 
 topdecl :: { LHsDecl GhcPs }
         : cl_decl                               { sL1 $1 (TyClD noExt (unLoc $1)) }
@@ -1149,6 +1152,31 @@ topdecl :: { LHsDecl GhcPs }
         -- but we treat an arbitrary expression just as if
         -- it had a $(..) wrapped around it
         | infixexp_top                          { sLL $1 $> $ mkSpliceDecl $1 }
+
+-- Exceptions
+--
+exception_decl :: { OrdList (LHsDecl GhcPs) }
+  : 'exception' tycon arecord_with_opt exception_body_opt {% mkExceptionDecls $2 $3 $4 %}
+
+exception_body_opt :: { [ExceptionBodyDecl] }
+  : 'where' exception_body      { $1 }
+  | {- empty -}                 { [] }
+
+exception_body :: { [ExceptionBodyDecl] }
+  : '{' exception_body_decls '}'                { reverse $2 }
+  | vocurly exception_body_decls close          { reverse $2 }
+
+exception_body_decls :: { [ExceptionBodyDecl] }
+  : exception_body_decls ';' exception_body_decl   { $3 : $1 }
+  | exception_body_decls ';'                       { $1 }
+  | exception_body_decl                            { [$1] }
+  | {- empty -}                                    { [] }
+
+exception_body_decl :: { ExceptionBodyDecl }
+  : exception_message_decl                         { MessageDecl $1 }
+
+exception_message_decl :: { LHsExpr GhcPs }
+  : 'message' exp  { sLL $1 $> $ unLoc $2 }
 
 -- Templates
 --
@@ -3710,6 +3738,7 @@ varid :: { Located RdrName }
         | 'choice'         { sL1 $1 $! mkUnqual varName (fsLit "choice") }
         | 'key'            { sL1 $1 $! mkUnqual varName (fsLit "key") }
         | 'maintainer'     { sL1 $1 $! mkUnqual varName (fsLit "maintainer") }
+        | 'message'        { sL1 $1 $! mkUnqual varName (fsLit "message") }
         -- If this changes relative to tyvarid, update 'checkRuleTyVarBndrNames' in RdrHsSyn.hs
         -- See Note [Parsing explicit foralls in Rules]
 
