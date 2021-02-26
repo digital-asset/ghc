@@ -1156,10 +1156,10 @@ topdecl :: { LHsDecl GhcPs }
 -- Exceptions
 --
 exception_decl :: { OrdList (LHsDecl GhcPs) }
-  : 'exception' tycon arecord_with_opt exception_body_opt {% mkExceptionDecls $2 $3 $4 %}
+  : 'exception' tycon arecord_with_opt exception_body_opt {% mkExceptionDecls $2 $3 $4 }
 
 exception_body_opt :: { [ExceptionBodyDecl] }
-  : 'where' exception_body      { $1 }
+  : 'where' exception_body      { $2 }
   | {- empty -}                 { [] }
 
 exception_body :: { [ExceptionBodyDecl] }
@@ -1173,7 +1173,7 @@ exception_body_decls :: { [ExceptionBodyDecl] }
   | {- empty -}                                    { [] }
 
 exception_body_decl :: { ExceptionBodyDecl }
-  : exception_message_decl                         { MessageDecl $1 }
+  : exception_message_decl                         { ExceptionMessageDecl $1 }
 
 exception_message_decl :: { LHsExpr GhcPs }
   : 'message' exp  { sLL $1 $> $ unLoc $2 }

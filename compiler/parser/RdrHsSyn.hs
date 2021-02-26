@@ -2228,7 +2228,7 @@ data ValidException = ValidException
   , veMessage :: Maybe (LHsExpr GhcPs) }
 
 data ExceptionBodyDecl
-  = ExceptionMessage (LHsExpr GhcPs)
+  = ExceptionMessageDecl (LHsExpr GhcPs)
 
 data ExceptionBodyDecls = ExceptionBodyDecls
   { ebdMessage :: [LHsExpr GhcPs] }
@@ -2241,7 +2241,7 @@ emptyExceptionBodyDecls = ExceptionBodyDecls []
 
 addExceptionBodyDecl :: ExceptionBodyDecl -> ExceptionBodyDecls -> ExceptionBodyDecls
 addExceptionBodyDecl ebd ebds@ExceptionBodyDecls{..} = case ebd of
-  ExceptionMessage m -> ebds { ebdMessage = m : ebdMessage }
+  ExceptionMessageDecl m -> ebds { ebdMessage = m : ebdMessage }
 
 --------------------------------------------------------------------------------
 -- Utilities for constructing types and values
