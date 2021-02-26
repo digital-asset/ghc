@@ -2883,6 +2883,9 @@ validateException name ExceptionBodyDecls{..}
         { veName = name
         , veMessage = listToMaybe ebdMessage
         }
+  where
+    report :: String -> P a
+    report e = addFatalError (getLoc templateApp) (text e)
 
 -- | Desugar an @exception@ declaration into a list of decls (called from 'Parser.y')
 mkExceptionDecls
