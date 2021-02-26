@@ -48,7 +48,7 @@ module   RdrHsSyn (
 
         -- DAML Exception Syntax
         ExceptionBodyDecl(..),
-        mkExceptionDecls
+        mkExceptionDecls,
 
         -- Stuff to do with Foreign declarations
         mkImport,
