@@ -2907,8 +2907,36 @@ mkExceptionDataDecl
   -> Located RdrName -- ^ exception name
   -> (Located RdrName, HsConDeclDetails GhcPs, Maybe LHsDocString) -- ^ result of 'splitCon'
   -> LHsDecl GhcPs -- ^ @data@ declaration
-mkExceptionDataDecl srcSpan name ci
-  = error "undefined: mkExceptionDataDecl" -- TODO https://github.com/digital-asset/daml/issues/8020
+mkExceptionDataDecl srcSpan lname@(L nloc _name) (conName, conDetails, conDoc) =
+  let conDecl = L nloc $ ConDeclH98
+        { con_ext = noExt
+        , con_name = conName
+        , con_forall = noLoc False
+        , con_ex_tvs = []
+        , con_mb_cxt = Nothing
+        , con_args = conDetails
+        , con_doc = conDoc
+        }
+      mkTyCl = mkLHsSigType . rdrNameToType . L nloc . qualifyDesugar . mkClsOcc
+      derivingTys = L nloc $ map mkTyCl ["Eq", "Show"]
+      derivingClause = L nloc $ HsDerivingClause noExt Nothing derivingTys
+      dataDefn = HsDataDefn
+        { dd_ext     = noExt
+        , dd_ND      = DataType
+        , dd_cType   = Nothing
+        , dd_ctxt    = L nloc [rdrNameToType . L nloc . qualifyDesugar $ mkClsOcc "DamlException"]
+        , dd_cons    = [conDecl]
+        , dd_kindSig = Nothing
+        , dd_derivs  = L nloc [derivingClause]
+        }
+      dataDecl = DataDecl
+        { tcdDExt     = noExt
+        , tcdLName    = lname
+        , tcdTyVars   = mkHsQTvs []
+        , tcdFixity   = Prefix
+        , tcdDataDefn = dataDefn
+        }
+  in L loc $ TyClD noExt dataDecl
 
 mkExceptionInstanceDecls
   :: ValidException
