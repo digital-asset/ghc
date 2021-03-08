@@ -2907,7 +2907,7 @@ mkExceptionDataDecl
   -> Located RdrName -- ^ exception name
   -> (Located RdrName, HsConDeclDetails GhcPs, Maybe LHsDocString) -- ^ result of 'splitCon'
   -> LHsDecl GhcPs -- ^ @data@ declaration
-mkExceptionDataDecl srcSpan lname@(L nloc _name) (conName, conDetails, conDoc) =
+mkExceptionDataDecl loc lname@(L nloc _name) (conName, conDetails, conDoc) =
   let conDecl = L nloc $ ConDeclH98
         { con_ext = noExt
         , con_name = conName
