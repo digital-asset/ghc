@@ -653,6 +653,8 @@ data Token
   | ITpostconsuming
   | ITkey
   | ITmaintainer
+  | ITexception
+  | ITmessage
 
   -- Pragmas, see  note [Pragma source text] in BasicTypes
   | ITinline_prag       SourceText InlineSpec RuleMatchInfo
@@ -892,7 +894,9 @@ reservedWordsFM = listToUFM $
          ( "preconsuming",   ITpreconsuming,  xbit DamlSyntaxBit),
          ( "postconsuming",  ITpostconsuming, xbit DamlSyntaxBit),
          ( "key",            ITkey,           xbit DamlSyntaxBit),
-         ( "maintainer",     ITmaintainer,    xbit DamlSyntaxBit)
+         ( "maintainer",     ITmaintainer,    xbit DamlSyntaxBit),
+         ( "exception",      ITexception,     xbit DamlSyntaxBit),
+         ( "message",        ITmessage,       xbit DamlSyntaxBit)
      ]
 
 {-----------------------------------
