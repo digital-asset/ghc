@@ -2876,16 +2876,16 @@ validateException
   :: Located RdrName
   -> ExceptionBodyDecls
   -> P ValidException
-validateException name ExceptionBodyDecls{..}
-  | length ebdMessage > 1 = report "Multiple 'message' declarations"
-  | otherwise =
-      pure ValidException
-        { veName = name
-        , veMessage = listToMaybe ebdMessage
-        }
+validateException veName ExceptionBodyDecls{..} = do
+    veMessage <- case ebdMessage of
+        [] -> pure Nothing
+        (m:ms) -> do
+            mapM_ (\m' -> report (getLoc m') "Multiple 'message' declarations") ms
+            pure (Just m)
+    pure ValidException{..}
   where
-    report :: String -> P a
-    report e = addFatalError (getLoc name) (text e)
+    report :: SrcSpan -> String -> P a
+    report loc e = addFatalError loc (text e)
 
 -- | Desugar an @exception@ declaration into a list of decls (called from 'Parser.y')
 mkExceptionDecls
