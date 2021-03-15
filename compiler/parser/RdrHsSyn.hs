@@ -2224,8 +2224,11 @@ extractTemplateBodyDecls :: [Located TemplateBodyDecl] -> TemplateBodyDecls
 extractTemplateBodyDecls = foldMap templateBodyDeclToDecls
 
 data ValidException = ValidException
-  { veName :: Located RdrName
-  , veMessage :: Maybe (LHsExpr GhcPs) }
+  { veExnName :: Located RdrName
+  , veConName :: Located RdrName
+  , veFields :: LHsType GhcPs
+  , veMessage :: Maybe (LHsExpr GhcPs)
+  }
 
 data ExceptionBodyDecl
   = ExceptionMessageDecl (LHsExpr GhcPs)
@@ -2874,9 +2877,11 @@ mkArchiveChoice =
 
 validateException
   :: Located RdrName
+  -> Located RdrName
+  -> LHsType GhcPs
   -> ExceptionBodyDecls
   -> P ValidException
-validateException veName ExceptionBodyDecls{..} = do
+validateException veExnName veConName veFields ExceptionBodyDecls{..} = do
     veMessage <- case ebdMessage of
         [] -> pure Nothing
         (m:ms) -> do
@@ -2894,11 +2899,11 @@ mkExceptionDecls
   -> [ExceptionBodyDecl]            -- ^ Exception body declarations
   -> P (OrdList (LHsDecl GhcPs))    -- ^ Desugared declarations
 mkExceptionDecls name fields decls = do
-  ve@ValidException{..} <- validateException name (extractExceptionBodyDecls decls)
-  ci@(conName, _, _) <- splitCon [fields, rdrNameToType veName]
+  ci@(conName, _, _) <- splitCon [fields, rdrNameToType name]
+  ve@ValidException{..} <- validateException name conName fields (extractExceptionBodyDecls decls)
   let exceptionName = occNameString . rdrNameOcc <$> name
       exceptionDataDecl = mkExceptionDataDecl (combineLocs name fields) name ci
-      exceptionInstanceDecls = mkExceptionInstanceDecls conName ve
+      exceptionInstanceDecls = mkExceptionInstanceDecls ve
   return $ toOL (exceptionDataDecl : exceptionInstanceDecls)
 
 -- Make the exception data decl, @data DamlException => E = E {...} deriving (Eq, Show)@
@@ -2939,18 +2944,22 @@ mkExceptionDataDecl loc lname@(L nloc _name) (conName, conDetails, conDoc) =
   in L loc $ TyClD noExt dataDecl
 
 mkExceptionInstanceDecls
-  :: Located RdrName -- constructor name
-  -> ValidException -- valid exception data
+  :: ValidException -- ^ valid exception data
   -> [LHsDecl GhcPs]
-mkExceptionInstanceDecls conName ValidException{..} =
+mkExceptionInstanceDecls ValidException{..} =
     [ mkInstance "HasMessage" $ messageMethod
     , mkInstance "HasThrow" $ mkPrimMethod "throwPure" "EThrow"
     , mkInstance "HasToAnyException" $ mkPrimMethod "toAnyException" "EToAnyException"
     , mkInstance "HasFromAnyException" $ mkPrimMethod "fromAnyException" "EFromAnyException"
     ]
   where
-    exceptionType = rdrNameToType veName
-    this = asPatRecWild "this" conName
+    exceptionType = rdrNameToType veExnName
+    this =
+      case veFields of
+        L _ (HsRecTy _ []) ->
+          asPatPrefixCon "this" veConName
+        _ ->
+          asPatRecWild "this" veConName
     messageMethod =
       case veMessage of
         Nothing ->
