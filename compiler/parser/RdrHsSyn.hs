@@ -2951,7 +2951,7 @@ mkExceptionInstanceDecls conName ValidException{..} =
   where
     exceptionType = rdrNameToType veName
     ghcShow = noLoc . HsVar noExt . noLoc $
-      mkRdrQual (mkModuleName "GHC.Show") (mkVarOcc "show")
+      mkRdrUnqual (mkVarOcc "show")
     this = asPatRecWild "this" conName
     messageMethod =
       case veMessage of
