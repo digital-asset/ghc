@@ -2895,10 +2895,10 @@ mkExceptionDecls
   -> P (OrdList (LHsDecl GhcPs))    -- ^ Desugared declarations
 mkExceptionDecls name fields decls = do
   ve@ValidException{..} <- validateException name (extractExceptionBodyDecls decls)
-  ci@(conNamee, _, _) <- splitCon [fields, rdrNameToType veName]
+  ci@(conName, _, _) <- splitCon [fields, rdrNameToType veName]
   let exceptionName = occNameString . rdrNameOcc <$> name
       exceptionDataDecl = mkExceptionDataDecl (combineLocs name fields) name ci
-      exceptionInstanceDecls = mkExceptionInstanceDecls ve
+      exceptionInstanceDecls = mkExceptionInstanceDecls conName ve
   return $ toOL (exceptionDataDecl : exceptionInstanceDecls)
 
 -- Make the exception data decl, @data DamlException => E = E {...} deriving (Eq, Show)@
@@ -2939,10 +2939,25 @@ mkExceptionDataDecl loc lname@(L nloc _name) (conName, conDetails, conDoc) =
   in L loc $ TyClD noExt dataDecl
 
 mkExceptionInstanceDecls
-  :: ValidException
+  :: Located RdrName -- constructor name
+  -> ValidException -- valid exception data
   -> [LHsDecl GhcPs]
-mkExceptionInstanceDecls _
-  = [] -- TODO https://github.com/digital-asset/daml/issues/8020
+mkExceptionInstanceDecls ValidException{..} =
+    [ mkInstance "HasMessage" $ mkMethod "message" [this] veMessage
+    , mkInstance "HasThrow" $ mkPrimMethod "throwPure" "EThrow"
+    , mkInstance "HasToAnyException" $ mkPrimMethod "toAnyException" "EToAnyException"
+    , mkInstance "HasFromAnyException" $ mkPrimMethod "fromAnyException" "EFromAnyException"
+    ]
+  where
+    this = asPatRecWild "this" conName
+    exceptionType = rdrNameToType veName
+
+    mkInstance name method = instDecl $
+      classInstDecl (mkQualClass name `mkAppTy` exceptionType) (unitBag method)
+
+    mkMethod :: String -> [Pat GhcPs] -> LHsExpr GhcPs -> LHsBind GhcPs
+    mkMethod methodName args methodBody =
+      mkTemplateClassMethod methodName args methodBody Nothing
 
 -- | Desugar a @template@ declaration into a list of decls (this is
 -- called from 'Parser.y').
