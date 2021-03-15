@@ -2942,7 +2942,7 @@ mkExceptionInstanceDecls
   :: Located RdrName -- constructor name
   -> ValidException -- valid exception data
   -> [LHsDecl GhcPs]
-mkExceptionInstanceDecls ValidException{..} =
+mkExceptionInstanceDecls conName ValidException{..} =
     [ mkInstance "HasMessage" $ mkMethod "message" [this] veMessage
     , mkInstance "HasThrow" $ mkPrimMethod "throwPure" "EThrow"
     , mkInstance "HasToAnyException" $ mkPrimMethod "toAnyException" "EToAnyException"
