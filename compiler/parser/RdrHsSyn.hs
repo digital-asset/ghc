@@ -2943,14 +2943,21 @@ mkExceptionInstanceDecls
   -> ValidException -- valid exception data
   -> [LHsDecl GhcPs]
 mkExceptionInstanceDecls conName ValidException{..} =
-    [ mkInstance "HasMessage" $ mkMethod "message" [this] veMessage
+    [ mkInstance "HasMessage" $ messageMethod
     , mkInstance "HasThrow" $ mkPrimMethod "throwPure" "EThrow"
     , mkInstance "HasToAnyException" $ mkPrimMethod "toAnyException" "EToAnyException"
     , mkInstance "HasFromAnyException" $ mkPrimMethod "fromAnyException" "EFromAnyException"
     ]
   where
-    this = asPatRecWild "this" conName
     exceptionType = rdrNameToType veName
+    ghcShow = noLoc . HsVar noExt . noLoc $ mkRdrQual (mkModuleName "GHC.Show") "show"
+    this = asPatRecWild "this" conName
+    messageMethod =
+      case veMessage of
+        Nothing ->
+          mkMethod "message" [] ghcShow
+        Just messageBody ->
+          mkMethod "message" [this] messageBody
 
     mkInstance name method = instDecl $
       classInstDecl (mkQualClass name `mkAppTy` exceptionType) (unitBag method)
