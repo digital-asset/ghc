@@ -2369,6 +2369,8 @@ applyToParties p@(L loc _) =
 -- | Calculate the application of 'concat' to a list of expressions
 -- (invoked from Parser.y).
 applyConcat :: Located [LHsExpr GhcPs] -> LHsExpr GhcPs
+applyConcat (L loc []) = L loc $ ExplicitList noExt Nothing []
+applyConcat (L _ [p]) = p
 applyConcat (L loc ps) =
   L loc $ HsApp noExt
     (L loc $ HsVar noExt $ L loc $ qualifyDesugar $ mkVarOcc "concat")
