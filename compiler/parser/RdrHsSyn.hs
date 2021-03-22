@@ -3101,8 +3101,10 @@ mkTryCatchExpr tryExpr@(L tryLoc _) (L catchLoc (_, rawAlts)) = do
       wildCard :: LPat GhcPs
       wildCard = noLoc (WildPat noExt)
 
+      emptyBinds :: LHsLocalBinds GhcPs
       emptyBinds = noLoc (EmptyLocalBinds noExt)
 
+      tryMatch :: LMatch GhcPs (LHsExpr GhcPs)
       tryMatch = noLoc
           $ Match noExt LambdaExpr [wildCard] Nothing
           $ GRHSs noExt [noLoc $ GRHS noExt [] tryExpr] emptyBinds
@@ -3126,6 +3128,7 @@ mkTryCatchExpr tryExpr@(L tryLoc _) (L catchLoc (_, rawAlts)) = do
 
       -- The last case in a catch expression is of the form "_ -> None",
       -- which represents the case where we don't catch the exception.
+      defaultCatchAlt :: LMatch GhcPs (LHsExpr GhcPs)
       defaultCatchAlt = noLoc
           $ Match noExt CaseAlt [wildCard] Nothing
           $ GRHSs noExt [noLoc $ GRHS noExt [] mkNone] emptyBinds
