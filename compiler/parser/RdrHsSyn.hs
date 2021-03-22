@@ -3108,7 +3108,7 @@ mkTryCatchExpr tryExpr@(L tryLoc _) (L catchLoc (_, rawAlts)) = do
       tryMatch = noLoc
           $ Match noExt LambdaExpr [wildCard] Nothing
           $ GRHSs noExt [noLoc $ GRHS noExt [] tryExpr] emptyBinds
-      tryLambda = L tryLoc $ HsLam noExt $ MG noExt (noLoc [noLoc tryMatch]) Generated
+      tryLambda = L tryLoc $ HsLam noExt $ MG noExt (noLoc [tryMatch]) Generated
 
       -- We need to convert the patterns in catch expression from
       --    "PATTERN -> EXPR"
