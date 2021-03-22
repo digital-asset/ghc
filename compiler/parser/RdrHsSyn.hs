@@ -49,6 +49,7 @@ module   RdrHsSyn (
         -- DAML Exception Syntax
         ExceptionBodyDecl(..),
         mkExceptionDecls,
+        mkTryCatchExpr,
 
         -- Stuff to do with Foreign declarations
         mkImport,
@@ -3083,6 +3084,55 @@ splitHsAppTysPs t = go t []
     go :: LHsType GhcPs -> [LHsType GhcPs] -> (LHsType GhcPs, [LHsType GhcPs])
     go (L _ (HsAppTy _ f a)) as = go f (a : as)
     go f                     as = (f, as)
+
+------------
+
+-- | Desugar a try–catch expressions for exception-handling.
+
+mkTryCatchExpr
+  :: LHsExpr GhcPs
+  -> Located ([AddAnn],[LMatch GhcPs (LHsExpr GhcPs)])
+  -> P (HsExpr GhcPs)
+mkTryCatchExpr tryExpr@(L tryLoc _) (L catchLoc (_, rawAlts)) = do
+
+  let tryCatchVar = mkQualVar $ mkVarOcc "_tryCatch"
+      fromAnyExceptionVar = mkQualVar $ mkVarOcc "fromAnyException"
+
+      wildCard :: LPat GhcPs
+      wildCard = noLoc (WildPat noExt)
+
+      tryMatch = noLoc
+          $ Match noExt LambdaExpr [wildCard]
+          $ GRHSs noExt [noLoc $ GRHS noExt [] tryExpr]
+      tryLambda = L tryLoc $ HsLam noExt $ MG noExt (noLoc [noLoc tryMatch]) Generated
+
+      -- We need to convert the patterns in catch expression from
+      --    "PATTERN -> EXPR"
+      -- into
+      --    "(fromAnyException -> Some PATTERN) -> EXPR"
+      convertPat :: LPat GhcPs -> P (LPat GhcPs)
+      -- TODO https://github.com/digital-asset/daml/issues/8020
+      --   Emit helpful error on single variable or wildcard pattern
+      --   without type annotation.
+      convertPat p = pure . noLoc . ViewPat noExt fromAnyExceptionVar . noLoc
+          $ ConPatIn (noLoc . qualifyDesugar $ mkDataOcc "Some") (PrefixCon [p])
+
+      convertMatch :: LMatch GhcPs (LHsExpr GhcPs) -> P (LMatch GhcPs (LHsExpr GhcPs))
+      convertMatch (L loc (Match ext pats grhss)) = do
+          pats' <- mapM convertPat pats
+          pure (L loc (Match ext pats' grhss))
+
+      -- The last case in a catch expression is of the form "_ -> None",
+      -- which represents the case where we don't catch the exception.
+      defaultCatchAlt = noLoc
+          $ Match noExt CaseAlt [wildCard]
+          $ GRHSs [noLoc $ GRHS noExt [] mkNone]
+
+  convertedAlts <- mapM convertMatch rawAlts
+  let catchAlts = convertedAlts ++ [defaultCatchAlt]
+      catchLambda = L catchLoc $ HsLamCase noExt $ MG noExt (noLoc catchAlts) Generated
+
+  pure $ HsApp noExt (mkApp tryCatchVar tryLambda) catchLambda
 
 
 -----------------------------------------------------------------------------
