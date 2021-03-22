@@ -3143,7 +3143,7 @@ mkTryCatchExpr tryExpr@(L tryLoc _) (L catchLoc (_, rawAlts)) = do
       convertMatch :: LMatch GhcPs (LHsExpr GhcPs) -> P (LMatch GhcPs (LHsExpr GhcPs))
       convertMatch (L loc (Match ext _ pats _ grhss)) = do
           pats' <- mapM convertLPat pats
-          grhss' <- mapM (convertGRHSs loc) grhss
+          grhss' <- convertGRHSs loc grhss
           pure (L loc (Match ext CaseAlt pats' Nothing grhss))
 
       -- The last case in a catch expression is of the form "_ -> None",
