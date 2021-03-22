@@ -3101,9 +3101,11 @@ mkTryCatchExpr tryExpr@(L tryLoc _) (L catchLoc (_, rawAlts)) = do
       wildCard :: LPat GhcPs
       wildCard = noLoc (WildPat noExt)
 
+      emptyBinds = noLoc (EmptyLocalBinds noExt)
+
       tryMatch = noLoc
-          $ Match noExt LambdaExpr [wildCard]
-          $ GRHSs noExt [noLoc $ GRHS noExt [] tryExpr]
+          $ Match noExt LambdaExpr [wildCard] Nothing
+          $ GRHSs noExt [noLoc $ GRHS noExt [] tryExpr] emptyBinds
       tryLambda = L tryLoc $ HsLam noExt $ MG noExt (noLoc [noLoc tryMatch]) Generated
 
       -- We need to convert the patterns in catch expression from
@@ -3118,15 +3120,15 @@ mkTryCatchExpr tryExpr@(L tryLoc _) (L catchLoc (_, rawAlts)) = do
           $ ConPatIn (noLoc . qualifyDesugar $ mkDataOcc "Some") (PrefixCon [p])
 
       convertMatch :: LMatch GhcPs (LHsExpr GhcPs) -> P (LMatch GhcPs (LHsExpr GhcPs))
-      convertMatch (L loc (Match ext pats grhss)) = do
+      convertMatch (L loc (Match ext _ pats _ grhss)) = do
           pats' <- mapM convertPat pats
-          pure (L loc (Match ext pats' grhss))
+          pure (L loc (Match ext CaseAlt pats' Nothing grhss))
 
       -- The last case in a catch expression is of the form "_ -> None",
       -- which represents the case where we don't catch the exception.
       defaultCatchAlt = noLoc
-          $ Match noExt CaseAlt [wildCard]
-          $ GRHSs [noLoc $ GRHS noExt [] mkNone]
+          $ Match noExt CaseAlt [wildCard] Nothing
+          $ GRHSs noExt [noLoc $ GRHS noExt [] mkNone] emptyBinds
 
   convertedAlts <- mapM convertMatch rawAlts
   let catchAlts = convertedAlts ++ [defaultCatchAlt]
