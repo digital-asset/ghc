@@ -2964,7 +2964,7 @@ aexp    :: { LHsExpr GhcPs }
                                                    FromSource (snd $ unLoc $4)))
                                                (mj AnnCase $1:mj AnnOf $3
                                                   :(fst $ unLoc $4)) }
-        | 'try' exp 'catch' altslist    {% cL (comb3 $1 $3 $4) <$> mkTryCatchExpr $2 $4 }
+        | 'try' exp 'catch' altslist    {% fmap (cL (comb3 $1 $3 $4)) (mkTryCatchExpr $2 $4) }
         | doexp                 { $1 }
         | 'mdo' stmtlist            {% ams (cL (comb2 $1 $2)
                                               (mkHsDo MDoExpr (snd $ unLoc $2)))
@@ -3388,8 +3388,8 @@ qual  :: { LStmt GhcPs (LHsExpr GhcPs) }
     | exp                               { sL1 $1 $ mkBodyStmt $1 }
     | 'let' binds                       {% ams (sLL $1 $>$ LetStmt noExt (snd $ unLoc $2))
                                                (mj AnnLet $1:(fst $ unLoc $2)) }
-    | 'try' exp ';' 'catch' altslist    {% cL (comb3 $1 $4 $5) . mkBodyStmt . cL (comb3 $1 $4 $5)
-                                          <$> mkTryCatchExpr $2 $5 }
+    | 'try' exp ';' 'catch' altslist    {% fmap (cL (comb3 $1 $4 $5) . mkBodyStmt . cL (comb3 $1 $4 $5))
+                                                (mkTryCatchExpr $2 $5) }
 
 -----------------------------------------------------------------------------
 -- Record Field Update/Construction
