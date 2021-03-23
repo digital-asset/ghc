@@ -3388,7 +3388,13 @@ qual  :: { LStmt GhcPs (LHsExpr GhcPs) }
     | exp                               { sL1 $1 $ mkBodyStmt $1 }
     | 'let' binds                       {% ams (sLL $1 $>$ LetStmt noExt (snd $ unLoc $2))
                                                (mj AnnLet $1:(fst $ unLoc $2)) }
-    | 'try' exp ';' 'catch' altslist    {% fmap (cL (comb3 $1 $4 $5) . mkBodyStmt . cL (comb3 $1 $4 $5))
+    | bindpat '<-' 'try' exp ';' 'catch' altslist
+                                        {% fmap ( cL (comb3 $1 $6 $7) . mkBindStmt $1
+                                                . cL (comb3 $3 $6 $7))
+                                                (mkTryCatchExpr $4 $7)
+                                           >>= \x -> ams x [mu AnnLarrow $2] }
+    | 'try' exp ';' 'catch' altslist    {% fmap ( cL (comb3 $1 $4 $5) . mkBodyStmt
+                                                . cL (comb3 $1 $4 $5))
                                                 (mkTryCatchExpr $2 $5) }
 
 -----------------------------------------------------------------------------
