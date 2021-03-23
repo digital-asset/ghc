@@ -3110,22 +3110,15 @@ mkTryCatchExpr tryExpr@(L tryLoc _) (L catchLoc (_, rawAlts)) = do
           $ GRHSs noExt [noLoc $ GRHS noExt [] tryExpr] emptyBinds
       tryLambda = L tryLoc $ HsLam noExt $ MG noExt (noLoc [tryMatch]) Generated
 
-      -- We need to convert the patterns in catch expression from
-      --    "PATTERN -> EXPR"
-      -- into
-      --    "(fromAnyException -> Some PATTERN) -> Some EXPR".
-      -- The following bindings achieve this.
-
       report :: SrcSpan -> String -> P a
       report loc e = addFatalError loc (text e)
 
+      -- Convert "PATTERN" into "(fromAnyException -> Some PATTERN)"
       convertLPat :: LPat GhcPs -> P (LPat GhcPs)
-      -- TODO https://github.com/digital-asset/daml/issues/8020
-      --   Emit helpful error for single variable or wildcard pattern
-      --   without type annotation.
       convertLPat p = pure . noLoc . ViewPat noExt fromAnyExceptionVar . noLoc
           $ ConPatIn (noLoc . qualifyDesugar $ mkDataOcc "Some") (PrefixCon [p])
 
+      -- Convert right-hand side "EXPR" into "Some EXPR"
       convertLGRHS :: LGRHS GhcPs (LHsExpr GhcPs) -> P (LGRHS GhcPs (LHsExpr GhcPs))
       convertLGRHS (L loc (GRHS ext guards body)) = do
           let body' = mkSome body
@@ -3133,6 +3126,7 @@ mkTryCatchExpr tryExpr@(L tryLoc _) (L catchLoc (_, rawAlts)) = do
       convertLGRHS (L loc _) =
           report loc "Unexpected right-hand side for catch."
 
+      -- Convert right-hand sides "EXPR" into "Some EXPR"
       convertGRHSs :: SrcSpan -> GRHSs GhcPs (LHsExpr GhcPs) -> P (GRHSs GhcPs (LHsExpr GhcPs))
       convertGRHSs _ (GRHSs ext lgrhss localBinds) = do
           lgrhss' <- mapM convertLGRHS lgrhss
@@ -3140,6 +3134,10 @@ mkTryCatchExpr tryExpr@(L tryLoc _) (L catchLoc (_, rawAlts)) = do
       convertGRHSs loc _ = do
           report loc "Unexpected right-hand side for catch."
 
+      -- Convert the patterns in catch expression from
+      --    "PATTERN -> EXPR"
+      -- into
+      --    "(fromAnyException -> Some PATTERN) -> Some EXPR".
       convertMatch :: LMatch GhcPs (LHsExpr GhcPs) -> P (LMatch GhcPs (LHsExpr GhcPs))
       convertMatch (L loc (Match ext _ pats _ grhss)) = do
           pats' <- mapM convertLPat pats
