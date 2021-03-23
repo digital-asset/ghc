@@ -3144,7 +3144,7 @@ mkTryCatchExpr tryExpr@(L tryLoc _) (L catchLoc (_, rawAlts)) = do
       convertMatch (L loc (Match ext _ pats _ grhss)) = do
           pats' <- mapM convertLPat pats
           grhss' <- convertGRHSs loc grhss
-          pure (L loc (Match ext CaseAlt pats' Nothing grhss))
+          pure (L loc (Match ext CaseAlt pats' Nothing grhss'))
 
       -- The last case in a catch expression is of the form "_ -> None",
       -- which represents the case where we don't catch the exception.
