@@ -655,6 +655,8 @@ data Token
   | ITmaintainer
   | ITexception
   | ITmessage
+  | ITtry
+  | ITcatch
 
   -- Pragmas, see  note [Pragma source text] in BasicTypes
   | ITinline_prag       SourceText InlineSpec RuleMatchInfo
@@ -896,7 +898,9 @@ reservedWordsFM = listToUFM $
          ( "key",            ITkey,           xbit DamlSyntaxBit),
          ( "maintainer",     ITmaintainer,    xbit DamlSyntaxBit),
          ( "exception",      ITexception,     xbit DamlSyntaxBit),
-         ( "message",        ITmessage,       xbit DamlSyntaxBit)
+         ( "message",        ITmessage,       xbit DamlSyntaxBit),
+         ( "try",            ITtry,           xbit DamlSyntaxBit),
+         ( "catch",          ITcatch,         xbit DamlSyntaxBit)
      ]
 
 {-----------------------------------
@@ -1534,6 +1538,7 @@ maybe_layout t = do -- If the alternative layout rule is enabled then
     where f ITdo    = pushLexState layout_do
           f ITmdo   = pushLexState layout_do
           f ITof    = pushLexState layout
+          f ITcatch = pushLexState layout
           f ITlcase = pushLexState layout
           f ITlet   = pushLexState layout
           f ITwhere = pushLexState layout

@@ -520,6 +520,8 @@ are the most common patterns, rewritten as regular expressions for clarity:
  'maintainer'   { L _ ITmaintainer }
  'exception'    { L _ ITexception }
  'message'      { L _ ITmessage }
+ 'try'          { L _ ITtry }
+ 'catch'        { L _ ITcatch }
 
  '{-# INLINE'             { L _ (ITinline_prag _ _ _) } -- INLINE or INLINABLE
  '{-# SPECIALISE'         { L _ (ITspec_prag _) }
@@ -2962,6 +2964,7 @@ aexp    :: { LHsExpr GhcPs }
                                                    FromSource (snd $ unLoc $4)))
                                                (mj AnnCase $1:mj AnnOf $3
                                                   :(fst $ unLoc $4)) }
+        | 'try' exp 'catch' altslist    {% fmap (cL (comb3 $1 $3 $4)) (mkTryCatchExpr $2 $4) }
         | doexp                 { $1 }
         | 'mdo' stmtlist            {% ams (cL (comb2 $1 $2)
                                               (mkHsDo MDoExpr (snd $ unLoc $2)))
@@ -3385,6 +3388,14 @@ qual  :: { LStmt GhcPs (LHsExpr GhcPs) }
     | exp                               { sL1 $1 $ mkBodyStmt $1 }
     | 'let' binds                       {% ams (sLL $1 $>$ LetStmt noExt (snd $ unLoc $2))
                                                (mj AnnLet $1:(fst $ unLoc $2)) }
+    | bindpat '<-' 'try' exp ';' 'catch' altslist
+                                        {% fmap ( cL (comb3 $1 $6 $7) . mkBindStmt $1
+                                                . cL (comb3 $3 $6 $7))
+                                                (mkTryCatchExpr $4 $7)
+                                           >>= \x -> ams x [mu AnnLarrow $2] }
+    | 'try' exp ';' 'catch' altslist    {% fmap ( cL (comb3 $1 $4 $5) . mkBodyStmt
+                                                . cL (comb3 $1 $4 $5))
+                                                (mkTryCatchExpr $2 $5) }
 
 -----------------------------------------------------------------------------
 -- Record Field Update/Construction

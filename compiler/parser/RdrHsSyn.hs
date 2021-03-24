@@ -49,6 +49,7 @@ module   RdrHsSyn (
         -- DAML Exception Syntax
         ExceptionBodyDecl(..),
         mkExceptionDecls,
+        mkTryCatchExpr,
 
         -- Stuff to do with Foreign declarations
         mkImport,
@@ -3085,6 +3086,78 @@ splitHsAppTysPs t = go t []
     go :: LHsType GhcPs -> [LHsType GhcPs] -> (LHsType GhcPs, [LHsType GhcPs])
     go (L _ (HsAppTy _ f a)) as = go f (a : as)
     go f                     as = (f, as)
+
+------------
+
+-- | Desugar a try–catch expressions for exception-handling.
+
+mkTryCatchExpr
+  :: LHsExpr GhcPs
+  -> Located ([AddAnn],[LMatch GhcPs (LHsExpr GhcPs)])
+  -> P (HsExpr GhcPs)
+mkTryCatchExpr tryExpr@(L tryLoc _) (L catchLoc (_, rawAlts)) = do
+
+  let tryCatchVar = mkQualVar $ mkVarOcc "_tryCatch"
+      fromAnyExceptionVar = mkQualVar $ mkVarOcc "fromAnyException"
+
+      wildCard :: LPat GhcPs
+      wildCard = noLoc (WildPat noExt)
+
+      emptyBinds :: LHsLocalBinds GhcPs
+      emptyBinds = noLoc (EmptyLocalBinds noExt)
+
+      tryMatch :: LMatch GhcPs (LHsExpr GhcPs)
+      tryMatch = noLoc
+          $ Match noExt LambdaExpr [wildCard] Nothing
+          $ GRHSs noExt [noLoc $ GRHS noExt [] tryExpr] emptyBinds
+      tryLambda = L tryLoc $ HsLam noExt $ MG noExt (noLoc [tryMatch]) Generated
+
+      report :: SrcSpan -> String -> P a
+      report loc e = addFatalError loc (text e)
+
+      -- Convert "PATTERN" into "(fromAnyException -> Some PATTERN)"
+      convertLPat :: LPat GhcPs -> P (LPat GhcPs)
+      convertLPat p = pure . noLoc . ViewPat noExt fromAnyExceptionVar . noLoc
+          $ ConPatIn (noLoc . qualifyDesugar $ mkDataOcc "Some") (PrefixCon [p])
+
+      -- Convert right-hand side "EXPR" into "Some EXPR"
+      convertLGRHS :: LGRHS GhcPs (LHsExpr GhcPs) -> P (LGRHS GhcPs (LHsExpr GhcPs))
+      convertLGRHS (L loc (GRHS ext guards body)) = do
+          let body' = mkSome body
+          pure (L loc (GRHS ext guards body'))
+      convertLGRHS (L loc _) =
+          report loc "Unexpected right-hand side for catch."
+
+      -- Convert right-hand sides "EXPR" into "Some EXPR"
+      convertGRHSs :: SrcSpan -> GRHSs GhcPs (LHsExpr GhcPs) -> P (GRHSs GhcPs (LHsExpr GhcPs))
+      convertGRHSs _ (GRHSs ext lgrhss localBinds) = do
+          lgrhss' <- mapM convertLGRHS lgrhss
+          pure (GRHSs ext lgrhss' localBinds)
+      convertGRHSs loc _ = do
+          report loc "Unexpected right-hand side for catch."
+
+      -- Convert the patterns in catch expression from
+      --    "PATTERN -> EXPR"
+      -- into
+      --    "(fromAnyException -> Some PATTERN) -> Some EXPR".
+      convertMatch :: LMatch GhcPs (LHsExpr GhcPs) -> P (LMatch GhcPs (LHsExpr GhcPs))
+      convertMatch (L loc (Match ext _ pats _ grhss)) = do
+          pats' <- mapM convertLPat pats
+          grhss' <- convertGRHSs loc grhss
+          pure (L loc (Match ext CaseAlt pats' Nothing grhss'))
+
+      -- The last case in a catch expression is of the form "_ -> None",
+      -- which represents the case where we don't catch the exception.
+      defaultCatchAlt :: LMatch GhcPs (LHsExpr GhcPs)
+      defaultCatchAlt = noLoc
+          $ Match noExt CaseAlt [wildCard] Nothing
+          $ GRHSs noExt [noLoc $ GRHS noExt [] mkNone] emptyBinds
+
+  convertedAlts <- mapM convertMatch rawAlts
+  let catchAlts = convertedAlts ++ [defaultCatchAlt]
+      catchLambda = L catchLoc $ HsLamCase noExt $ MG noExt (noLoc catchAlts) Generated
+
+  pure $ HsApp noExt (mkApp tryCatchVar tryLambda) catchLambda
 
 
 -----------------------------------------------------------------------------
