@@ -586,7 +586,7 @@ So we need to cast (T a Int) to (T a b).  Sigh.
 
 -}
 
-ds_expr _ expr@(RecordUpd { rupd_expr = record_expr, rupd_flds = fields
+ds_expr _ expr@(RecordUpd { rupd_expr = record_expr, rupd_flds = Left fields
                           , rupd_ext = RecordUpdTc
                               { rupd_cons = cons_to_upd
                               , rupd_in_tys = in_inst_tys
@@ -713,6 +713,7 @@ ds_expr _ expr@(RecordUpd { rupd_expr = record_expr, rupd_flds = fields
                                          , pat_arg_tys = in_inst_tys
                                          , pat_wrap = req_wrap }
            ; return (mkSimpleMatch RecUpd [pat] wrapped_rhs) }
+ds_expr _ RecordUpd {} = panic "DsExpr: ds_expr: The impossible happened!"
 
 -- Here is where we desugar the Template Haskell brackets and escapes
 

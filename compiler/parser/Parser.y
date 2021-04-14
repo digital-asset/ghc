@@ -56,7 +56,7 @@ import Outputable
 
 -- compiler/basicTypes
 import RdrName
-import OccName          ( varName, dataName, tcClsName, tvName, startsWithUnderscore )
+import OccName          ( varName, dataName, tcClsName, tvName, startsWithUnderscore, mkVarOcc )
 import DataCon          ( DataCon, dataConName )
 import SrcLoc
 import Module
@@ -2984,19 +2984,22 @@ doexp   :: { LHsExpr GhcPs }
                                          (mj AnnDo $1:(fst $ unLoc $2)) }
 
 aexp1   :: { LHsExpr GhcPs }
-        : aexp1 '{' fbinds '}' {% do { r <- mkRecConstrOrUpdate $1 (comb2 $2 $4)
+        : aexp1 '{' fbinds '}' {% do { overloaded <- getBit OverloadedRecordUpdateBit
+                                     ; r <- mkRecConstrOrUpdate overloaded $1 (comb2 $2 $4)
                                                                    (snd $3)
                                      ; _ <- amsL (comb2 $1 $>) (moc $2:mcc $4:(fst $3))
                                      ; checkRecordSyntax (sLL $1 $> r) }}
         | aexp1 'with' '{' fbinds '}'
-                               {% do { r <- mkRecConstrOrUpdate $1 (comb2 $3 $5)
+                               {% do { overloaded <- getBit OverloadedRecordUpdateBit
+                                     ; r <- mkRecConstrOrUpdate overloaded $1 (comb2 $3 $5)
                                                                    (snd $4)
                                      ; _ <- ams (sLL $1 $> ()) (moc $3:mcc $5:(fst $4))
                                      ; checkRecordSyntax (sLL $1 $> r) }}
         | aexp1 'with' vocurly fbinds close
-                               {% do { let { (_, (fields, _)) = $4
-                                           ; end_tok = last (void $3 : map void fields) }
-                                     ; r <- mkRecConstrOrUpdate $1 (comb2 $3 end_tok)
+                               {% do { overloaded <- getBit OverloadedRecordUpdateBit
+                                     ; let { (_, (fields, _)) = $4
+                                           ; end_tok = last (void $3 : map (either void void) fields) }
+                                     ; r <- mkRecConstrOrUpdate overloaded $1 (comb2 $3 end_tok)
                                                                    (snd $4)
                                      ; checkRecordSyntax (L (comb2 $1 end_tok) $ r) }}
         | aexp2                { $1 }
@@ -3400,30 +3403,59 @@ qual  :: { LStmt GhcPs (LHsExpr GhcPs) }
 -----------------------------------------------------------------------------
 -- Record Field Update/Construction
 
-fbinds  :: { ([AddAnn],([LHsRecField GhcPs (LHsExpr GhcPs)], Bool)) }
+fbinds  :: { ([AddAnn],([Fbind (HsExpr GhcPs)], Bool)) }
         : fbinds1                       { $1 }
         | {- empty -}                   { ([],([], False)) }
 
-fbinds1 :: { ([AddAnn],([LHsRecField GhcPs (LHsExpr GhcPs)], Bool)) }
+fbinds1 :: { ([AddAnn],([Fbind (HsExpr GhcPs)], Bool)) }
         : fbind ',' fbinds1
-                {% addAnnotation (gl $1) AnnComma (gl $2) >>
+                {% let gl' = \x -> case x of {Left (L l _) -> l; Right (L l _) -> l} in
+                   addAnnotation (gl' $1) AnnComma (gl $2) >>
                    return (case $3 of (ma,(flds, dd)) -> (ma,($1 : flds, dd))) }
         | fbind ';' fbinds1
-                {% addAnnotation (gl $1) AnnComma (gl $2) >>
+                {% let gl' = \x -> case x of {Left (L l _) -> l; Right (L l _) -> l} in
+                   addAnnotation (gl' $1) AnnComma (gl $2) >>
                    return (case $3 of (ma,(flds, dd)) -> (ma,($1 : flds, dd))) }
         | fbind                         { ([],([$1], False)) }
         | '..'                          { ([mj AnnDotdot $1],([],   True)) }
 
-fbind   :: { LHsRecField GhcPs (LHsExpr GhcPs) }
-        : qvar '=' texp {% ams  (sLL $1 $> $ HsRecField (sL1 $1 $ mkFieldOcc $1) $3 False)
-                                [mj AnnEqual $2] }
+fbind   :: { Fbind (HsExpr GhcPs) }
+        : qvar '=' texp {% fmap Left $ ams  (sLL $1 $> $ HsRecField (sL1 $1 $ mkFieldOcc $1) $3 False)
+                                        [mj AnnEqual $2] }
                         -- RHS is a 'texp', allowing view patterns (Trac #6038)
                         -- and, incidentally, sections.  Eg
                         -- f (R { x = show -> s }) = ...
 
-        | qvar          { sLL $1 $> $ HsRecField (sL1 $1 $ mkFieldOcc $1) placeHolderPunRhs True }
+        | qvar          { Left $ sLL $1 $> $ HsRecField (sL1 $1 $ mkFieldOcc $1) placeHolderPunRhs True }
                         -- In the punning case, use a place-holder
                         -- The renamer fills in the final value
+        | field '.' fieldToUpdate '=' texp
+                        { do
+                            let top = $1
+                                fields = top : reverse $3
+                                final = last fields
+                                l = comb2 top final
+                                isPun = False
+                            Right $ mkRdrProjUpdate (comb2 $1 $5) (L l fields) $5 isPun
+                        }
+        | field '.' fieldToUpdate
+                        { do
+                          let top = $1
+                              fields = top : reverse $3
+                              final = last fields
+                              l = comb2 top final
+                              isPun = True
+                              var = mkUnqualVar $ mkVarOcc $ unpackFS $ unLoc final
+                          Right $ mkRdrProjUpdate l (L l fields) var isPun
+                        }
+
+fieldToUpdate :: { [Located FastString] }
+fieldToUpdate
+        : fieldToUpdate '.' field { $3 : $1 }
+        | field { [$1] }
+
+field :: { Located FastString }
+      : VARID { sL1 $1 $! getVARID $1 }
 
 -----------------------------------------------------------------------------
 -- Implicit Parameter Bindings

@@ -2400,6 +2400,7 @@ data ExtBits
   | GadtSyntaxBit
   | DamlSyntaxBit
   | ScopedTypeVariablesBit
+  | OverloadedRecordUpdateBit
 
   -- Flags that are updated once parsing starts
   | InRulePragBit
@@ -2494,6 +2495,7 @@ mkParserFlags' warningFlags extensionFlags thisPackage
       .|. GadtSyntaxBit               `xoptBit` LangExt.GADTSyntax
       .|. DamlSyntaxBit               `xoptBit` LangExt.DamlSyntax
       .|. ScopedTypeVariablesBit      `xoptBit` LangExt.ScopedTypeVariables
+      .|. OverloadedRecordUpdateBit   `xoptBit` LangExt.OverloadedRecordUpdate
     optBits =
           HaddockBit        `setBitIf` isHaddock
       .|. RawTokenStreamBit `setBitIf` rawTokStream

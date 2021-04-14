@@ -578,10 +578,14 @@ addTickHsExpr expr@(RecordCon { rcon_flds = rec_binds })
   = do { rec_binds' <- addTickHsRecordBinds rec_binds
        ; return (expr { rcon_flds = rec_binds' }) }
 
-addTickHsExpr expr@(RecordUpd { rupd_expr = e, rupd_flds = flds })
+addTickHsExpr expr@(RecordUpd { rupd_expr = e, rupd_flds = Left flds })
   = do { e' <- addTickLHsExpr e
        ; flds' <- mapM addTickHsRecField flds
-       ; return (expr { rupd_expr = e', rupd_flds = flds' }) }
+       ; return (expr { rupd_expr = e', rupd_flds = Left flds' }) }
+addTickHsExpr expr@(RecordUpd { rupd_expr = e, rupd_flds = Right flds })
+  = do { e' <- addTickLHsExpr e
+       ; flds' <- mapM addTickHsRecField flds
+       ; return (expr { rupd_expr = e', rupd_flds = Right flds' }) }
 
 addTickHsExpr (ExprWithTySig x e ty) =
         liftM3 ExprWithTySig

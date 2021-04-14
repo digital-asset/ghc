@@ -816,9 +816,12 @@ instance ( a ~ GhcPass p
         [ toHie $ C Use name
         , toHie $ RC RecFieldAssign $ binds
         ]
-      RecordUpd {rupd_expr = expr, rupd_flds = upds}->
+      RecordUpd {rupd_expr = expr, rupd_flds = Left upds}->
         [ toHie expr
         , toHie $ map (RC RecFieldAssign) upds
+        ]
+      RecordUpd {rupd_expr = expr, rupd_flds = Right _ }->
+        [ toHie expr
         ]
       ExprWithTySig _ expr sig ->
         [ toHie expr

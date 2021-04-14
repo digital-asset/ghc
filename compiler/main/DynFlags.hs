@@ -4455,7 +4455,8 @@ xFlagsDeps = [
   flagSpec "UnicodeSyntax"                    LangExt.UnicodeSyntax,
   flagSpec "UnliftedFFITypes"                 LangExt.UnliftedFFITypes,
   flagSpec "ViewPatterns"                     LangExt.ViewPatterns,
-  flagSpec "DamlSyntax"                       LangExt.DamlSyntax
+  flagSpec "DamlSyntax"                       LangExt.DamlSyntax,
+  flagSpec "OverloadedRecordUpdate"           LangExt.OverloadedRecordUpdate
   ]
 
 defaultFlags :: Settings -> [GeneralFlag]
