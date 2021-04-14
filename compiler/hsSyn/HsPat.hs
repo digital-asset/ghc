@@ -25,7 +25,7 @@ module HsPat (
         HsConPatDetails, hsConPatArgs,
         HsRecFields(..), HsRecField'(..), LHsRecField',
         HsRecField, LHsRecField,
-        HsRecUpdField, LHsRecUpdField,
+        HsRecUpdField, LHsRecUpdField, LHsRecProj, LHsRecUpdProj, Fbind, FieldLabelStrings(..), FieldLabelString,
         hsRecFields, hsRecFieldSel, hsRecFieldId, hsRecFieldsArgs,
         hsRecUpdFieldId, hsRecUpdFieldOcc, hsRecUpdFieldRdr,
 
@@ -406,6 +406,16 @@ type HsRecField    p arg = HsRecField' (FieldOcc p) arg
 
 -- | Haskell Record Update Field
 type HsRecUpdField p     = HsRecField' (AmbiguousFieldOcc p) (LHsExpr p)
+
+newtype FieldLabelStrings = FieldLabelStrings [Located FieldLabelString] deriving (Data)
+instance Outputable FieldLabelStrings where
+  ppr (FieldLabelStrings flds) = hcat (punctuate dot (map (ppr . unLoc) flds))
+
+type RecProj arg = HsRecField' FieldLabelStrings arg
+type LHsRecProj p arg = Located (RecProj arg)
+type Fbind b = Either (LHsRecField GhcPs (Located b)) (LHsRecProj GhcPs (Located b))
+type RecUpdProj p = RecProj (LHsExpr p)
+type LHsRecUpdProj p = Located (RecUpdProj p)
 
 -- | Haskell Record Field
 --

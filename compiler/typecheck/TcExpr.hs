@@ -818,7 +818,7 @@ following.
 
 -}
 
-tcExpr expr@(RecordUpd { rupd_expr = record_expr, rupd_flds = rbnds }) res_ty
+tcExpr expr@(RecordUpd { rupd_expr = record_expr, rupd_flds = Left rbnds }) res_ty
   = ASSERT( notNull rbnds )
     do  { -- STEP -2: typecheck the record_expr, the record to be updated
           (record_expr', record_rho) <- tcInferRho record_expr
@@ -967,13 +967,13 @@ tcExpr expr@(RecordUpd { rupd_expr = record_expr, rupd_flds = rbnds }) res_ty
           mkHsWrap wrap_res $
           RecordUpd { rupd_expr
                           = mkLHsWrap fam_co (mkLHsWrapCo co_scrut record_expr')
-                    , rupd_flds = rbinds'
+                    , rupd_flds = Left rbinds'
                     , rupd_ext = RecordUpdTc
                         { rupd_cons = relevant_cons
                         , rupd_in_tys = scrut_inst_tys
                         , rupd_out_tys = result_inst_tys
                         , rupd_wrap = req_wrap }} }
-
+tcExpr expr@(RecordUpd {}) _res_ty = panic "TcExpr: The impossible happened!"
 tcExpr e@(HsRecFld _ f) res_ty
     = tcCheckRecSelId e f res_ty
 

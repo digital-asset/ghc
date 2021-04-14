@@ -876,7 +876,7 @@ zonkExpr env expr@(RecordCon { rcon_ext = ext, rcon_flds = rbinds })
         ; return (expr { rcon_ext  = ext { rcon_con_expr = new_con_expr }
                        , rcon_flds = new_rbinds }) }
 
-zonkExpr env (RecordUpd { rupd_flds = rbinds
+zonkExpr env (RecordUpd { rupd_flds = Left rbinds
                         , rupd_expr = expr
                         , rupd_ext = RecordUpdTc
                             { rupd_cons = cons, rupd_in_tys = in_tys
@@ -886,11 +886,12 @@ zonkExpr env (RecordUpd { rupd_flds = rbinds
         ; new_out_tys <- mapM (zonkTcTypeToTypeX env) out_tys
         ; new_rbinds  <- zonkRecUpdFields env rbinds
         ; (_, new_recwrap) <- zonkCoFn env req_wrap
-        ; return (RecordUpd { rupd_expr = new_expr, rupd_flds =  new_rbinds
+        ; return (RecordUpd { rupd_expr = new_expr, rupd_flds =  Left new_rbinds
                             , rupd_ext = RecordUpdTc
                                 { rupd_cons = cons, rupd_in_tys = new_in_tys
                                 , rupd_out_tys = new_out_tys
                                 , rupd_wrap = new_recwrap }}) }
+zonkExpr env (RecordUpd {}) = panic "GHC.Tc.Utils.Zonk: zonkExpr: The impossible happened!"
 
 zonkExpr env (ExprWithTySig _ e ty)
   = do { e' <- zonkLExpr env e

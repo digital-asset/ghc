@@ -595,6 +595,9 @@ gHC_OVER_LABELS = mkBaseModule (fsLit "GHC.OverloadedLabels")
 gHC_RECORDS :: Module
 gHC_RECORDS = mkBaseModule (fsLit "GHC.Records")
 
+dA_RECORDS :: Module
+dA_RECORDS = mkBaseModule (fsLit "DA.Internal.Record")
+
 mAIN, rOOT_MAIN :: Module
 mAIN            = mkMainModule_ mAIN_NAME
 rOOT_MAIN       = mkMainModule (fsLit ":Main") -- Root module for initialisation
@@ -1377,6 +1380,11 @@ isListClassName = clsQual gHC_EXTS (fsLit "IsList")    isListClassKey
 fromListName    = varQual gHC_EXTS (fsLit "fromList")  fromListClassOpKey
 fromListNName   = varQual gHC_EXTS (fsLit "fromListN") fromListNClassOpKey
 toListName      = varQual gHC_EXTS (fsLit "toList")    toListClassOpKey
+
+-- HasField class ops
+getFieldName, setFieldName :: Name
+getFieldName = varQual dA_RECORDS (fsLit "getField") getFieldClassOpKey
+setFieldName = varQual dA_RECORDS (fsLit "setField") setFieldClassOpKey
 
 -- Class Show
 showClassName :: Name
@@ -2432,6 +2440,11 @@ timesNaturalIdKey       = mkPreludeMiscIdUnique 566
 mkNaturalIdKey          = mkPreludeMiscIdUnique 567
 naturalSDataConKey      = mkPreludeMiscIdUnique 568
 wordToNaturalIdKey      = mkPreludeMiscIdUnique 569
+
+-- HasField class ops
+getFieldClassOpKey, setFieldClassOpKey :: Unique
+getFieldClassOpKey            = mkPreludeMiscIdUnique  570
+setFieldClassOpKey            = mkPreludeMiscIdUnique  570
 
 {-
 ************************************************************************
