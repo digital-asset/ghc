@@ -30,7 +30,7 @@ module RnEnv (
         lookupGreAvailRn,
 
         -- Rebindable Syntax
-        lookupSyntaxName, lookupSyntaxName', lookupSyntaxName_, lookupSyntaxNames,
+        lookupSyntaxName, lookupSyntaxName', lookupSyntaxNameLocalEnv, lookupSyntaxNames,
         lookupIfThenElse,
 
         -- Constructing usage information
@@ -1616,16 +1616,11 @@ lookupSyntaxName' std_name
             -- Get the similarly named thing from the local environment
            lookupOccRn (mkRdrUnqual (nameOccName std_name)) }
 
-lookupSyntaxName_ :: Name                -- The standard name
+lookupSyntaxNameLocalEnv :: OccName                -- The standard name
                  -> RnM (Name, FreeVars) -- Possibly a non-standard name
-lookupSyntaxName_ std_name
-  = do { rebindable_on <- xoptM LangExt.RebindableSyntax
-       ; if not rebindable_on then
-           return (std_name, emptyFVs)
-         else
-            -- Get the similarly named thing from the local environment
-           do { usr_name <- lookupOccRn (mkRdrUnqual (nameOccName std_name))
-              ; return (usr_name, unitFV usr_name) } }
+lookupSyntaxNameLocalEnv std_name
+  = do { usr_name <- lookupOccRn (mkRdrUnqual std_name)
+       ; return (usr_name, unitFV usr_name) }
 
 lookupSyntaxName :: Name                             -- The standard name
                  -> RnM (SyntaxExpr GhcRn, FreeVars) -- Possibly a non-standard

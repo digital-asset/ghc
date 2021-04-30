@@ -322,8 +322,8 @@ rnExpr (RecordUpd { rupd_expr = expr, rupd_flds = Right flds})
          ; punsEnabled <-xoptM LangExt.RecordPuns
          ; unless (null punnedFields || punsEnabled) $
               addErr $ text "For this to work enable NamedFieldPuns."
-         ; (getField, fv_getField) <- lookupSyntaxName_ getFieldName
-         ; (setField, fv_setField) <- lookupSyntaxName_ setFieldName
+         ; (getField, fv_getField) <- lookupSyntaxNameLocalEnv (mkVarOcc "getField")
+         ; (setField, fv_setField) <- lookupSyntaxNameLocalEnv (mkVarOcc "setField")
          ; (e, fv_e) <- rnLExpr expr
          ; (us, fv_us) <- rnHsUpdProjs flds
          ; return ( mkRecordDotUpd getField setField e us
