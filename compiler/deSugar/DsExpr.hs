@@ -713,6 +713,8 @@ ds_expr _ expr@(RecordUpd { rupd_expr = record_expr, rupd_flds = Left fields
                                          , pat_arg_tys = in_inst_tys
                                          , pat_wrap = req_wrap }
            ; return (mkSimpleMatch RecUpd [pat] wrapped_rhs) }
+-- These terms have been replaced by desugaring in the renamer. See
+-- Note [Overview of record dot syntax] in https://github.com/ghc/ghc/commit/cf65cf16c89414273c4f6b2d090d4b2fffb90759.
 ds_expr _ RecordUpd {} = panic "DsExpr: ds_expr: The impossible happened!"
 
 -- Here is where we desugar the Template Haskell brackets and escapes

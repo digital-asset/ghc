@@ -1616,7 +1616,7 @@ lookupSyntaxName' std_name
             -- Get the similarly named thing from the local environment
            lookupOccRn (mkRdrUnqual (nameOccName std_name)) }
 
-lookupSyntaxNameLocalEnv :: OccName                -- The standard name
+lookupSyntaxNameLocalEnv :: OccName      -- The standard name
                  -> RnM (Name, FreeVars) -- Possibly a non-standard name
 lookupSyntaxNameLocalEnv std_name
   = do { usr_name <- lookupOccRn (mkRdrUnqual std_name)

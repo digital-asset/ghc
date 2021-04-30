@@ -891,6 +891,8 @@ zonkExpr env (RecordUpd { rupd_flds = Left rbinds
                                 { rupd_cons = cons, rupd_in_tys = new_in_tys
                                 , rupd_out_tys = new_out_tys
                                 , rupd_wrap = new_recwrap }}) }
+-- These terms have been replaced by desugaring in the renamer. See
+-- Note [Overview of record dot syntax] in https://github.com/ghc/ghc/commit/cf65cf16c89414273c4f6b2d090d4b2fffb90759.
 zonkExpr env (RecordUpd {}) = panic "GHC.Tc.Utils.Zonk: zonkExpr: The impossible happened!"
 
 zonkExpr env (ExprWithTySig _ e ty)
