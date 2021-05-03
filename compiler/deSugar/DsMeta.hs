@@ -1378,10 +1378,11 @@ repE (RecordCon { rcon_con_name = c, rcon_flds = flds })
  = do { x <- lookupLOcc c;
         fs <- repFields flds;
         repRecCon x fs }
-repE (RecordUpd { rupd_expr = e, rupd_flds = flds })
+repE (RecordUpd { rupd_expr = e, rupd_flds = Left flds })
  = do { x <- repLE e;
         fs <- repUpdFields flds;
         repRecUpd x fs }
+repE (RecordUpd { rupd_flds = Right _ }) = panic "DsMeta.repE: The impossible happened!"
 
 repE (ExprWithTySig _ e ty)
   = do { e1 <- repLE e

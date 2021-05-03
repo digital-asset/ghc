@@ -27,9 +27,10 @@ module   RdrHsSyn (
         mkPatSynMatchGroup,
         mkRecConstrOrUpdate, -- HsExp -> [HsFieldUpdate] -> P HsExp
         mkTyClD, mkInstD,
-        mkRdrRecordCon, mkRdrRecordUpd,
+        mkRdrRecordCon, mkRdrRecordUpd, mkRdrProjUpdate,
         setRdrNameSpace,
         filterCTuple,
+        mkUnqualVar,
 
         cvBindGroup,
         cvBindsAndSigs,
@@ -82,6 +83,7 @@ module   RdrHsSyn (
         parseErrorSDoc, hintBangPat,
         TyEl(..), mergeOps, mergeDataCon,
 
+
         -- Help with processing exports
         ImpExpSubSpec(..),
         ImpExpQcSpec(..),
@@ -105,7 +107,7 @@ module   RdrHsSyn (
 import GhcPrelude
 import HsSyn            -- Lots of it
 import TyCon            ( TyCon, isTupleTyCon, tyConSingleDataCon_maybe )
-import DataCon          ( DataCon, dataConTyCon )
+import DataCon          ( DataCon, dataConTyCon)
 import ConLike          ( ConLike(..) )
 import CoAxiom          ( Role, fsFromRole )
 import RdrName
@@ -138,6 +140,7 @@ import qualified Data.Monoid as Monoid
 import Data.Data       ( dataTypeOf, fromConstr, dataTypeConstrs )
 import Bag
 import qualified Data.Set as Set
+import Data.Either
 import Module
 
 #include "HsVersions.h"
@@ -2060,24 +2063,86 @@ checkPrecP (dL->L l (_,i)) (dL->L _ ol)
     specialOp op = unLoc op `elem` [ eqTyCon_RDR
                                    , getRdrName funTyCon ]
 
+mkRdrProjUpdate :: SrcSpan
+                -> Located [Located FieldLabelString]
+                -> LHsExpr GhcPs
+                -> Bool
+                -> LHsRecProj GhcPs (LHsExpr GhcPs)
+mkRdrProjUpdate _ (L _ []) _ _ = panic "mkRdrProjUpdate: The impossible has happened!"
+mkRdrProjUpdate loc (L l flds) arg isPun =
+  L loc HsRecField {
+    hsRecFieldLbl = L l (FieldLabelStrings flds)
+    , hsRecFieldArg = arg
+    , hsRecPun = isPun
+  }
+
 mkRecConstrOrUpdate
-        :: LHsExpr GhcPs
+        :: Bool
+        -> LHsExpr GhcPs
         -> SrcSpan
-        -> ([LHsRecField GhcPs (LHsExpr GhcPs)], Bool)
+        -> ([Fbind (HsExpr GhcPs)], Bool)
         -> P (HsExpr GhcPs)
 
-mkRecConstrOrUpdate (dL->L l (HsVar _ (dL->L _ c))) _ (fs,dd)
+mkRecConstrOrUpdate _ (dL->L l (HsVar _ (dL->L _ c))) _lrec (fbinds,dd)
   | isRdrDataCon c
-  = return (mkRdrRecordCon (cL l c) (mk_rec_fields fs dd))
-mkRecConstrOrUpdate exp@(dL->L l _) _ (fs,dd)
+  = do
+      let (fs, ps) = partitionEithers fbinds
+      if not (null ps)
+        then addFatalError (getLoc (head ps)) $ text "Use of OverloadedRecordDot '.' not valid ('.' isn't allowed when constructing records or in record patterns)"
+        else return (mkRdrRecordCon (cL l c) (mk_rec_fields fs dd))
+mkRecConstrOrUpdate overloaded_update exp l (fs,dd)
   | dd        = parseErrorSDoc l (text "You cannot use `..' in a record update")
-  | otherwise = return (mkRdrRecordUpd exp (map (fmap mk_rec_upd_field) fs))
+  | otherwise = mkRdrRecordUpd overloaded_update exp fs
 
-mkRdrRecordUpd :: LHsExpr GhcPs -> [LHsRecUpdField GhcPs] -> HsExpr GhcPs
-mkRdrRecordUpd exp flds
-  = RecordUpd { rupd_ext  = noExt
-              , rupd_expr = exp
-              , rupd_flds = flds }
+mkRdrRecordUpd :: Bool -> LHsExpr GhcPs -> [Fbind (HsExpr GhcPs)] -> P (HsExpr GhcPs)
+mkRdrRecordUpd overloaded_on exp@(L loc _) fbinds = do
+  -- We do not need to know if OverloadedRecordDot is in effect. We do
+  -- however need to know if OverloadedRecordUpdate (passed in
+  -- overloaded_on) is in effect because it affects the Left/Right nature
+  -- of the RecordUpd value we calculate.
+  let (fs, ps) = partitionEithers fbinds
+      fs' = map (fmap mk_rec_upd_field) fs
+  case overloaded_on of
+    False | not $ null ps ->
+      -- A '.' was found in an update and OverloadedRecordUpdate isn't on.
+      addFatalError loc $ text "OverloadedRecordUpdate needs to be enabled"
+    False ->
+      -- This is just a regular record update.
+      return RecordUpd {
+        rupd_ext = noExt
+      , rupd_expr = exp
+      , rupd_flds = Left fs' }
+    True -> do
+      let qualifiedFields =
+            [ L l lbl | L _ (HsRecField (L l lbl) _ _) <- fs'
+                      , isQual . rdrNameAmbiguousFieldOcc $ lbl
+            ]
+      if not $ null qualifiedFields
+        then
+          addFatalError (getLoc (head qualifiedFields)) $ text "Fields cannot be qualified when OverloadedRecordUpdate is enabled"
+        else -- This is a RecordDotSyntax update.
+          return RecordUpd {
+            rupd_ext = noExt
+           , rupd_expr = exp
+           , rupd_flds = Right (toProjUpdates fbinds) }
+  where
+    toProjUpdates :: [Fbind (HsExpr GhcPs)] -> [LHsRecUpdProj GhcPs]
+    toProjUpdates = map (\x -> case x of { Right p -> p; Left f -> recFieldToProjUpdate f })
+
+    -- Convert a top-level field update like {foo=2} or {bar} (punned)
+    -- to a projection update.
+    recFieldToProjUpdate :: LHsRecField GhcPs  (LHsExpr GhcPs) -> LHsRecUpdProj GhcPs
+    recFieldToProjUpdate (L l (HsRecField (L _ (FieldOcc _ (L loc rdr))) arg pun)) =
+        -- The idea here is to convert the label to a singleton [FastString].
+        let f = occNameFS . rdrNameOcc $ rdr
+        in mkRdrProjUpdate l (L loc [L loc f]) (punnedVar f) pun
+        where
+          -- If punning, compute HsVar "f" otherwise just arg. This
+          -- has the effect that sentinel HsVar "pun-rhs" is replaced
+          -- by HsVar "f" here, before the update is written to a
+          -- setField expressions.
+          punnedVar :: FastString -> LHsExpr GhcPs
+          punnedVar f  = if not pun then arg else noLoc . HsVar noExt . noLoc . mkRdrUnqual . mkVarOccFS $ f
 
 mkRdrRecordCon :: Located RdrName -> HsRecordBinds GhcPs -> HsExpr GhcPs
 mkRdrRecordCon con flds

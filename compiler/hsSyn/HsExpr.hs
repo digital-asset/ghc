@@ -494,7 +494,7 @@ data HsExpr p
   | RecordUpd
       { rupd_ext  :: XRecordUpd p
       , rupd_expr :: LHsExpr p
-      , rupd_flds :: [LHsRecUpdField p]
+      , rupd_flds :: Either [LHsRecUpdField p] [LHsRecUpdProj p]
       }
   -- For a type family, the arg types are of the *instance* tycon,
   -- not the family tycon
@@ -1085,8 +1085,10 @@ ppr_expr (ExplicitList _ _ exprs)
 ppr_expr (RecordCon { rcon_con_name = con_id, rcon_flds = rbinds })
   = hang (ppr con_id) 2 (ppr rbinds)
 
-ppr_expr (RecordUpd { rupd_expr = L _ aexp, rupd_flds = rbinds })
-  = hang (ppr aexp) 2 (braces (fsep (punctuate comma (map ppr rbinds))))
+ppr_expr (RecordUpd { rupd_expr = L _ aexp, rupd_flds = flds })
+  = case flds of
+      Left rbinds -> hang (ppr aexp) 2 (braces (fsep (punctuate comma (map ppr rbinds))))
+      Right pbinds -> hang (ppr aexp) 2 (braces (fsep (punctuate comma (map ppr pbinds))))
 
 ppr_expr (ExprWithTySig _ expr sig)
   = hang (nest 2 (ppr_lexpr expr) <+> of_type)
