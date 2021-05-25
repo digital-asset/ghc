@@ -2220,9 +2220,23 @@ mkProjUpdateSetField get_field set_field (L _ (HsRecField { hsRecFieldLbl = (L _
           -- [getField@"baz"(getField@"bar"(getField@"foo" a), getField@"bar"(getField@"foo" a), getField@"foo" a, a]
       ; zips = \a -> (final, head (getters a)) : zip (reverse fields) (tail (getters a)) -- Ordered from deep to shallow.
           -- [("quux", getField@"baz"(getField@"bar"(getField@"foo" a)), ("baz", getField@"bar"(getField@"foo" a)), ("bar", getField@"foo" a), ("foo", a)]
+          --
+      ; arg_lit = fsLit "arg"
+      ; arg_name = mkSystemVarName (mkVarOccUnique arg_lit) arg_lit
+      ; arg_syn_expr = mkRnSyntaxExpr arg_name
+      ; arg_pat = noLoc $ VarPat noExt $ noLoc arg_name
+      ; arg_var = syn_expr arg_syn_expr
       }
-    in (\a -> foldl' (mkSet set_field) arg (zips a))
-          -- setField@"foo" (a) (setField@"bar" (getField @"foo" (a))(setField@"baz" (getField @"bar" (getField @"foo" (a)))(setField@"quux" (getField @"baz" (getField @"bar" (getFi
+    in (\a ->
+      if null fields
+        then
+          foldl' (mkSet set_field) arg (zips a)
+          -- only add a case binding for nested record updates.
+        else
+          let match = mkHsCaseAlt arg_pat (foldl' (mkSet set_field) arg (zips (noLoc arg_var))) in
+          noLoc $ HsCase noExt a (mkMatchGroup Generated [match]))
+       -- case a of
+       --   arg -> setField@"foo" (arg) (setField@"bar" (getField @"foo" (arg))(setField@"baz" (getField @"bar" (getField @"foo" (arg)))(setField@"quux" (getField @"baz" (getField @"bar" (getFi
 
 mkRecordDotUpd :: Name -> Name -> LHsExpr GhcRn -> [LHsRecUpdProj GhcRn] -> HsExpr GhcRn
 mkRecordDotUpd get_field set_field exp updates = foldl' fieldUpdate (unLoc exp) updates
