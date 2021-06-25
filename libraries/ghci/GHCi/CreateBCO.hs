@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -44,7 +45,11 @@ createBCO _   ResolvedBCO{..} | resolvedBCOIsLE /= isLittleEndian
                 , "mixed endianness setup is not supported!"
                 ])
 createBCO arr bco
+#if MIN_VERSION_ghc_prim(0, 7, 0)
+   = do linked_bco <- linkBCO' arr bco
+#else
    = do BCO bco# <- linkBCO' arr bco
+#endif
         -- Why do we need mkApUpd0 here?  Otherwise top-level
         -- interpreted CAFs don't get updated after evaluation.  A
         -- top-level BCO will evaluate itself and return its value
@@ -58,8 +63,13 @@ createBCO arr bco
         --       non-zero arity BCOs in an AP thunk.
         --
         if (resolvedBCOArity bco > 0)
+#if MIN_VERSION_ghc_prim(0, 7, 0)
+           then return (HValue (unsafeCoerce# linked_bco))
+           else case mkApUpd0# linked_bco of { (# final_bco #) ->
+#else
            then return (HValue (unsafeCoerce# bco#))
            else case mkApUpd0# bco# of { (# final_bco #) ->
+#endif
                   return (HValue final_bco) }
 
 
@@ -102,8 +112,13 @@ mkPtrsArray arr n_ptrs ptrs = do
     fill (ResolvedBCOStaticPtr r) i = do
       writePtrsArrayPtr i (fromRemotePtr r)  marr
     fill (ResolvedBCOPtrBCO bco) i = do
+#if MIN_VERSION_ghc_prim(0, 7, 0)
+      bco <- linkBCO' arr bco
+      writePtrsArrayBCO i bco marr
+#else
       BCO bco# <- linkBCO' arr bco
       writePtrsArrayBCO i bco# marr
+#endif
     fill (ResolvedBCOPtrBreakArray r) i = do
       BA mba <- localRef r
       writePtrsArrayMBA i mba marr
@@ -130,11 +145,18 @@ writePtrsArrayPtr (I# i) (Ptr a#) (PtrsArr arr) = IO $ \s ->
 writeArrayAddr# :: MutableArray# s a -> Int# -> Addr# -> State# s -> State# s
 writeArrayAddr# marr i addr s = unsafeCoerce# writeArray# marr i addr s
 
+#if MIN_VERSION_ghc_prim(0, 7, 0)
+writePtrsArrayBCO :: Int -> BCO -> PtrsArr -> IO ()
+#else
 writePtrsArrayBCO :: Int -> BCO# -> PtrsArr -> IO ()
+#endif
 writePtrsArrayBCO (I# i) bco (PtrsArr arr) = IO $ \s ->
   case (unsafeCoerce# writeArray#) arr i bco s of s' -> (# s', () #)
 
+#if MIN_VERSION_ghc_prim(0, 7, 0)
+#else
 data BCO = BCO BCO#
+#endif
 
 writePtrsArrayMBA :: Int -> MutableByteArray# s -> PtrsArr -> IO ()
 writePtrsArrayMBA (I# i) mba (PtrsArr arr) = IO $ \s ->
@@ -142,8 +164,12 @@ writePtrsArrayMBA (I# i) mba (PtrsArr arr) = IO $ \s ->
 
 newBCO :: ByteArray# -> ByteArray# -> Array# a -> Int# -> ByteArray# -> IO BCO
 newBCO instrs lits ptrs arity bitmap = IO $ \s ->
+#if MIN_VERSION_ghc_prim(0, 7, 0)
+  newBCO# instrs lits ptrs arity bitmap s
+#else
   case newBCO# instrs lits ptrs arity bitmap s of
     (# s1, bco #) -> (# s1, BCO bco #)
+#endif
 
 {- Note [BCO empty array]
 

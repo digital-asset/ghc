@@ -113,7 +113,7 @@ import ExtractDocs
 
 import Control.Monad
 import Data.Function
-import Data.List
+import Data.List hiding (singleton)
 import qualified Data.Map as Map
 import Data.Ord
 import Data.IORef
