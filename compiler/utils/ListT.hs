@@ -53,7 +53,7 @@ fold = runListT
 -- | Runs a ListT computation with the specified initial success and
 -- failure continuations.
 runListT :: ListT m a -> (a -> m r -> m r) -> m r -> m r
-runListT = unListT
+runListT l = unListT l
 
 instance Functor (ListT f) where
     fmap f lt = ListT $ \sk fk -> unListT lt (sk . f) fk
