@@ -119,7 +119,6 @@ import qualified Data.Set as Set
 import Data.String
 import Data.Word
 import System.IO        ( Handle )
-import System.FilePath
 import Text.Printf
 import Numeric (showFFloat)
 import Data.Graph (SCC(..))
@@ -1002,7 +1001,7 @@ pprInfixVar is_operator pp_v
 
 ---------------------
 pprFastFilePath :: FastString -> SDoc
-pprFastFilePath path = text $ normalise $ unpackFS path
+pprFastFilePath path = text $ unpackFS path
 
 {-
 ************************************************************************
