@@ -522,6 +522,8 @@ are the most common patterns, rewritten as regular expressions for clarity:
  'message'      { L _ ITmessage }
  'try'          { L _ ITtry }
  'catch'        { L _ ITcatch }
+ 'interface'    { L _ ITinterface }
+ 'implements'   { L _ ITimplements }
 
  '{-# INLINE'             { L _ (ITinline_prag _ _ _) } -- INLINE or INLINABLE
  '{-# SPECIALISE'         { L _ (ITspec_prag _) }
@@ -1128,6 +1130,7 @@ daml_topdecl : topdecl                               { unitOL $1 }
              -- Templates: we desugar to multiple decls right in the parser
              | template_decl                         { $1 }
              | exception_decl                        { $1 }
+             | interface_decl                        { $1 }
 
 topdecl :: { LHsDecl GhcPs }
         : cl_decl                               { sL1 $1 (TyClD noExt (unLoc $1)) }
@@ -1209,10 +1212,30 @@ template_body_decl :: { Located TemplateBodyDecl }
   | flex_choice_decl                             { sL1 $1 $ FlexChoiceDecl $1 }
   | key_decl                                     { sL1 $1 $ KeyDecl $1 }
   | maintainer_decl                              { sL1 $1 $ MaintainerDecl $1 }
+  | implements_group_decl                        { sL1 $1 $ ImplementsDecl $1 }
 
 let_bindings_decl :: { Located ([AddAnn], LHsLocalBinds GhcPs) }
   : 'let' binds                 { sLL $1 $> (mj AnnWhere $1 : (fst $ unLoc $2)
                                              , snd $ unLoc $2) }
+
+implements_group_decl :: { Located ImplementsDeclBlock }
+  : 'implements' tycon 'where' implements_decl_list { sL1 $1 $ ImplementsDeclBlock $2 $4 }
+
+implements_decl_list :: { [Located ImplementsDefinition] }
+  : '{' implements_decls '}' { reverse $2 }
+  | vocurly implements_decls close { reverse $2 }
+
+implements_decls :: { [Located ImplementsDefinition] }
+implements_decls
+  : implements_decls ';' implements_decl { $3 : $1 }
+  | implements_decls ';' { $1 }
+  | implements_decl { [ $1 ] }
+  | {- empty -} { [] }
+
+implements_decl :: { Located ImplementsDefinition }
+  : flex_choice_decl { sL1 $1 $ ImplementsChoice $1 }
+  | 'let' vocurly var '=' exp close { sL1 $1 $ ImplementsFunction ($3, $5) }
+  | 'let' '{' var '=' exp '}' { sL1 $1 $ ImplementsFunction ($3, $5) }
 
 choice_group_decl :: { Located (LHsExpr GhcPs , Located [Located ChoiceData]) }
   : 'controller' party_list 'can' choice_decl_list  { sLL $1 $> (applyConcat $2, $4) }
@@ -1261,6 +1284,11 @@ observer_and_controller :: { (LHsExpr GhcPs, Maybe (LHsExpr GhcPs)) }
   : 'controller' party_list { (applyConcat $2, Nothing) }
   -- we currently only support an optional observer clause *before* the controller clause
   | 'observer' parties 'controller' party_list  { (applyConcat $4, Just (applyConcat $2)) }
+
+consuming_ :: { Located ChoiceConsuming }
+ : 'preconsuming'                               { sL1 $1 PreConsuming  }
+ | 'nonconsuming'                                { sL1 $1 NonConsuming  }
+ | 'postconsuming'                               { sL1 $1 PostConsuming }
 
 consuming :: { Located (Maybe ChoiceConsuming) }
  : 'preconsuming'                                { sL1 $1 (Just PreConsuming)  }
@@ -1315,6 +1343,31 @@ tyapps_ :: { Located [Located TyEl] } -- NB: This list is reversed
 
 tyapp_ :: { Located TyEl }
       : atype_                                   { sL1 $1 $ TyElOpd (unLoc $1) }
+
+-- interfaces
+
+interface_decl :: { OrdList (LHsDecl GhcPs) }
+  : 'interface' tycon 'where' interface_body {% mkInterfaceDecl $2 (unLoc $4) }
+
+interface_body :: { Located [Located InterfaceBodyDecl] }
+interface_body
+  : '{'interface_body_decls '}' { $2 }
+  | vocurly interface_body_decls close { $2 }
+
+interface_body_decls :: { Located [Located InterfaceBodyDecl] }
+interface_body_decls
+  : interface_body_decls ';' interface_body_decl { sLL $1 $> $ $3 : (unLoc $1) }
+  | interface_body_decls ';'                     { sLL $1 $> $ unLoc $1 }
+  | interface_body_decl                          { sL1 $1 [$1] }
+  | {- empty -}                                  { sL0 [] }
+
+interface_body_decl :: { Located InterfaceBodyDecl }
+interface_body_decl
+  :
+  --
+  'choice' tycon OF_TYPE btype_ arecord_with_opt { sL (comb2 $2 $>) $ InterfaceChoiceSignature $ ChoiceSignature Nothing $2 $4 $5 }
+  | consuming_ 'choice' tycon OF_TYPE btype_ arecord_with_opt { sL (comb2 $3 $>) $ InterfaceChoiceSignature $ ChoiceSignature Nothing $3 $5 $6 }
+  | var OF_TYPE sigtypedoc { sL1 $1 $ InterfaceFunctionSignature ($1, $3) }
 
 -- Type classes
 --
