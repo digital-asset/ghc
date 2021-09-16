@@ -1,4 +1,5 @@
 {-# LANGUAGE DamlSyntax #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE DataKinds #-}
@@ -6,7 +7,7 @@
 
 -- This file provides a definition required by a desugared DAML template.
 
-module GHC.Types (Decimal, Opaque, primitive, primitiveInterface) where
+module GHC.Types (DamlInterface, Decimal, Opaque, primitive, primitiveInterface) where
 
 import "ghc-prim" GHC.Types
 
@@ -20,3 +21,6 @@ data Opaque = Opaque
 
 data Decimal = Decimal
   deriving (Eq, Show)
+
+class DamlInterface
+instance DamlInterface
