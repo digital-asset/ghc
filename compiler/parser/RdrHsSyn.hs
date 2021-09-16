@@ -3102,8 +3102,11 @@ mkInterfaceDecl tycon decls = do
             ]
         existentialExerciseInstances :: [LHsDecl GhcPs]
         existentialExerciseInstances =
+            instDecl
+              (classInstDecl (hasFetch (rdrNameToType tycon))
+                 (unitBag (mkPrimMethod "fetch" "UFetchInterface"))) :
             [ instDecl $ classInstDecl (hasExercise (rdrNameToType tycon) sig) $
-              unitBag (mkPrimMethod "exercise" "UExercise")
+                unitBag (mkPrimMethod "exercise" "UExerciseInterface")
             | L _ (InterfaceChoiceSignature sig@ChoiceSignature{..}) <- decls
             ]
     choiceTys <- sequence
@@ -3118,6 +3121,7 @@ mkInterfaceDecl tycon decls = do
     hasExercise t ChoiceSignature{..} =
         foldl' mkAppTy (mkQualClass "HasExercise")
           [t, rdrNameToType ifChoiceName, ifChoiceResultType]
+    hasFetch t = mkQualClass "HasFetch" `mkAppTy` t
 
 
 shareTemplateLetBindings :: Located RdrName -> LHsLocalBinds GhcPs -> ([LHsDecl GhcPs], LHsLocalBinds GhcPs)
