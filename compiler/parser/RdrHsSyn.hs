@@ -2592,6 +2592,10 @@ ghcTypesOpaque :: LHsType GhcPs
 ghcTypesOpaque =
     noLoc $ HsTyVar noExt NotPromoted (noLoc $ mkRdrQual (mkModuleName "GHC.Types") $ mkTcOcc "Opaque")
 
+ghcTypesDamlInterface :: LHsType GhcPs
+ghcTypesDamlInterface =
+    noLoc $ HsTyVar noExt NotPromoted (noLoc $ mkRdrQual (mkModuleName "GHC.Types") $ mkTcOcc "DamlInterface")
+
 mkPrimMethod :: String -> String -> LHsBind GhcPs
 mkPrimMethod methodName primArg =
   mkTemplateClassMethod methodName [] (mkPrimitive "primitive" primArg) Nothing
@@ -3077,7 +3081,7 @@ mkInterfaceDecl tycon decls = do
             , tcdDataDefn = HsDataDefn
                 { dd_ext = noExt
                 , dd_ND = DataType
-                , dd_ctxt = noLHsContext
+                , dd_ctxt = noLoc [ghcTypesDamlInterface]
                 , dd_cType = Nothing
                 , dd_kindSig = Nothing
                 , dd_cons =
