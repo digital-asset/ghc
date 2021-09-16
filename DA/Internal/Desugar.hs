@@ -96,3 +96,5 @@ class HasToAnyChoice t c r | t c -> r where
 
 class HasFromAnyChoice t c r | t c -> r where
   _fromAnyChoice : proxy t -> Any -> Optional c
+
+data Implements t i = Implements

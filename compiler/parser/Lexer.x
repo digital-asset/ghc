@@ -48,7 +48,7 @@
 {-# OPTIONS_GHC -funbox-strict-fields #-}
 
 module Lexer (
-   Token(..), lexer, pragState, mkPState, mkPStatePure, PState(..),
+   Token(..), lexer, lexerDbg, pragState, mkPState, mkPStatePure, PState(..),
    P(..), ParseResult(..), mkParserFlags, mkParserFlags', ParserFlags,
    getRealSrcLoc, getPState, withThisPackage,
    failLocMsgP, failSpanMsgP, srcParseFail,
@@ -657,6 +657,8 @@ data Token
   | ITmessage
   | ITtry
   | ITcatch
+  | ITinterface
+  | ITimplements
 
   -- Pragmas, see  note [Pragma source text] in BasicTypes
   | ITinline_prag       SourceText InlineSpec RuleMatchInfo
@@ -900,7 +902,9 @@ reservedWordsFM = listToUFM $
          ( "exception",      ITexception,     xbit DamlSyntaxBit),
          ( "message",        ITmessage,       xbit DamlSyntaxBit),
          ( "try",            ITtry,           xbit DamlSyntaxBit),
-         ( "catch",          ITcatch,         xbit DamlSyntaxBit)
+         ( "catch",          ITcatch,         xbit DamlSyntaxBit),
+         ( "interface",      ITinterface,     xbit DamlSyntaxBit),
+         ( "implements",     ITimplements,    xbit DamlSyntaxBit)
      ]
 
 {-----------------------------------
@@ -2678,7 +2682,7 @@ lexError str = do
 -- This is the top-level function: called from the parser each time a
 -- new token is to be read from the input.
 
-lexer :: Bool -> (Located Token -> P a) -> P a
+lexer, lexerDbg :: Bool -> (Located Token -> P a) -> P a
 lexer queueComments cont = do
   alr <- getBit AlternativeLayoutRuleBit
   let lexTokenFun = if alr then lexTokenAlr else lexToken
@@ -2696,6 +2700,11 @@ lexer queueComments cont = do
   if (queueComments && isComment tok)
     then queueComment (L (RealSrcSpan span) tok) >> lexer queueComments cont
     else cont (L (RealSrcSpan span) tok)
+
+-- Use this instead of 'lexer' in Parser.y to dump the tokens for debugging.
+lexerDbg queueComments cont = lexer queueComments contDbg
+  where
+    contDbg tok = trace ("token: " ++ show (unLoc tok)) (cont tok)
 
 lexTokenAlr :: P (RealLocated Token)
 lexTokenAlr = do mPending <- popPendingImplicitToken
