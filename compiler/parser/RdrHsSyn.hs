@@ -3045,7 +3045,7 @@ mkInterfaceInstance templateName conName sharedBinds ImplementsDeclBlock{..} =
          [ mkTemplateClassMethod (occNameString $ rdrNameOcc $ unLoc name) args expr (allLetBindings True args sharedBinds)
          | L _ (ImplementsFunction (name, expr)) <- implementsDefs
          , let args = [asPatRecWild "this" conName]
-         ]
+         ] ++ interfaceMethods implementsInterface
       )
 
 mkInterfaceClass :: Located RdrName -> Located RdrName
@@ -3064,6 +3064,19 @@ mkInterfaceDecl tycon decls = do
           , tcdFixity = Prefix
           , tcdFDs = []
           , tcdSigs =
+            [ noLoc $ ClassOpSig noExt False
+                [interfaceMethodName tycon "to" ""]
+                (mkLHsSigType $ noLoc $ HsFunTy noExt classTy ifaceTy)
+            , noLoc $ ClassOpSig noExt False
+                [interfaceMethodName tycon "from" ""]
+                (mkLHsSigType $ noLoc $ HsFunTy noExt ifaceTy (mkOptional classTy))
+            , noLoc $ ClassOpSig noExt False
+                [interfaceMethodName tycon "to" "ContractId"]
+                (mkLHsSigType $ noLoc $ HsFunTy noExt (mkContractId classTy) (mkContractId ifaceTy))
+            , noLoc $ ClassOpSig noExt False
+                [interfaceMethodName tycon "from" "ContractId"]
+                (mkLHsSigType $ noLoc $ HsFunTy noExt (mkContractId ifaceTy) (mkUpdate $ mkParenTy $ mkOptional $ mkParenTy $ mkContractId classTy))
+            ] ++
             [ L l (ClassOpSig noExt False [name] (mkLHsSigType $ noLoc $ HsFunTy noExt classTy ty))
             | L l (InterfaceFunctionSignature (name, ty)) <- decls
             ]
@@ -3100,7 +3113,8 @@ mkInterfaceDecl tycon decls = do
             }
         existentialInstance :: LHsDecl GhcPs
         existentialInstance = instDecl $
-            classInstDecl (rdrNameToType (mkInterfaceClass tycon) `mkAppTy` rdrNameToType tycon) $ listToBag
+            classInstDecl (rdrNameToType (mkInterfaceClass tycon) `mkAppTy` ifaceTy) $ listToBag $
+            interfaceMethods tycon ++
             [ mkPrimInterfaceMethod (occNameString $ occName methodName) (occNameString $ occName methodName)
             | L _ (InterfaceFunctionSignature (L _ methodName, _)) <- decls
             ]
@@ -3120,12 +3134,27 @@ mkInterfaceDecl tycon decls = do
             ]
     pure (toOL (cls : existential : existentialInstance : existentialExerciseInstances ++ choiceTys))
   where
+    ifaceTy = rdrNameToType tycon
     classVar = noLoc $ Unqual (mkTyVarOcc "t")
     classTy = noLoc $ HsTyVar noExt NotPromoted classVar
     hasExercise t ChoiceSignature{..} =
         foldl' mkAppTy (mkQualClass "HasExercise")
           [t, rdrNameToType ifChoiceName, ifChoiceResultType]
     hasFetch t = mkQualClass "HasFetch" `mkAppTy` t
+
+interfaceMethodName :: Located RdrName -> String -> String -> Located RdrName
+interfaceMethodName iface prefix suffix = noLoc $ Unqual $ mkVarOcc $ prefix ++ occNameString (occName $ unLoc iface) ++ suffix
+
+interfaceMethodNameStr :: Located RdrName -> String -> String -> String
+interfaceMethodNameStr iface prefix suffix = occNameString $ occName $ unLoc $ interfaceMethodName iface prefix suffix
+
+interfaceMethods :: Located RdrName -> [LHsBind GhcPs]
+interfaceMethods iface =
+    [ mkPrimMethod (interfaceMethodNameStr iface "to" "") "EToInterface"
+    , mkPrimMethod (interfaceMethodNameStr iface "from" "") "EFromInterface"
+    , mkPrimMethod (interfaceMethodNameStr iface "to" "ContractId") "EToInterfaceContractId"
+    , mkPrimMethod (interfaceMethodNameStr iface "from" "ContractId") "UFromInterfaceContractId"
+    ]
 
 
 shareTemplateLetBindings :: Located RdrName -> LHsLocalBinds GhcPs -> ([LHsDecl GhcPs], LHsLocalBinds GhcPs)
