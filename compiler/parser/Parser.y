@@ -1366,7 +1366,7 @@ interface_body_decl
   :
   --
   'choice' tycon OF_TYPE btype_ arecord_with_opt { sL (comb2 $2 $>) $ InterfaceChoiceSignature $ ChoiceSignature Nothing $2 $4 $5 }
-  | consuming_ 'choice' tycon OF_TYPE btype_ arecord_with_opt { sL (comb2 $3 $>) $ InterfaceChoiceSignature $ ChoiceSignature Nothing $3 $5 $6 }
+  | consuming_ 'choice' tycon OF_TYPE btype_ arecord_with_opt { sL (comb2 $3 $>) $ InterfaceChoiceSignature $ ChoiceSignature (Just (unLoc $1)) $3 $5 $6 }
   | var OF_TYPE sigtypedoc { sL1 $1 $ InterfaceFunctionSignature ($1, $3) }
 
 -- Type classes

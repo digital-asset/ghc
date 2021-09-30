@@ -2693,6 +2693,23 @@ mkChoiceDecls templateLoc conName binds (CombinedChoiceData controllers observer
         choiceReturnType = mkUpdate $ mkParenTy cdChoiceReturnTy
         contractIdType = mkContractId templateType
 
+mkInterfaceChoiceDecls :: Located RdrName -> ChoiceSignature -> [LHsDecl GhcPs]
+mkInterfaceChoiceDecls conName ChoiceSignature{..} =
+    [ noLoc (SigD noExt (TypeSig noExt [noLoc name] (mkHsWildCardBndrs (mkHsImplicitBndrs $ noLoc $ HsTupleTy noExt HsBoxedOrConstraintTuple [actionSig, consumingSig]))))
+    , noLoc (ValD noExt (FunBind noExt (noLoc name) (matchGroup noSrcSpan $ matchWithBinds (matchContext $ noLoc name) [] noSrcSpan (noLoc $ ExplicitTuple noExt (map (noLoc . Present noExt) [actionDef, consumingDef]) Boxed) (noLoc emptyLocalBinds)) WpHole []))
+    ]
+    where
+        name = mkRdrUnqual $ mkVarOcc ("_interface_choice_" ++ rdrNameToString conName ++ rdrNameToString ifChoiceName)
+        consumingSig = (mkQualType $ show $ fromMaybe Consuming ifChoiceConsumption) `mkAppTy` ifaceType
+        consumingDef = mkQualVar $ mkDataOcc $ show $ fromMaybe Consuming ifChoiceConsumption
+        actionSig = mkFunTy contractIdType (mkFunTy ifaceType (mkFunTy choiceType choiceReturnType))
+        choiceType = mkChoiceType ifChoiceName
+        choiceReturnType = mkUpdate $ mkParenTy ifChoiceResultType
+        ifaceType = mkTemplateType ifaceName
+        ifaceName = noLoc $ rdrNameToString conName
+        contractIdType = mkContractId ifaceType
+        actionDef = mkApp (mkUnqualVar $ mkVarOcc "error") (noLoc $ HsLit noExt $ HsString NoSourceText $ fsLit "interface choice implementation")
+
 emptyString :: LHsExpr GhcPs
 emptyString = noLoc $ HsLit noExt $ HsString NoSourceText $ fsLit ""
 
@@ -3127,12 +3144,17 @@ mkInterfaceDecl tycon decls = do
                 unitBag (mkPrimMethod "exercise" "UExerciseInterface")
             | L _ (InterfaceChoiceSignature sig@ChoiceSignature{..}) <- decls
             ]
+        choiceDecls =
+            concat
+            [ mkInterfaceChoiceDecls tycon choiceSig
+            | L _l (InterfaceChoiceSignature choiceSig) <- decls
+            ]
     choiceTys <- sequence
             [ do info <- splitCon [ifChoiceFields, rdrNameToType ifChoiceName]
                  pure $ mkTemplateDataDecl l ifChoiceName info
             | L l (InterfaceChoiceSignature ChoiceSignature {..}) <- decls
             ]
-    pure (toOL (cls : existential : existentialInstance : existentialExerciseInstances ++ choiceTys))
+    pure (toOL (cls : existential : existentialInstance : existentialExerciseInstances ++ choiceTys ++ choiceDecls))
   where
     ifaceTy = rdrNameToType tycon
     classVar = noLoc $ Unqual (mkTyVarOcc "t")
