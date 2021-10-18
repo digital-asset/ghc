@@ -1363,11 +1363,14 @@ interface_body_decls
 
 interface_body_decl :: { Located InterfaceBodyDecl }
 interface_body_decl
-  :
-  --
-  'choice' tycon OF_TYPE btype_ arecord_with_opt { sL (comb2 $2 $>) $ InterfaceChoiceSignature $ ChoiceSignature Nothing $2 $4 $5 }
-  | consuming_ 'choice' tycon OF_TYPE btype_ arecord_with_opt { sL (comb2 $3 $>) $ InterfaceChoiceSignature $ ChoiceSignature (Just (unLoc $1)) $3 $5 $6 }
+  : consuming 'choice' tycon OF_TYPE btype_ arecord_with_opt interface_choice_body
+        { sL (comb2 $3 $>) $ InterfaceChoice (InterfaceChoiceSignature (unLoc $1) $3 $5 $6) $7 }
   | var OF_TYPE sigtypedoc { sL1 $1 $ InterfaceFunctionSignature ($1, $3) }
+
+interface_choice_body :: { Maybe InterfaceChoiceBody }
+interface_choice_body
+  : observer_and_controller doexp { Just (InterfaceChoiceBody (snd $1) (fst $1) $2) }
+  | {- empty -} { Nothing }
 
 -- Type classes
 --
