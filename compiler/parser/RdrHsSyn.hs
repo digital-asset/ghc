@@ -2233,7 +2233,6 @@ data InterfaceChoiceSignature = InterfaceChoiceSignature
       , ifChoiceName :: Located RdrName
       , ifChoiceResultType :: LHsType GhcPs
       , ifChoiceFields :: LHsType GhcPs
-      , ifChoiceBody :: Maybe ()
       }
 
 data InterfaceChoiceBody = InterfaceChoiceBody
