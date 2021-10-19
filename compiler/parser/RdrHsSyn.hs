@@ -2798,8 +2798,8 @@ mkChoiceInstanceDecl templateName CombinedChoiceData { ccdChoiceData = ChoiceDat
     mkClass name = foldl' mkAppTy (mkQualClass name) [templateType, choiceType, returnType]
     mkInstance name method = instDecl $ classInstDecl (mkClass name) $ unitBag method
 
-mkInterfaceChoiceInstanceDecl :: LHsType GhcPs -> InterfaceChoiceSignature -> [LHsDecl GhcPs]
-mkInterfaceChoiceInstanceDecl interfaceType InterfaceChoiceSignature {..} =
+mkInterfaceVirtualChoiceInstanceDecl :: LHsType GhcPs -> InterfaceChoiceSignature -> [LHsDecl GhcPs]
+mkInterfaceVirtualChoiceInstanceDecl interfaceType InterfaceChoiceSignature {..} =
   [ mkInstance "HasToAnyChoice" (mkPrimMethod "_toAnyChoice" "EToAnyChoice")
   , mkInstance "HasFromAnyChoice" (mkPrimMethod "_fromAnyChoice" "EFromAnyChoice")
   ]
@@ -2808,6 +2808,26 @@ mkInterfaceChoiceInstanceDecl interfaceType InterfaceChoiceSignature {..} =
     returnType = mkParenTy ifChoiceResultType
     mkClass name = foldl' mkAppTy (mkQualClass name) [interfaceType, choiceType, returnType]
     mkInstance name method = instDecl $ classInstDecl (mkClass name) $ unitBag method
+
+mkInterfaceFixedChoiceInstanceDecl :: Located RdrName -> InterfaceChoiceSignature -> [LHsDecl GhcPs]
+mkInterfaceFixedChoiceInstanceDecl tycon InterfaceChoiceSignature {..} =
+  [ mkInstance "HasToAnyChoice" (mkPrimMethod "_toAnyChoice" "EToAnyChoice")
+  , mkInstance "HasFromAnyChoice" (mkPrimMethod "_fromAnyChoice" "EFromAnyChoice")
+  , mkInstance "HasExercise" (mkTemplateClassMethod "exercise" [cid]
+      (mkApp (mkPrimitive "primitive" "UExerciseInterface")
+             (mkApp (mkUnqualVar $ mkVarOcc ("to" ++ occNameString tycon ++ "ContractId"))
+                    (mkUnqualVar $ mkVarOcc "cid"))))
+  ]
+  where
+    cid = mkVarPat $ mkVarOcc "cid"
+    ifaceClassType = rdrNameToType (mkInterfaceClass tycon)
+    paramtype = rdrNameToType (mkRdrUnqual (mkVarOcc "t"))
+    contextType = mkAppTy ifaceClassType paramType
+    addContext = noLoc . mkImplicitHsForAllTy contextType
+    choiceType = mkChoiceType ifChoiceName
+    returnType = mkParenTy ifChoiceResultType
+    mkClass name = foldl' mkAppTy (mkQualClass name) [paramtype, choiceType, returnType]
+    mkInstance name method = instDecl $ classInstDecl (addContext (mkClass name)) $ unitBag method
 
 -- | Construct instances for the split-up `TemplateKey` typeclass, i.e., instances fr all single-method typeclasses
 -- that constitute the `Choice` constraint synonym.
@@ -2949,6 +2969,24 @@ mkArchiveChoice =
     }
   where
     pureUnit = mkApp (mkUnqualVar $ mkVarOcc "pure") (noLoc $ ExplicitTuple noExt [] Boxed)
+
+interfaceChoiceToCombinedChoiceData ::
+  InterfaceChoiceSignature -> InterfaceChoiceBody -> CombinedChoiceData
+interfaceChoiceToCombinedChoiceData InterfaceChoiceSignature{..} InterfaceChoiceBody{..} =
+  CombinedChoiceData
+    { ccdControllers = ifChoiceControllers
+    , ccdObservers = ifChoiceObserver
+    , ccdChoiceData = ChoiceData
+        { cdChoiceName = ifChoiceName
+        , cdChoiceFields = ifChoiceFields
+        , cdChoiceReturnTy = ifChoiceResultType
+        , cdChoiceBody = ifChoiceExpr
+        , cdChoiceConsuming = ifChoiceConsumption
+        , cdChoiceDoc = Nothing
+        }
+    , ccdFlexible = True
+    , ccdInterfaceImplementation = False
+    }
 
 validateException
   :: Located RdrName
@@ -3179,26 +3217,33 @@ mkInterfaceDecl tycon decls = do
                 unitBag (mkPrimMethod "exercise" "UExerciseInterface")
             | L _ (InterfaceChoice sig@InterfaceChoiceSignature{..} Nothing) <- decls
             ]
-        toAnyTemplateInstances :: [LHsDecl GhcPs]
-        toAnyTemplateInstances = mkInterfaceInstanceDecl ifaceTy
+        ifaceInstances :: [LHsDecl GhcPs]
+        ifaceinstances = mkInterfaceInstanceDecl ifaceTy
 
-        toAnyChoiceInstances :: [LHsDecl GhcPs]
-        toAnyChoiceInstances =
-            concat
-            [ mkInterfaceChoiceInstanceDecl ifaceTy choiceSig
+        choiceInstances :: [LHsDecl GhcPs]
+        choiceInstances = concat $
+            [ mkInterfaceVirtualChoiceInstanceDecl ifaceTy choiceSig
             | L _l (InterfaceChoice choiceSig Nothing) <- decls
+            ] ++
+            [ mkInterfaceFixedChoiceInstanceDecl tycon choiceSig
+            | L _l (InterfaceChoice choiceSig (Just _)) <- decls
             ]
-        choiceDecls =
-            concat
+
+        choiceDecls :: [LHsDecl GhcPs]
+        choiceDecls = concat $
             [ mkInterfaceChoiceDecls tycon choiceSig
             | L _l (InterfaceChoice choiceSig Nothing) <- decls
+            ] ++
+            [ mkChoiceDecls (getLoc tycon) tycon emptyBinds
+                (interfaceChoiceToCombinedChoiceData choiceSig choiceBody)
+            | L _l (InterfaceChoice choiceSig (Just choiceBody)) <- decls
             ]
     choiceTys <- sequence
             [ do info <- splitCon [ifChoiceFields, rdrNameToType ifChoiceName]
                  pure $ mkTemplateDataDecl l ifChoiceName info
-            | L l (InterfaceChoice InterfaceChoiceSignature{..} Nothing) <- decls
+            | L l (InterfaceChoice InterfaceChoiceSignature{..} _) <- decls
             ]
-    pure (toOL (cls : existential : existentialInstance : existentialExerciseInstances ++ toAnyTemplateInstances ++ toAnyChoiceInstances ++ choiceTys ++ choiceDecls))
+    pure (toOL (cls : existential : existentialInstance : existentialExerciseInstances ++ ifaceInstances ++ choiceInstances ++ choiceTys ++ choiceDecls))
   where
     ifaceTy = rdrNameToType tycon
     classVar = noLoc $ Unqual (mkTyVarOcc "t")
