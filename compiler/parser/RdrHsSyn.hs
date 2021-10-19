@@ -3218,7 +3218,7 @@ mkInterfaceDecl tycon decls = do
             | L _ (InterfaceChoice sig@InterfaceChoiceSignature{..} Nothing) <- decls
             ]
         ifaceInstances :: [LHsDecl GhcPs]
-        ifaceinstances = mkInterfaceInstanceDecl ifaceTy
+        ifaceInstances = mkInterfaceInstanceDecl ifaceTy
 
         choiceInstances :: [LHsDecl GhcPs]
         choiceInstances = concat $
