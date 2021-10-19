@@ -2821,12 +2821,12 @@ mkInterfaceFixedChoiceInstanceDecl tycon InterfaceChoiceSignature {..} =
   where
     cid = mkVarPat $ mkVarOcc "cid"
     ifaceClassType = rdrNameToType (mkInterfaceClass tycon)
-    paramtype = rdrNameToType (mkRdrUnqual (mkVarOcc "t"))
-    contextType = mkAppTy ifaceClassType paramType
+    paramType = rdrNameToType (noLoc (mkRdrUnqual (mkVarOcc "t")))
+    contextType = mkParenTy (mkAppTy ifaceClassType paramType)
     addContext = noLoc . mkImplicitHsForAllTy contextType
     choiceType = mkChoiceType ifChoiceName
     returnType = mkParenTy ifChoiceResultType
-    mkClass name = foldl' mkAppTy (mkQualClass name) [paramtype, choiceType, returnType]
+    mkClass name = foldl' mkAppTy (mkQualClass name) [paramType, choiceType, returnType]
     mkInstance name method = instDecl $ classInstDecl (addContext (mkClass name)) $ unitBag method
 
 -- | Construct instances for the split-up `TemplateKey` typeclass, i.e., instances fr all single-method typeclasses
