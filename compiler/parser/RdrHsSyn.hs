@@ -2823,7 +2823,7 @@ mkInterfaceFixedChoiceInstanceDecl tycon InterfaceChoiceSignature {..} =
     ifaceClassType = rdrNameToType (mkInterfaceClass tycon)
     paramType = rdrNameToType (noLoc (mkRdrUnqual (mkVarOcc "t")))
     contextType = mkParenTy (mkAppTy ifaceClassType paramType)
-    addContext = noLoc . mkImplicitHsForAllTy contextType
+    addContext = noLoc . HsQualTy noExt contextType
     choiceType = mkChoiceType ifChoiceName
     returnType = mkParenTy ifChoiceResultType
     mkClass name = foldl' mkAppTy (mkQualClass name) [paramType, choiceType, returnType]
@@ -3234,7 +3234,7 @@ mkInterfaceDecl tycon decls = do
             [ mkInterfaceChoiceDecls tycon choiceSig
             | L _l (InterfaceChoice choiceSig Nothing) <- decls
             ] ++
-            [ mkChoiceDecls (getLoc tycon) tycon emptyBinds
+            [ mkChoiceDecls (getLoc tycon) tycon (noLoc (EmptyLocalBinds noExt))
                 (interfaceChoiceToCombinedChoiceData choiceSig choiceBody)
             | L _l (InterfaceChoice choiceSig (Just choiceBody)) <- decls
             ]
