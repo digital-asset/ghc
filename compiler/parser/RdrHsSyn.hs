@@ -2210,12 +2210,17 @@ data FlexChoiceData = FlexChoiceData {
   , fcdChoiceData  :: ChoiceData
   }
 
+data ChoiceSource
+  = TemplateChoice
+  | InterfaceFixedChoice
+  | InterfaceVirtualChoice
+
 data CombinedChoiceData = CombinedChoiceData {
     ccdControllers :: LHsExpr GhcPs
   , ccdObservers   :: Maybe (LHsExpr GhcPs)
   , ccdChoiceData  :: ChoiceData
   , ccdFlexible    :: Bool
-  , ccdInterfaceImplementation :: Bool
+  , ccdSource :: ChoiceSource
   }
 
 data KeyData = KeyData {
@@ -2673,7 +2678,7 @@ mkLambda args body mBinds =
 
 
 mkChoiceDecls :: SrcSpan -> Located RdrName -> LHsLocalBinds GhcPs -> CombinedChoiceData -> [LHsDecl GhcPs]
-mkChoiceDecls templateLoc conName binds (CombinedChoiceData controllers observersM ChoiceData{..} flexible _implements) =
+mkChoiceDecls templateLoc conName binds (CombinedChoiceData controllers observersM ChoiceData{..} flexible source) =
     [ noLoc (SigD noExt (TypeSig noExt [noLoc name] (mkHsWildCardBndrs (mkHsImplicitBndrs $ noLoc $ HsTupleTy noExt HsBoxedOrConstraintTuple [controllerSig, actionSig, consumingSig, observersSig]))))
     , noLoc (ValD noExt (FunBind noExt (noLoc name) (matchGroup noSrcSpan $ matchWithBinds (matchContext $ noLoc name) [] noSrcSpan (noLoc $ ExplicitTuple noExt (map (noLoc . Present noExt) [controllerDef, actionDef, consumingDef, observersDef]) Boxed) (noLoc emptyLocalBinds)) WpHole []))
     ]
@@ -2697,7 +2702,9 @@ mkChoiceDecls templateLoc conName binds (CombinedChoiceData controllers observer
         choiceName = rdrNameToString cdChoiceName
         choiceNameToRdrName = if choiceName == "Archive" then qualifyDesugar else mkRdrUnqual
         self = mkVarPat $ mkVarOcc "self"
-        this = asPatRecWild "this" conName
+        this
+          | InterfaceFixedChoice <- source = mkVarPat $ mkVarOcc "this"
+          | otherwise = asPatRecWild "this" conName
         templateType = mkTemplateType templateName
         templateName = L templateLoc $ rdrNameToString conName
         choiceType = mkChoiceType cdChoiceName
@@ -2822,7 +2829,8 @@ mkInterfaceFixedChoiceInstanceDecl tycon InterfaceChoiceSignature {..} =
   where
     cid = mkVarPat $ mkVarOcc "cid"
     ifaceClassType = rdrNameToType (mkInterfaceClass tycon)
-    paramType = rdrNameToType (noLoc (mkRdrUnqual (mkVarOcc "t")))
+    paramVar = noLoc $ Unqual (mkTyVarOcc "t")
+    pramaType = noLoc $ HsTyVar noExt NotPromoted paramVar
     contextType = noLoc [mkParenTy (mkAppTy ifaceClassType paramType)]
     addContext = noLoc . HsQualTy noExt contextType
     choiceType = mkChoiceType ifChoiceName
@@ -2861,16 +2869,16 @@ mkKeyInstanceDecl sharedBinds templateName conName ValidTemplate{..}
 mkChoiceDataDecls
   :: CombinedChoiceData  -- ^ choice data for 'S' including relevant type variables
   -> P [LHsDecl GhcPs]   -- ^ resulting declarations
-mkChoiceDataDecls CombinedChoiceData { ccdChoiceData = ChoiceData{..}, ccdInterfaceImplementation = implements }
-  | implements = pure []
-  | otherwise = do
-  -- Calculate data constructor info from the choice name and record type.
-  choiceConInfo <- splitCon [cdChoiceFields, rdrNameToType cdChoiceName]
-  let dataLoc = combineLocs cdChoiceName cdChoiceFields
-      dataDecl = mkTemplateDataDecl dataLoc cdChoiceName choiceConInfo
-      -- Prepend the choice documentation, if any, as a 'DocNext'.
-      mbDocDecl = fmap (fmap (DocD noExt . DocCommentNext)) cdChoiceDoc
-  return $ maybeToList mbDocDecl ++ [dataDecl]
+mkChoiceDataDecls CombinedChoiceData { ccdChoiceData = ChoiceData{..}, ccdSource }
+  | TemplateChoice <- ccdSource = do
+      -- Calculate data constructor info from the choice name and record type.
+      choiceConInfo <- splitCon [cdChoiceFields, rdrNameToType cdChoiceName]
+      let dataLoc = combineLocs cdChoiceName cdChoiceFields
+          dataDecl = mkTemplateDataDecl dataLoc cdChoiceName choiceConInfo
+          -- Prepend the choice documentation, if any, as a 'DocNext'.
+          mbDocDecl = fmap (fmap (DocD noExt . DocCommentNext)) cdChoiceDoc
+      return $ maybeToList mbDocDecl ++ [dataDecl]
+  | otherwise = pure []
 
 -- | Perform preliminary checks on template header and body declarations.
 -- Return consolidated data structure with more precise types.
@@ -2932,8 +2940,8 @@ validateTemplate vtTemplateName tbd@TemplateBodyDecls{..}
 combineChoices :: TemplateBodyDecls -> [CombinedChoiceData]
 combineChoices TemplateBodyDecls{..} =
   choiceGroupsToCombinedChoices tbdControlledChoiceGroups
-    ++ map (flexChoiceToCombinedChoice False . unLoc) tbdFlexChoices
-    ++ concatMap (\block -> [flexChoiceToCombinedChoice True (unLoc choice) | (unLoc -> ImplementsChoice choice) <- implementsDefs (unLoc block)]) tbdImplements
+    ++ map (flexChoiceToCombinedChoice TemplateChoice . unLoc) tbdFlexChoices
+    ++ concatMap (\block -> [flexChoiceToCombinedChoice InterfaceVirtualChoice (unLoc choice) | (unLoc -> ImplementsChoice choice) <- implementsDefs (unLoc block)]) tbdImplements
 
 -- | Convert controlled choice groups to a list of individual choices with controllers.
 -- Leave type variable information empty, to be added afterwards.
@@ -2946,9 +2954,9 @@ choiceGroupsToCombinedChoices = concatMap distributeController
     makeCombinedChoice controller choice = CombinedChoiceData controller Nothing (unLoc choice) False False
 
 -- | Simple type conversion, leaving type variable information empty for now.
-flexChoiceToCombinedChoice :: Bool -> FlexChoiceData -> CombinedChoiceData
-flexChoiceToCombinedChoice implements FlexChoiceData{..} =
-  CombinedChoiceData fcdControllers fcdObservers fcdChoiceData True implements
+flexChoiceToCombinedChoice :: ChoiceSource -> FlexChoiceData -> CombinedChoiceData
+flexChoiceToCombinedChoice source FlexChoiceData{..} =
+  CombinedChoiceData fcdControllers fcdObservers fcdChoiceData True source
 
 mkArchiveChoice :: CombinedChoiceData
 mkArchiveChoice =
@@ -2966,7 +2974,7 @@ mkArchiveChoice =
         , cdChoiceDoc = Nothing
         }
     , ccdFlexible = False
-    , ccdInterfaceImplementation = False
+    , ccdSource = TemplateChoice
     }
   where
     pureUnit = mkApp (mkUnqualVar $ mkVarOcc "pure") (noLoc $ ExplicitTuple noExt [] Boxed)
@@ -2986,7 +2994,7 @@ interfaceChoiceToCombinedChoiceData InterfaceChoiceSignature{..} InterfaceChoice
         , cdChoiceDoc = Nothing
         }
     , ccdFlexible = True
-    , ccdInterfaceImplementation = False
+    , ccdSource = InterfaceFixedChoice
     }
 
 validateException
