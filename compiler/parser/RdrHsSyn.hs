@@ -2815,14 +2815,15 @@ mkInterfaceFixedChoiceInstanceDecl tycon InterfaceChoiceSignature {..} =
   , mkInstance "HasFromAnyChoice" (mkPrimMethod "_fromAnyChoice" "EFromAnyChoice")
   , mkInstance "HasExercise" (mkTemplateClassMethod "exercise" [cid]
       (mkApp (mkPrimitive "primitive" "UExerciseInterface")
-             (mkApp (mkUnqualVar $ mkVarOcc ("to" ++ occNameString tycon ++ "ContractId"))
-                    (mkUnqualVar $ mkVarOcc "cid"))))
+             (mkApp (mkUnqualVar $ mkVarOcc ("to" ++ occNameString (rdrNameOcc (unLoc tycon)) ++ "ContractId"))
+                    (mkUnqualVar $ mkVarOcc "cid")))
+      Nothing)
   ]
   where
     cid = mkVarPat $ mkVarOcc "cid"
     ifaceClassType = rdrNameToType (mkInterfaceClass tycon)
     paramType = rdrNameToType (noLoc (mkRdrUnqual (mkVarOcc "t")))
-    contextType = mkParenTy (mkAppTy ifaceClassType paramType)
+    contextType = noLoc [mkParenTy (mkAppTy ifaceClassType paramType)]
     addContext = noLoc . HsQualTy noExt contextType
     choiceType = mkChoiceType ifChoiceName
     returnType = mkParenTy ifChoiceResultType
@@ -2981,7 +2982,7 @@ interfaceChoiceToCombinedChoiceData InterfaceChoiceSignature{..} InterfaceChoice
         , cdChoiceFields = ifChoiceFields
         , cdChoiceReturnTy = ifChoiceResultType
         , cdChoiceBody = ifChoiceExpr
-        , cdChoiceConsuming = ifChoiceConsumption
+        , cdChoiceConsuming = noLoc ifChoiceConsumption
         , cdChoiceDoc = Nothing
         }
     , ccdFlexible = True
