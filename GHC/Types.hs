@@ -24,3 +24,6 @@ data Decimal = Decimal
 
 class DamlInterface
 instance DamlInterface
+
+class DamlTemplate
+instance DamlTemplate
