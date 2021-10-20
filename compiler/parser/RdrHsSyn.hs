@@ -2950,7 +2950,7 @@ choiceGroupsToCombinedChoices
 choiceGroupsToCombinedChoices = concatMap distributeController
   where
     distributeController (L _ (controller, L _ choices)) = map (makeCombinedChoice controller) choices
-    makeCombinedChoice controller choice = CombinedChoiceData controller Nothing (unLoc choice) False False
+    makeCombinedChoice controller choice = CombinedChoiceData controller Nothing (unLoc choice) False TemplateChoice
 
 -- | Simple type conversion, leaving type variable information empty for now.
 flexChoiceToCombinedChoice :: ChoiceSource -> FlexChoiceData -> CombinedChoiceData
