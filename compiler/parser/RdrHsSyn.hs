@@ -2829,7 +2829,8 @@ mkInterfaceFixedChoiceInstanceDecl tycon InterfaceChoiceSignature {..} =
   where
     cid = mkVarPat $ mkVarOcc "cid"
     ifaceClassType = rdrNameToType (mkInterfaceClass tycon)
-    paramType = mkUnqualType (noLoc "t")
+    paramVar = noLoc $ Unqual (mkTyVarOcc "t")
+    paramType = noLoc $ HsTyVar noExt NotPromoted paramVar
     contextType = noLoc [mkParenTy (mkAppTy ifaceClassType paramType)]
     addContext = noLoc . HsQualTy noExt contextType
     choiceType = mkChoiceType ifChoiceName
