@@ -3175,6 +3175,9 @@ mkInterfaceDecl tycon decls = do
             , noLoc $ ClassOpSig noExt False
                 [interfaceMethodName tycon "from" "ContractId"]
                 (mkLHsSigType $ noLoc $ HsFunTy noExt (mkContractId ifaceTy) (mkUpdate $ mkParenTy $ mkOptional $ mkParenTy $ mkContractId classTy))
+            , noLoc $ ClassOpSig noExt False
+                [interfaceMethodName tycon "" "TypeRep"]
+                (mkLHsSigType $ noLoc $ HsFunTy noExt classTy typeRepTy)
             ] ++
             [ L l (ClassOpSig noExt False [name] (mkLHsSigType $ noLoc $ HsFunTy noExt classTy ty))
             | L l (InterfaceFunctionSignature (name, ty)) <- decls
@@ -3257,13 +3260,18 @@ mkInterfaceDecl tycon decls = do
     ifaceTy = rdrNameToType tycon
     classVar = noLoc $ Unqual (mkTyVarOcc "t")
     classTy = noLoc $ HsTyVar noExt NotPromoted classVar
+    typeRepTy = mkQualType "TypeRep"
     hasExercise t InterfaceChoiceSignature{..} =
         foldl' mkAppTy (mkQualClass "HasExercise")
           [t, rdrNameToType ifChoiceName, ifChoiceResultType]
     hasFetch t = mkQualClass "HasFetch" `mkAppTy` t
 
 interfaceMethodName :: Located RdrName -> String -> String -> Located RdrName
-interfaceMethodName iface prefix suffix = noLoc $ Unqual $ mkVarOcc $ prefix ++ occNameString (occName $ unLoc iface) ++ suffix
+interfaceMethodName iface prefix suffix = noLoc $ Unqual $ mkVarOcc $ prefix ++ (lowerIfNoPrefix $ occNameString (occName $ unLoc iface)) ++ suffix
+  where
+    lowerIfNoPrefix s = case s of
+      c:cs | null prefix -> toLower c : cs
+      _ -> s
 
 interfaceMethodNameStr :: Located RdrName -> String -> String -> String
 interfaceMethodNameStr iface prefix suffix = occNameString $ occName $ unLoc $ interfaceMethodName iface prefix suffix
@@ -3274,6 +3282,7 @@ interfaceMethods iface =
     , mkPrimMethod (interfaceMethodNameStr iface "from" "") "EFromInterface"
     , mkPrimMethod (interfaceMethodNameStr iface "to" "ContractId") "EToInterfaceContractId"
     , mkPrimMethod (interfaceMethodNameStr iface "from" "ContractId") "UFromInterfaceContractId"
+    , mkPrimMethod (interfaceMethodNameStr iface "" "TypeRep") "$TO_TYPE_REP"
     ]
 
 
