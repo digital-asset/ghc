@@ -2213,7 +2213,6 @@ data FlexChoiceData = FlexChoiceData {
 data ChoiceSource
   = TemplateChoice
   | InterfaceFixedChoice
-  | InterfaceVirtualChoice
 
 data CombinedChoiceData = CombinedChoiceData {
     ccdControllers :: LHsExpr GhcPs
@@ -2252,8 +2251,7 @@ data ImplementsDeclBlock = ImplementsDeclBlock
   }
 
 data ImplementsDefinition
-    = ImplementsChoice (Located FlexChoiceData)
-    | ImplementsFunction (Located RdrName, LHsExpr GhcPs)
+    = ImplementsFunction (Located RdrName, LHsExpr GhcPs)
 
 -- | Any declaration that can appear within a template
 data TemplateBodyDecl
@@ -2913,7 +2911,6 @@ combineChoices :: TemplateBodyDecls -> [CombinedChoiceData]
 combineChoices TemplateBodyDecls{..} =
   choiceGroupsToCombinedChoices tbdControlledChoiceGroups
     ++ map (flexChoiceToCombinedChoice TemplateChoice . unLoc) tbdFlexChoices
-    ++ concatMap (\block -> [flexChoiceToCombinedChoice InterfaceVirtualChoice (unLoc choice) | (unLoc -> ImplementsChoice choice) <- implementsDefs (unLoc block)]) tbdImplements
 
 -- | Convert controlled choice groups to a list of individual choices with controllers.
 -- Leave type variable information empty, to be added afterwards.

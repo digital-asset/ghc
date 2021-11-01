@@ -1233,8 +1233,7 @@ implements_decls
   | {- empty -} { [] }
 
 implements_decl :: { Located ImplementsDefinition }
-  : flex_choice_decl { sL1 $1 $ ImplementsChoice $1 }
-  | 'let' vocurly var '=' exp close { sL1 $1 $ ImplementsFunction ($3, $5) }
+  : 'let' vocurly var '=' exp close { sL1 $1 $ ImplementsFunction ($3, $5) }
   | 'let' '{' var '=' exp '}' { sL1 $1 $ ImplementsFunction ($3, $5) }
 
 choice_group_decl :: { Located (LHsExpr GhcPs , Located [Located ChoiceData]) }
