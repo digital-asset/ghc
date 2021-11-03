@@ -2232,6 +2232,7 @@ data KeyData = KeyData {
 data InterfaceBodyDecl
   = InterfaceFunctionSignature (Located RdrName, LHsType GhcPs)
   | InterfaceChoice InterfaceChoiceSignature (Maybe InterfaceChoiceBody)
+  | InterfaceEnsureDecl (LHsExpr GhcPs)
 
 data InterfaceChoiceSignature = InterfaceChoiceSignature
       { ifChoiceConsumption :: Maybe ChoiceConsuming
@@ -2777,18 +2778,23 @@ mkTemplateInstanceDecl sharedBinds templateName conName ValidTemplate{..} =
     this = asPatRecWild "this" conName
     cid = mkVarPat $ mkVarOcc "cid"
 
-mkInterfaceInstanceDecl :: LHsType GhcPs -> [LHsDecl GhcPs]
-mkInterfaceInstanceDecl interfaceType =
+mkInterfaceInstanceDecl :: LHsType GhcPs -> Maybe (LHsExpr GhcPs) -> [LHsDecl GhcPs]
+mkInterfaceInstanceDecl interfaceType interfacePrecondM =
   [ mkInstance "HasToAnyTemplate" $ mkPrimMethod "_toAnyTemplate" "EToAnyTemplate"
   , mkInstance "HasFromAnyTemplate" $ mkPrimMethod "_fromAnyTemplate" "EFromAnyTemplate"
   , mkInstance "HasTemplateTypeRep" $ mkPrimMethod "_templateTypeRep" "ETemplateTypeRep"
   , mkInstance "HasSignatory" $ mkPrimMethod "signatory" "ESignatoryInterface"
   , mkInstance "HasObserver" $ mkPrimMethod "observer" "EObserverInterface"
   , mkInstance "HasCreate" $ mkPrimMethod "create" "UCreateInterface"
+  , mkInstance "HasEnsure" $ mkMethod "ensure" [this] (fromMaybe (mkQualVar $ mkDataOcc "True") interfacePrecondM)
   ]
   where
     mkInstance name method =
         instDecl $ classInstDecl (mkQualClass name `mkAppTy` interfaceType) $ unitBag method
+    this = mkVarPat $ mkVarOcc "this"
+    mkMethod :: String -> [Pat GhcPs] -> LHsExpr GhcPs -> LHsBind GhcPs
+    mkMethod methodName args methodBody =
+      mkTemplateClassMethod methodName args methodBody Nothing
 
 -- | Construct instances for split-up `Choice` typeclass, i.e., instances for all single-method typeclasses
 -- that constitute the `Choice` constraint synonym.
@@ -3230,7 +3236,8 @@ mkInterfaceDecl tycon decls = do
             | L _ (InterfaceChoice sig@InterfaceChoiceSignature{..} Nothing) <- decls
             ]
         ifaceInstances :: [LHsDecl GhcPs]
-        ifaceInstances = mkInterfaceInstanceDecl ifaceTy
+        ifaceInstances =
+          mkInterfaceInstanceDecl ifaceTy (listToMaybe [decl | L _l (InterfaceEnsureDecl decl) <- decls])
 
         choiceInstances :: [LHsDecl GhcPs]
         choiceInstances = concat $
