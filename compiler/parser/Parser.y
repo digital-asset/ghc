@@ -1233,8 +1233,7 @@ implements_decls
   | {- empty -} { [] }
 
 implements_decl :: { Located ImplementsDefinition }
-  : flex_choice_decl { sL1 $1 $ ImplementsChoice $1 }
-  | 'let' vocurly var '=' exp close { sL1 $1 $ ImplementsFunction ($3, $5) }
+  : 'let' vocurly var '=' exp close { sL1 $1 $ ImplementsFunction ($3, $5) }
   | 'let' '{' var '=' exp '}' { sL1 $1 $ ImplementsFunction ($3, $5) }
 
 choice_group_decl :: { Located (LHsExpr GhcPs , Located [Located ChoiceData]) }
@@ -1374,10 +1373,9 @@ interface_body_decl
         { sL (comb3 $3 $6 $>) $ InterfaceChoice (InterfaceChoiceSignature (Just (unLoc $1)) $3 $5 $6) (unLoc $7) }
   | var OF_TYPE sigtypedoc { sL1 $1 $ InterfaceFunctionSignature ($1, $3) }
 
-interface_choice_body :: { Located (Maybe InterfaceChoiceBody) }
+interface_choice_body :: { Located InterfaceChoiceBody }
 interface_choice_body
-  : observer_and_controller doexp { sL (comb2 (fst $1) $2) $ Just (InterfaceChoiceBody (snd $1) (fst $1) $2) }
-  | {- empty -} { noLoc Nothing }
+  : observer_and_controller doexp { sL (comb2 (fst $1) $2) $ InterfaceChoiceBody (snd $1) (fst $1) $2 }
 
 -- Type classes
 --
