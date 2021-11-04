@@ -2231,7 +2231,6 @@ data KeyData = KeyData {
 data InterfaceBodyDecl
   = InterfaceFunctionSignature (Located RdrName, LHsType GhcPs)
   | InterfaceChoice InterfaceChoiceSignature InterfaceChoiceBody
-  | InterfaceChoice InterfaceChoiceSignature (Maybe InterfaceChoiceBody)
   | InterfaceEnsureDecl (LHsExpr GhcPs)
 
 data InterfaceChoiceSignature = InterfaceChoiceSignature
