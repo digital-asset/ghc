@@ -86,6 +86,7 @@ import TysWiredIn       ( unitTyCon, unitDataCon, tupleTyCon, tupleDataCon, nilD
 -- compiler/utils
 import Util             ( looksLikePackageName, fstOf3, sndOf3, thdOf3 )
 import GhcPrelude
+import qualified Prelude
 }
 
 -- %expect 237 -- shift/reduce conflicts
