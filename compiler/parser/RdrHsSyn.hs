@@ -3093,34 +3093,15 @@ mkTemplateDecls templateName fields decls = do
       choiceDecls = concatMap (mkChoiceDecls (getLoc templateName) conName sharedBinds) choicesWithArchive
       keyInstanceDecl = mkKeyInstanceDecl sharedBinds templateName conName vt
       templateInterfaceImplements = map (mkInterfaceInstance vtTemplateName conName sharedBinds) vtImplements
-      templateImplementsMarkers = concatMap (mkImplementsMarker vtTemplateName) vtImplements
   return $ toOL $ templateDataDecl : choiceDataDecls ++ letDecls
                ++ templateInstances ++ (choiceInstanceDecls ++ choiceDecls ++ keyInstanceDecl)
-               ++ templateInterfaceImplements ++ templateImplementsMarkers
-
-mkImplementsMarker :: Located RdrName -> ImplementsDeclBlock -> [LHsDecl GhcPs]
-mkImplementsMarker template ImplementsDeclBlock{implementsInterface=interface} =
-    [ noLoc $ SigD noExt (TypeSig noExt [name] ty)
-    , noLoc $ ValD noExt $ FunBind
-        noExt name
-        (matchGroup noSrcSpan $
-         matchWithBinds (matchContext name) [] noSrcSpan (mkQualVar (mkDataOcc "Implements")) (noLoc emptyLocalBinds))
-        WpHole []
-    ]
-  where
-    ty = mkHsWildCardBndrs $ mkHsImplicitBndrs $ mkQualType "Implements" `mkAppTy` rdrNameToType template `mkAppTy` rdrNameToType interface
-    name = noLoc $ mkRdrUnqual $ mkVarOcc ("_implements_" ++ rdrNameToString template ++ rdrNameToString interface)
+               ++ templateInterfaceImplements
 
 mkInterfaceInstance :: Located RdrName -> Located RdrName -> LHsLocalBinds GhcPs -> ImplementsDeclBlock -> LHsDecl GhcPs
 mkInterfaceInstance templateName conName sharedBinds ImplementsDeclBlock{..} =
     instDecl $ classInstDecl
       (mkHsAppTy (rdrNameToType $ mkInterfaceClass implementsInterface) (mkTemplateType $ fmap (occNameString . rdrNameOcc) templateName))
-      (listToBag $
-         [ mkTemplateClassMethod (occNameString $ rdrNameOcc $ unLoc name) args expr (allLetBindings True args sharedBinds)
-         | L _ (ImplementsFunction (name, expr)) <- implementsDefs
-         , let args = [asPatRecWild "this" conName]
-         ] ++ interfaceMethods implementsInterface
-      )
+      (listToBag $ interfaceMethods implementsInterface)
 
 mkInterfaceClass :: Located RdrName -> Located RdrName
 mkInterfaceClass name = L (getLoc name) $ Unqual $ mkTcOcc $ "Is" ++ occNameString (occName $ unLoc name)
@@ -3186,10 +3167,7 @@ mkInterfaceDecl tycon decls = do
         existentialInstance :: LHsDecl GhcPs
         existentialInstance = instDecl $
             classInstDecl (rdrNameToType (mkInterfaceClass tycon) `mkAppTy` ifaceTy) $ listToBag $
-            interfaceMethods tycon ++
-            [ mkPrimInterfaceMethod (occNameString $ occName methodName) (occNameString $ occName methodName)
-            | L _ (InterfaceFunctionSignature (L _ methodName, _)) <- decls
-            ]
+            interfaceMethods tycon
         existentialExerciseInstances :: [LHsDecl GhcPs]
         existentialExerciseInstances =
             [instDecl
@@ -3199,13 +3177,16 @@ mkInterfaceDecl tycon decls = do
         ifaceMethods :: [LHsDecl GhcPs]
         ifaceMethods = concat
           [
-            [ noLoc $ SigD noExt $ TypeSig noExt [methodName] (mkLHsSigWcType $ noLoc $ HsFunTy noExt classTy ty)
+            [ let tyRhs = noLoc $ HsFunTy noExt classTy methodType
+                  tyCtx = noLoc [mkQualType "Implements" `mkAppTy` classTy `mkAppTy` ifaceTy]
+                  ty = HsQualTy noExt tyCtx tyRhs
+              in noLoc $ SigD noExt $ TypeSig noExt [methodName] (mkLHsSigWcType $ noLoc ty)
             , let L _ rdrName = methodName
                   name = occNameString $ occName rdrName
                   rhs = mkPrimInterfaceMethod name name
               in noLoc $ ValD noExt (unLoc rhs)
             ]
-          | L _ (InterfaceFunctionSignature (methodName, ty)) <- decls
+          | L _ (InterfaceFunctionSignature (methodName, methodType)) <- decls
           ]
 
         ifaceInstances :: [LHsDecl GhcPs]
