@@ -3151,9 +3151,6 @@ mkInterfaceDecl tycon decls = do
             , noLoc $ ClassOpSig noExt False
                 [interfaceMethodName tycon "" "TypeRep"]
                 (mkLHsSigType $ noLoc $ HsFunTy noExt classTy typeRepTy)
-            ] ++
-            [ L l (ClassOpSig noExt False [name] (mkLHsSigType $ noLoc $ HsFunTy noExt classTy ty))
-            | L l (InterfaceFunctionSignature (name, ty)) <- decls
             ]
           , tcdMeths = emptyBag
           , tcdATs = []
@@ -3198,6 +3195,19 @@ mkInterfaceDecl tycon decls = do
             [instDecl
               (classInstDecl (hasFetch (rdrNameToType tycon))
                  (unitBag (mkPrimMethod "fetch" "UFetchInterface")))]
+
+        ifaceMethods :: [LHsDecl GhcPs]
+        ifaceMethods = concat
+          [
+            [ noLoc $ SigD noExt $ TypeSig noExt [methodName] (mkLHsSigWcType $ noLoc $ HsFunTy noExt classTy ty)
+            , let L _ rdrName = methodName
+                  name = occNameString $ occName rdrName
+                  rhs = mkPrimInterfaceMethod name name
+              in noLoc $ ValD noExt (unLoc rhs)
+            ]
+          | L _ (InterfaceFunctionSignature (methodName, ty)) <- decls
+          ]
+
         ifaceInstances :: [LHsDecl GhcPs]
         ifaceInstances =
           mkInterfaceInstanceDecl ifaceTy (listToMaybe [decl | L _l (InterfaceEnsureDecl decl) <- decls])
@@ -3219,7 +3229,7 @@ mkInterfaceDecl tycon decls = do
                  pure $ mkTemplateDataDecl l ifChoiceName info
             | L l (InterfaceChoice InterfaceChoiceSignature{..} _) <- decls
             ]
-    pure (toOL (cls : existential : existentialInstance : existentialExerciseInstances ++ ifaceInstances ++ choiceInstances ++ choiceTys ++ choiceDecls))
+    pure (toOL (cls : existential : existentialInstance : existentialExerciseInstances ++ ifaceMethods ++ ifaceInstances ++ choiceInstances ++ choiceTys ++ choiceDecls))
   where
     ifaceTy = rdrNameToType tycon
     classVar = noLoc $ Unqual (mkTyVarOcc "t")
