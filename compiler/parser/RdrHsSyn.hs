@@ -2382,6 +2382,9 @@ mkQualVar = noLoc . HsVar noExt . noLoc . qualifyDesugar
 mkApp :: LHsExpr GhcPs -> LHsExpr GhcPs -> LHsExpr GhcPs
 mkApp e1 e2 = noLoc $ HsApp noExt e1 e2
 
+mkAppType :: LHsExpr GhcPs -> LHsType GhcPs -> LHsExpr GhcPs
+mkAppType e ty = noLoc $ HsAppType noExt e (mkHsWildCardBndrs ty)
+
 mkUnqualType :: Located String -> LHsType GhcPs
 mkUnqualType (L loc tyName) =
   rdrNameToType $ L loc $ mkRdrUnqual $ mkTcOcc tyName
@@ -2594,10 +2597,8 @@ mkTemplateClassMethod rawMethodName args body mBinds = do
 
 mkPrimitive :: String -> String -> LHsExpr GhcPs
 mkPrimitive primitive methodName =
-  let mkAppType :: LHsExpr GhcPs -> LHsType GhcPs -> LHsExpr GhcPs
-      mkAppType e ty = noLoc $ HsAppType noExt e (mkHsWildCardBndrs ty)
-  in  mkAppType (noLoc $ HsVar noExt $ noLoc $ mkRdrQual (mkModuleName "GHC.Types") $ mkVarOcc primitive) $
-        noLoc $ HsTyLit noExt $ HsStrTy NoSourceText $ mkFastString methodName
+  mkAppType (noLoc $ HsVar noExt $ noLoc $ mkRdrQual (mkModuleName "GHC.Types") $ mkVarOcc primitive) $
+    noLoc $ HsTyLit noExt $ HsStrTy NoSourceText $ mkFastString methodName
 
 ghcTypesOpaque :: LHsType GhcPs
 ghcTypesOpaque =
@@ -2798,8 +2799,11 @@ mkInterfaceFixedChoiceInstanceDecl tycon InterfaceChoiceSignature {..} =
   , mkInstance "HasFromAnyChoice" (mkPrimMethod "_fromAnyChoice" "EFromAnyChoice")
   , mkInstance "HasExercise" (mkTemplateClassMethod "exercise" [cid]
       (mkApp (mkPrimitive "primitive" "UExerciseInterface")
-             (mkApp (mkUnqualVar $ mkVarOcc ("to" ++ occNameString (rdrNameOcc (unLoc tycon)) ++ "ContractId"))
-                    (mkUnqualVar $ mkVarOcc "cid")))
+        (noLoc $ HsPar noExt $
+          mkQualVar (mkVarOcc "toInterfaceContractId")
+            `mkAppType` paramType
+            `mkAppType` rdrNameToType tycon
+            `mkApp` mkUnqualVar (mkVarOcc "cid")))
       Nothing)
   ]
   where
