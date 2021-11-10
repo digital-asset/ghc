@@ -2804,10 +2804,9 @@ mkInterfaceFixedChoiceInstanceDecl tycon InterfaceChoiceSignature {..} =
   ]
   where
     cid = mkVarPat $ mkVarOcc "cid"
-    ifaceClassType = rdrNameToType (mkInterfaceClass tycon)
     paramVar = noLoc $ Unqual (mkTyVarOcc "t")
     paramType = noLoc $ HsTyVar noExt NotPromoted paramVar
-    contextType = noLoc [mkParenTy (mkAppTy ifaceClassType paramType)]
+    contextType = noLoc [mkParenTy (implementsConstraint paramType (rdrNameToType tycon))]
     addContext = noLoc . HsQualTy noExt contextType
     choiceType = mkChoiceType ifChoiceName
     returnType = mkParenTy ifChoiceResultType
@@ -3092,53 +3091,30 @@ mkTemplateDecls templateName fields decls = do
       choiceInstanceDecls = concatMap (mkChoiceInstanceDecl templateName) choicesWithArchive
       choiceDecls = concatMap (mkChoiceDecls (getLoc templateName) conName sharedBinds) choicesWithArchive
       keyInstanceDecl = mkKeyInstanceDecl sharedBinds templateName conName vt
-      templateInterfaceImplements = map (mkInterfaceInstance vtTemplateName conName sharedBinds) vtImplements
+      templateInterfaceImplements = map (mkInterfaceInstance vtTemplateName . implementsInterface) vtImplements
   return $ toOL $ templateDataDecl : choiceDataDecls ++ letDecls
                ++ templateInstances ++ (choiceInstanceDecls ++ choiceDecls ++ keyInstanceDecl)
                ++ templateInterfaceImplements
 
-mkInterfaceInstance :: Located RdrName -> Located RdrName -> LHsLocalBinds GhcPs -> ImplementsDeclBlock -> LHsDecl GhcPs
-mkInterfaceInstance templateName conName sharedBinds ImplementsDeclBlock{..} =
+mkInterfaceInstance :: Located RdrName -> Located RdrName -> LHsDecl GhcPs
+mkInterfaceInstance templateName interfaceName =
     instDecl $ classInstDecl
-      (mkHsAppTy (rdrNameToType $ mkInterfaceClass implementsInterface) (mkTemplateType $ fmap (occNameString . rdrNameOcc) templateName))
-      (listToBag $ interfaceMethods implementsInterface)
+      (implementsConstraint
+        (mkTemplateType (fmap (occNameString . rdrNameOcc) templateName))
+        (rdrNameToType interfaceName)
+      )
+      (listToBag interfaceMethods)
 
-mkInterfaceClass :: Located RdrName -> Located RdrName
-mkInterfaceClass name = L (getLoc name) $ Unqual $ mkTcOcc $ "Is" ++ occNameString (occName $ unLoc name)
+implementsClass :: LHsType GhcPs
+implementsClass = mkQualType "Implements"
+
+implementsConstraint :: LHsType GhcPs -> LHsType GhcPs -> LHsType GhcPs
+implementsConstraint t i = implementsClass `mkAppTy` t `mkAppTy` i
 
 mkInterfaceDecl
   :: Located RdrName -> [Located InterfaceBodyDecl] -> P (OrdList (LHsDecl GhcPs))
 mkInterfaceDecl tycon decls = do
-    let cls = noLoc $ TyClD noExt $ ClassDecl
-          { tcdCExt = noExt
-          , tcdCtxt = noLoc []
-          , tcdLName = mkInterfaceClass tycon
-          , tcdTyVars = mkHsQTvs [noLoc $ UserTyVar noExt classVar]
-          , tcdFixity = Prefix
-          , tcdFDs = []
-          , tcdSigs =
-            [ noLoc $ ClassOpSig noExt False
-                [interfaceMethodName tycon "to" ""]
-                (mkLHsSigType $ noLoc $ HsFunTy noExt classTy ifaceTy)
-            , noLoc $ ClassOpSig noExt False
-                [interfaceMethodName tycon "from" ""]
-                (mkLHsSigType $ noLoc $ HsFunTy noExt ifaceTy (mkOptional classTy))
-            , noLoc $ ClassOpSig noExt False
-                [interfaceMethodName tycon "to" "ContractId"]
-                (mkLHsSigType $ noLoc $ HsFunTy noExt (mkContractId classTy) (mkContractId ifaceTy))
-            , noLoc $ ClassOpSig noExt False
-                [interfaceMethodName tycon "from" "ContractId"]
-                (mkLHsSigType $ noLoc $ HsFunTy noExt (mkContractId ifaceTy) (mkUpdate $ mkParenTy $ mkOptional $ mkParenTy $ mkContractId classTy))
-            , noLoc $ ClassOpSig noExt False
-                [interfaceMethodName tycon "" "TypeRep"]
-                (mkLHsSigType $ noLoc $ HsFunTy noExt classTy typeRepTy)
-            ]
-          , tcdMeths = emptyBag
-          , tcdATs = []
-          , tcdATDefs = []
-          , tcdDocs = []
-          }
-        existential :: LHsDecl GhcPs
+    let existential :: LHsDecl GhcPs
         existential = noLoc $ TyClD noExt $ DataDecl
             { tcdDExt = noExt
             , tcdLName = tycon
@@ -3165,9 +3141,8 @@ mkInterfaceDecl tycon decls = do
                 }
             }
         existentialInstance :: LHsDecl GhcPs
-        existentialInstance = instDecl $
-            classInstDecl (rdrNameToType (mkInterfaceClass tycon) `mkAppTy` ifaceTy) $ listToBag $
-            interfaceMethods tycon
+        existentialInstance = mkInterfaceInstance tycon tycon
+
         existentialExerciseInstances :: [LHsDecl GhcPs]
         existentialExerciseInstances =
             [instDecl
@@ -3178,7 +3153,7 @@ mkInterfaceDecl tycon decls = do
         ifaceMethods = concat
           [
             [ let tyRhs = noLoc $ HsFunTy noExt classTy methodType
-                  tyCtx = noLoc [mkQualType "Implements" `mkAppTy` classTy `mkAppTy` ifaceTy]
+                  tyCtx = noLoc [implementsConstraint classTy ifaceTy]
                   ty = HsQualTy noExt tyCtx tyRhs
               in noLoc $ SigD noExt $ TypeSig noExt [methodName] (mkLHsSigWcType $ noLoc ty)
             , let L _ rdrName = methodName
@@ -3210,36 +3185,21 @@ mkInterfaceDecl tycon decls = do
                  pure $ mkTemplateDataDecl l ifChoiceName info
             | L l (InterfaceChoice InterfaceChoiceSignature{..} _) <- decls
             ]
-    pure (toOL (cls : existential : existentialInstance : existentialExerciseInstances ++ ifaceMethods ++ ifaceInstances ++ choiceInstances ++ choiceTys ++ choiceDecls))
+    pure (toOL (existential : existentialInstance : existentialExerciseInstances ++ ifaceMethods ++ ifaceInstances ++ choiceInstances ++ choiceTys ++ choiceDecls))
   where
     ifaceTy = rdrNameToType tycon
     classVar = noLoc $ Unqual (mkTyVarOcc "t")
     classTy = noLoc $ HsTyVar noExt NotPromoted classVar
-    typeRepTy = mkQualType "TypeRep"
-    hasExercise t InterfaceChoiceSignature{..} =
-        foldl' mkAppTy (mkQualClass "HasExercise")
-          [t, rdrNameToType ifChoiceName, ifChoiceResultType]
     hasFetch t = mkQualClass "HasFetch" `mkAppTy` t
 
-interfaceMethodName :: Located RdrName -> String -> String -> Located RdrName
-interfaceMethodName iface prefix suffix = noLoc $ Unqual $ mkVarOcc $ prefix ++ (lowerIfNoPrefix $ occNameString (occName $ unLoc iface)) ++ suffix
-  where
-    lowerIfNoPrefix s = case s of
-      c:cs | null prefix -> toLower c : cs
-      _ -> s
-
-interfaceMethodNameStr :: Located RdrName -> String -> String -> String
-interfaceMethodNameStr iface prefix suffix = occNameString $ occName $ unLoc $ interfaceMethodName iface prefix suffix
-
-interfaceMethods :: Located RdrName -> [LHsBind GhcPs]
-interfaceMethods iface =
-    [ mkPrimMethod (interfaceMethodNameStr iface "to" "") "EToInterface"
-    , mkPrimMethod (interfaceMethodNameStr iface "from" "") "EFromInterface"
-    , mkPrimMethod (interfaceMethodNameStr iface "to" "ContractId") "EToInterfaceContractId"
-    , mkPrimMethod (interfaceMethodNameStr iface "from" "ContractId") "UFromInterfaceContractId"
-    , mkPrimMethod (interfaceMethodNameStr iface "" "TypeRep") "$TO_TYPE_REP"
+interfaceMethods :: [LHsBind GhcPs]
+interfaceMethods =
+    [ mkPrimMethod "toInterface" "EToInterface"
+    , mkPrimMethod "fromInterface" "EFromInterface"
+    , mkPrimMethod "toInterfaceContractId" "EToInterfaceContractId"
+    , mkPrimMethod "fromInterfaceContractId" "UFromInterfaceContractId"
+    , mkPrimMethod "interfaceTypeRep" "$TO_TYPE_REP"
     ]
-
 
 shareTemplateLetBindings :: Located RdrName -> LHsLocalBinds GhcPs -> ([LHsDecl GhcPs], LHsLocalBinds GhcPs)
 shareTemplateLetBindings conName vtLetBindings =
