@@ -2385,6 +2385,9 @@ mkApp e1 e2 = noLoc $ HsApp noExt e1 e2
 mkAppType :: LHsExpr GhcPs -> LHsType GhcPs -> LHsExpr GhcPs
 mkAppType e ty = noLoc $ HsAppType noExt e (mkHsWildCardBndrs ty)
 
+mkParExpr :: LHsExpr GhcPs -> LHsExpr GhcPs
+mkParExpr exp@(L loc _) = L loc (HsPar noExt exp)
+
 mkUnqualType :: Located String -> LHsType GhcPs
 mkUnqualType (L loc tyName) =
   rdrNameToType $ L loc $ mkRdrUnqual $ mkTcOcc tyName
@@ -2404,6 +2407,9 @@ mkAppTy ty1 ty2 = noLoc $ HsAppTy noExt ty1 ty2
 
 unitType :: LHsType GhcPs
 unitType = noLoc $ HsTupleTy noExt HsBoxedOrConstraintTuple []
+
+mkSymbol :: String -> LHsType GhcPs
+mkSymbol = noLoc . HsTyLit noExt . HsStrTy NoSourceText . mkFastString
 
 -- Optional type and constructors
 mkOptional :: LHsType GhcPs -> LHsType GhcPs
@@ -2451,7 +2457,7 @@ applyToParties :: LHsExpr GhcPs -> LHsExpr GhcPs
 applyToParties p@(L loc _) =
   L loc $ HsApp noExt
     (L loc $ HsVar noExt $ L loc $ qualifyDesugar $ mkVarOcc "toParties")
-    (L loc (HsPar noExt p)) -- Add parens (see https://github.com/digital-asset/daml/issues/5).
+    (mkParExpr p) -- Add parens (see https://github.com/digital-asset/daml/issues/5).
 
 -- | Calculate the application of 'concat' to a list of expressions
 -- (invoked from Parser.y).
@@ -2799,7 +2805,7 @@ mkInterfaceFixedChoiceInstanceDecl tycon InterfaceChoiceSignature {..} =
   , mkInstance "HasFromAnyChoice" (mkPrimMethod "_fromAnyChoice" "EFromAnyChoice")
   , mkInstance "HasExercise" (mkTemplateClassMethod "exercise" [cid]
       (mkApp (mkPrimitive "primitive" "UExerciseInterface")
-        (noLoc $ HsPar noExt $
+        (mkParExpr $
           mkQualVar (mkVarOcc "toInterfaceContractId")
             `mkAppType` paramType
             `mkAppType` rdrNameToType tycon
@@ -2810,7 +2816,7 @@ mkInterfaceFixedChoiceInstanceDecl tycon InterfaceChoiceSignature {..} =
     cid = mkVarPat $ mkVarOcc "cid"
     paramVar = noLoc $ Unqual (mkTyVarOcc "t")
     paramType = noLoc $ HsTyVar noExt NotPromoted paramVar
-    contextType = noLoc [mkParenTy (implementsConstraint paramType (rdrNameToType tycon))]
+    contextType = noLoc [mkParenTy (mkImplementsConstraint paramType (rdrNameToType tycon))]
     addContext = noLoc . HsQualTy noExt contextType
     choiceType = mkChoiceType ifChoiceName
     returnType = mkParenTy ifChoiceResultType
@@ -3095,25 +3101,69 @@ mkTemplateDecls templateName fields decls = do
       choiceInstanceDecls = concatMap (mkChoiceInstanceDecl templateName) choicesWithArchive
       choiceDecls = concatMap (mkChoiceDecls (getLoc templateName) conName sharedBinds) choicesWithArchive
       keyInstanceDecl = mkKeyInstanceDecl sharedBinds templateName conName vt
-      templateInterfaceImplements = map (mkInterfaceInstance vtTemplateName . implementsInterface) vtImplements
+      adjustImplementsDeclBlock implements =
+        let newDefs =
+              [ L loc (ImplementsFunction (name, newExp))
+              | L loc (ImplementsFunction (name, exp)) <- implementsDefs implements
+              , let this = asPatRecWild "this" conName
+                    args = [this]
+                    newExp = mkLambda args exp (allLetBindings True args sharedBinds)
+              ]
+        in implements { implementsDefs = newDefs }
+      templateInterfaceImplements =  (mkInterfaceImplements vtTemplateName . adjustImplementsDeclBlock) =<< vtImplements
   return $ toOL $ templateDataDecl : choiceDataDecls ++ letDecls
                ++ templateInstances ++ (choiceInstanceDecls ++ choiceDecls ++ keyInstanceDecl)
                ++ templateInterfaceImplements
 
-mkInterfaceInstance :: Located RdrName -> Located RdrName -> LHsDecl GhcPs
-mkInterfaceInstance templateName interfaceName =
-    instDecl $ classInstDecl
-      (implementsConstraint
-        (mkTemplateType (fmap (occNameString . rdrNameOcc) templateName))
-        (rdrNameToType interfaceName)
-      )
-      (listToBag interfaceMethods)
+mkInterfaceImplements :: Located RdrName -> ImplementsDeclBlock -> [LHsDecl GhcPs]
+mkInterfaceImplements templateName implements =
+  implementsInstance : implementsInterfaceMethods
+  where
+    implementsInstance =
+      instDecl
+        (classInstDecl
+          implementsConstraint
+          (listToBag interfaceMethods)
+        )
+    implementsInterfaceMethods =
+      [ let fullMethodName =
+              noLoc $ mkRdrUnqual $ mkVarOcc $
+                "_method_"
+                  ++ intercalate "_" (rdrNameToString <$> [templateName, implementsInterface, name])
+            body =
+              mkMethodExpr
+              `mkAppType` templateType
+              `mkAppType` interfaceType
+              `mkAppType` mkSymbol (occNameString $ rdrNameOcc $ unLoc name)
+              `mkApp` mkParExpr exp
+            ctx = matchContext fullMethodName
+            match = matchWithBinds ctx [] loc body (noLoc (EmptyLocalBinds noExt))
+            matchGroup = MG noExt (noLoc [noLoc match]) Generated
+        in
+          noLoc (ValD noExt (FunBind noExt fullMethodName matchGroup WpHole []))
+      | L loc (ImplementsFunction (name, exp)) <- implementsDefs
+      ]
+    implementsConstraint = mkImplementsConstraint templateType interfaceType
+    -- implementsProxy = mkImplementsProxy templateType interfaceType
+    templateType = mkTemplateType (fmap (occNameString . rdrNameOcc) templateName)
+    interfaceType = rdrNameToType implementsInterface
+    ImplementsDeclBlock
+      { implementsInterface
+      , implementsDefs
+      } = implements
+
 
 implementsClass :: LHsType GhcPs
 implementsClass = mkQualType "Implements"
 
-implementsConstraint :: LHsType GhcPs -> LHsType GhcPs -> LHsType GhcPs
-implementsConstraint t i = implementsClass `mkAppTy` t `mkAppTy` i
+mkImplementsConstraint :: LHsType GhcPs -> LHsType GhcPs -> LHsType GhcPs
+mkImplementsConstraint t i = implementsClass `mkAppTy` t `mkAppTy` i
+
+hasMethodClass :: LHsType GhcPs
+hasMethodClass = mkQualClass "HasMethod"
+
+mkMethodExpr :: LHsExpr GhcPs
+mkMethodExpr = mkQualVar $ mkVarOcc "mkMethod"
 
 mkInterfaceDecl
   :: Located RdrName -> [Located InterfaceBodyDecl] -> P (OrdList (LHsDecl GhcPs))
@@ -3144,8 +3194,17 @@ mkInterfaceDecl tycon decls = do
                 , dd_derivs = noLoc []
                 }
             }
-        existentialInstance :: LHsDecl GhcPs
-        existentialInstance = mkInterfaceInstance tycon tycon
+        existentialImplements :: [LHsDecl GhcPs]
+        existentialImplements = mkInterfaceImplements tycon ImplementsDeclBlock
+          { implementsInterface = tycon
+          , implementsDefs =
+              [ L l $ ImplementsFunction
+                ( methodName
+                , noLoc $ HsVar noExt methodName
+                )
+              | L l (InterfaceFunctionSignature (methodName, _)) <- decls
+              ]
+          }
 
         existentialExerciseInstances :: [LHsDecl GhcPs]
         existentialExerciseInstances =
@@ -3156,8 +3215,15 @@ mkInterfaceDecl tycon decls = do
         ifaceMethods :: [LHsDecl GhcPs]
         ifaceMethods = concat
           [
-            [ let tyRhs = noLoc $ HsFunTy noExt classTy methodType
-                  tyCtx = noLoc [implementsConstraint classTy ifaceTy]
+            [ let methodNameType = mkSymbol $ occNameString $ rdrNameOcc $ unLoc methodName
+                  instanceType =
+                    hasMethodClass
+                    `mkAppTy` ifaceTy
+                    `mkAppTy` methodNameType
+                    `mkAppTy` mkParenTy methodType
+              in instDecl $ classInstDecl instanceType emptyBag
+            , let tyRhs = noLoc $ HsFunTy noExt classTy methodType
+                  tyCtx = noLoc [mkImplementsConstraint classTy ifaceTy]
                   ty = HsQualTy noExt tyCtx tyRhs
               in noLoc $ SigD noExt $ TypeSig noExt [methodName] (mkLHsSigWcType $ noLoc ty)
             , let L _ rdrName = methodName
@@ -3189,7 +3255,7 @@ mkInterfaceDecl tycon decls = do
                  pure $ mkTemplateDataDecl l ifChoiceName info
             | L l (InterfaceChoice InterfaceChoiceSignature{..} _) <- decls
             ]
-    pure (toOL (existential : existentialInstance : existentialExerciseInstances ++ ifaceMethods ++ ifaceInstances ++ choiceInstances ++ choiceTys ++ choiceDecls))
+    pure (toOL (existential : existentialImplements ++ existentialExerciseInstances ++ ifaceMethods ++ ifaceInstances ++ choiceInstances ++ choiceTys ++ choiceDecls))
   where
     ifaceTy = rdrNameToType tycon
     classVar = noLoc $ Unqual (mkTyVarOcc "t")

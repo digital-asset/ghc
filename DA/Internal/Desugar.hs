@@ -4,6 +4,8 @@
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE DataKinds #-}
 
 -- This file contains a minimal setup to allow the compilation of a desugared DAML template.
 
@@ -16,6 +18,7 @@ module DA.Internal.Desugar
   )
 where
 
+import GHC.TypeLits (Symbol)
 import Data.String (IsString(..))
 
 data Any
@@ -104,3 +107,10 @@ class Implements t i where
   toInterfaceContractId : ContractId t -> ContractId i
   fromInterfaceContractId : ContractId i -> Update (Optional (ContractId t))
   interfaceTypeRep : t -> TypeRep
+
+class HasMethod i (m : Symbol) r | i m -> r
+
+newtype Method t i (m : Symbol) r = Method { unMethod : t -> r }
+
+mkMethod : (Implements t i, HasMethod i m r) => (t -> r) -> Method t i m r
+mkMethod = Method
