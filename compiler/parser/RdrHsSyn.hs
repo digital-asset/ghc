@@ -2622,9 +2622,20 @@ mkPrimMethod :: String -> String -> LHsBind GhcPs
 mkPrimMethod methodName primArg =
   mkTemplateClassMethod methodName [] (mkPrimitive "primitive" primArg) Nothing
 
-mkPrimInterfaceMethod :: String -> String -> LHsBind GhcPs
-mkPrimInterfaceMethod methodName primArg =
-  mkTemplateClassMethod methodName [] (mkPrimitive "primitiveInterface" primArg) Nothing
+mkPrimInterfaceMethod :: LHsType GhcPs -> String -> String -> LHsBind GhcPs
+mkPrimInterfaceMethod ifaceTy methodName primArg =
+  let t = mkVarOcc "t"
+      args = [mkVarPat t]
+      rhs =
+        mkPrimitive "primitiveInterface" primArg
+        `mkApp`
+          mkParExpr (
+            mkQualVar (mkVarOcc "toInterface")
+            `mkAppType` noLoc (HsWildCardTy noExt)
+            `mkAppType` ifaceTy
+            `mkApp` mkUnqualVar t
+            )
+  in mkTemplateClassMethod methodName args rhs Nothing
 
 -- | Construct a @data X a b c = X {...} deriving (Eq, Show)@
 mkTemplateDataDecl ::
@@ -3228,7 +3239,7 @@ mkInterfaceDecl tycon decls = do
               in noLoc $ SigD noExt $ TypeSig noExt [methodName] (mkLHsSigWcType $ noLoc ty)
             , let L _ rdrName = methodName
                   name = occNameString $ occName rdrName
-                  rhs = mkPrimInterfaceMethod name name
+                  rhs = mkPrimInterfaceMethod ifaceTy name name
               in noLoc $ ValD noExt (unLoc rhs)
             ]
           | L _ (InterfaceFunctionSignature (methodName, methodType)) <- decls
