@@ -2706,7 +2706,7 @@ mkChoiceDecls templateLoc conName binds (CombinedChoiceData controllers observer
         controllerSig = mkFunTy templateType (mkFunTy choiceType partiesType)
         controllerDef = mkLambda controllerDefArgs controllers (Just (extendLetBindings binds (dummyBinds controllerDefArgs)))
         controllerDefArgs = [this, if flexible then arg else WildPat noExt]
-        observersSig = mkOptional (mkFunTy templateType (mkFunTy choiceType partiesType))
+        observersSig = mkOptional (mkParenTy (mkFunTy templateType (mkFunTy choiceType partiesType)))
         observersDef = case observersM of
           Nothing -> mkNone
           Just observers ->
