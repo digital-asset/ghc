@@ -3150,7 +3150,6 @@ mkInterfaceImplements templateName conName sharedBinds implements =
       | L loc (ImplementsFunction (name, exp)) <- implementsDefs
       ]
     implementsConstraint = mkImplementsConstraint templateType interfaceType
-    -- implementsProxy = mkImplementsProxy templateType interfaceType
     templateType = mkTemplateType (fmap (occNameString . rdrNameOcc) templateName)
     interfaceType = rdrNameToType implementsInterface
     ImplementsDeclBlock
