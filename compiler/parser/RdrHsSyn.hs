@@ -3127,28 +3127,7 @@ mkInterfaceImplements templateName conName sharedBinds implements =
           implementsConstraint
           (listToBag interfaceMethods)
         )
-    implementsInterfaceMethods =
-      [ let fullMethodName =
-              noLoc $ mkRdrUnqual $ mkVarOcc $
-                "_method_"
-                  ++ intercalate "_" (rdrNameToString <$> [templateName, implementsInterface, name])
-            this = asPatRecWild "this" conName
-            args = [this]
-            localBinds = allLetBindings True args sharedBinds
-            impl = mkLambda args exp localBinds
-            body =
-              mkMethodExpr
-              `mkAppType` templateType
-              `mkAppType` interfaceType
-              `mkAppType` mkSymbol (occNameString $ rdrNameOcc $ unLoc name)
-              `mkApp` mkParExpr impl
-            ctx = matchContext fullMethodName
-            match = matchWithBinds ctx [] loc body (noLoc (EmptyLocalBinds noExt))
-            matchGroup = MG noExt (noLoc [noLoc match]) Generated
-        in
-          noLoc (ValD noExt (FunBind noExt fullMethodName matchGroup WpHole []))
-      | L loc (ImplementsFunction (name, exp)) <- implementsDefs
-      ]
+    implementsInterfaceMethods = map mkInterfaceImplementsMethod implementsDefs
     implementsConstraint = mkImplementsConstraint templateType interfaceType
     templateType = mkTemplateType (fmap (occNameString . rdrNameOcc) templateName)
     interfaceType = rdrNameToType implementsInterface
@@ -3157,6 +3136,27 @@ mkInterfaceImplements templateName conName sharedBinds implements =
       , implementsDefs
       } = implements
 
+    mkInterfaceImplementsMethod :: Located ImplementsDefinition -> LHsDecl GhcPs
+    mkInterfaceImplementsMethod (L loc (ImplementsFunction (name, exp))) =
+      let
+        fullMethodName =
+          noLoc $ mkRdrUnqual $ mkVarOcc $
+            "_method_"
+              ++ intercalate "_" (rdrNameToString <$> [templateName, implementsInterface, name])
+        this = asPatRecWild "this" conName
+        args = [this]
+        localBinds = allLetBindings True args sharedBinds
+        impl = mkLambda args exp localBinds
+        body =
+          mkMethodExpr
+          `mkAppType` templateType
+          `mkAppType` interfaceType
+          `mkAppType` mkSymbol (occNameString $ rdrNameOcc $ unLoc name)
+          `mkApp` mkParExpr impl
+        ctx = matchContext fullMethodName
+        match = matchWithBinds ctx [] loc body (noLoc (EmptyLocalBinds noExt))
+        matchGroup = MG noExt (noLoc [noLoc match]) Generated
+      in noLoc (ValD noExt (FunBind noExt fullMethodName matchGroup WpHole []))
 
 implementsClass :: LHsType GhcPs
 implementsClass = mkQualType "Implements"
