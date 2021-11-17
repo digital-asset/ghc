@@ -2777,6 +2777,34 @@ mkTemplateInstanceDecl sharedBinds templateName conName ValidTemplate{..} =
     this = asPatRecWild "this" conName
     cid = mkVarPat $ mkVarOcc "cid"
 
+mkInterfaceMethodDecl :: LHsType GhcPs -> LHsType GhcPs -> Located RdrName -> LHsType GhcPs -> [LHsDecl GhcPs]
+mkInterfaceMethodDecl ifaceTy classTy methodName methodType =
+  [ hasMethodInstance
+  , topLevelFuncSig
+  , topLevelFuncDef
+  ]
+  where
+    hasMethodInstance = instDecl $ classInstDecl instanceType emptyBag
+      where
+        instanceType =
+          hasMethodClass
+          `mkAppTy` ifaceTy
+          `mkAppTy` methodNameType
+          `mkAppTy` mkParenTy methodType
+        methodNameType = mkSymbol $ occNameString $ rdrNameOcc $ unLoc methodName
+
+    topLevelFuncSig = noLoc $ SigD noExt $ TypeSig noExt [methodName] (mkLHsSigWcType $ noLoc ty)
+      where
+        ty = HsQualTy noExt tyCtx tyRhs
+        tyCtx = noLoc [mkImplementsConstraint classTy ifaceTy]
+        tyRhs = noLoc $ HsFunTy noExt classTy methodType
+
+    topLevelFuncDef = noLoc $ ValD noExt (unLoc rhs)
+      where
+        rhs = mkPrimInterfaceMethod ifaceTy name name
+        name = occNameString $ occName rdrName
+        L _ rdrName = methodName
+
 mkInterfaceInstanceDecl :: LHsType GhcPs -> Maybe (LHsExpr GhcPs) -> [LHsDecl GhcPs]
 mkInterfaceInstanceDecl interfaceType interfacePrecondM =
   [ mkInstance "HasToAnyTemplate" $ mkPrimMethod "_toAnyTemplate" "EToAnyTemplate"
@@ -3208,23 +3236,7 @@ mkInterfaceDecl tycon decls = do
 
         ifaceMethods :: [LHsDecl GhcPs]
         ifaceMethods = concat
-          [
-            [ let methodNameType = mkSymbol $ occNameString $ rdrNameOcc $ unLoc methodName
-                  instanceType =
-                    hasMethodClass
-                    `mkAppTy` ifaceTy
-                    `mkAppTy` methodNameType
-                    `mkAppTy` mkParenTy methodType
-              in instDecl $ classInstDecl instanceType emptyBag
-            , let tyRhs = noLoc $ HsFunTy noExt classTy methodType
-                  tyCtx = noLoc [mkImplementsConstraint classTy ifaceTy]
-                  ty = HsQualTy noExt tyCtx tyRhs
-              in noLoc $ SigD noExt $ TypeSig noExt [methodName] (mkLHsSigWcType $ noLoc ty)
-            , let L _ rdrName = methodName
-                  name = occNameString $ occName rdrName
-                  rhs = mkPrimInterfaceMethod ifaceTy name name
-              in noLoc $ ValD noExt (unLoc rhs)
-            ]
+          [ mkInterfaceMethodDecl ifaceTy classTy methodName methodType
           | L _ (InterfaceFunctionSignature (methodName, methodType)) <- decls
           ]
 
