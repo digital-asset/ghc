@@ -3112,22 +3112,13 @@ mkTemplateDecls templateName fields decls = do
       choiceInstanceDecls = concatMap (mkChoiceInstanceDecl templateName) choicesWithArchive
       choiceDecls = concatMap (mkChoiceDecls (getLoc templateName) conName sharedBinds) choicesWithArchive
       keyInstanceDecl = mkKeyInstanceDecl sharedBinds templateName conName vt
-      adjustImplementsDeclBlock implements =
-        let newDefs =
-              [ L loc (ImplementsFunction (name, newExp))
-              | L loc (ImplementsFunction (name, exp)) <- implementsDefs implements
-              , let this = asPatRecWild "this" conName
-                    args = [this]
-                    newExp = mkLambda args exp (allLetBindings True args sharedBinds)
-              ]
-        in implements { implementsDefs = newDefs }
-      templateInterfaceImplements =  (mkInterfaceImplements vtTemplateName . adjustImplementsDeclBlock) =<< vtImplements
+      templateInterfaceImplements = concatMap (mkInterfaceImplements vtTemplateName conName sharedBinds) vtImplements
   return $ toOL $ templateDataDecl : choiceDataDecls ++ letDecls
                ++ templateInstances ++ (choiceInstanceDecls ++ choiceDecls ++ keyInstanceDecl)
                ++ templateInterfaceImplements
 
-mkInterfaceImplements :: Located RdrName -> ImplementsDeclBlock -> [LHsDecl GhcPs]
-mkInterfaceImplements templateName implements =
+mkInterfaceImplements :: Located RdrName -> Located RdrName -> LHsLocalBinds GhcPs -> ImplementsDeclBlock -> [LHsDecl GhcPs]
+mkInterfaceImplements templateName conName sharedBinds implements =
   implementsInstance : implementsInterfaceMethods
   where
     implementsInstance =
@@ -3141,12 +3132,16 @@ mkInterfaceImplements templateName implements =
               noLoc $ mkRdrUnqual $ mkVarOcc $
                 "_method_"
                   ++ intercalate "_" (rdrNameToString <$> [templateName, implementsInterface, name])
+            this = asPatRecWild "this" conName
+            args = [this]
+            localBinds = allLetBindings True args sharedBinds
+            impl = mkLambda args exp localBinds
             body =
               mkMethodExpr
               `mkAppType` templateType
               `mkAppType` interfaceType
               `mkAppType` mkSymbol (occNameString $ rdrNameOcc $ unLoc name)
-              `mkApp` mkParExpr exp
+              `mkApp` mkParExpr impl
             ctx = matchContext fullMethodName
             match = matchWithBinds ctx [] loc body (noLoc (EmptyLocalBinds noExt))
             matchGroup = MG noExt (noLoc [noLoc match]) Generated
@@ -3205,17 +3200,6 @@ mkInterfaceDecl tycon decls = do
                 , dd_derivs = noLoc []
                 }
             }
-        existentialImplements :: [LHsDecl GhcPs]
-        existentialImplements = mkInterfaceImplements tycon ImplementsDeclBlock
-          { implementsInterface = tycon
-          , implementsDefs =
-              [ L l $ ImplementsFunction
-                ( methodName
-                , noLoc $ HsVar noExt methodName
-                )
-              | L l (InterfaceFunctionSignature (methodName, _)) <- decls
-              ]
-          }
 
         existentialExerciseInstances :: [LHsDecl GhcPs]
         existentialExerciseInstances =
@@ -3266,7 +3250,7 @@ mkInterfaceDecl tycon decls = do
                  pure $ mkTemplateDataDecl l ifChoiceName info
             | L l (InterfaceChoice InterfaceChoiceSignature{..} _) <- decls
             ]
-    pure (toOL (existential : existentialImplements ++ existentialExerciseInstances ++ ifaceMethods ++ ifaceInstances ++ choiceInstances ++ choiceTys ++ choiceDecls))
+    pure (toOL (existential : existentialExerciseInstances ++ ifaceMethods ++ ifaceInstances ++ choiceInstances ++ choiceTys ++ choiceDecls))
   where
     ifaceTy = rdrNameToType tycon
     classVar = noLoc $ Unqual (mkTyVarOcc "t")
