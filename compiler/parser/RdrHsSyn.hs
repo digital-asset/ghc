@@ -3149,14 +3149,8 @@ mkInterfaceImplements :: Located RdrName -> Located RdrName -> LHsLocalBinds Ghc
 mkInterfaceImplements templateName conName sharedBinds implements =
   implementsInstance : implementsInterfaceMethods
   where
-    implementsInstance =
-      instDecl
-        (classInstDecl
-          implementsConstraint
-          (listToBag interfaceMethods)
-        )
+    implementsInstance = mkImplementsInstance templateType interfaceType
     implementsInterfaceMethods = map mkInterfaceImplementsMethod implementsDefs
-    implementsConstraint = mkImplementsConstraint templateType interfaceType
     templateType = mkTemplateType (fmap (occNameString . rdrNameOcc) templateName)
     interfaceType = rdrNameToType implementsInterface
     ImplementsDeclBlock
@@ -3185,6 +3179,14 @@ mkInterfaceImplements templateName conName sharedBinds implements =
         match = matchWithBinds ctx [] loc body (noLoc (EmptyLocalBinds noExt))
         matchGroup = MG noExt (noLoc [noLoc match]) Generated
       in noLoc (ValD noExt (FunBind noExt fullMethodName matchGroup WpHole []))
+
+mkImplementsInstance :: LHsType GhcPs -> LHsType GhcPs -> LHsDecl GhcPs
+mkImplementsInstance templateType interfaceType =
+  instDecl $
+    classInstDecl implementsConstraint $
+      listToBag interfaceMethods
+  where
+    implementsConstraint = mkImplementsConstraint templateType interfaceType
 
 implementsClass :: LHsType GhcPs
 implementsClass = mkQualType "Implements"
@@ -3228,6 +3230,9 @@ mkInterfaceDecl tycon decls = do
                 }
             }
 
+        existentialImplementsInstance :: LHsDecl GhcPs
+        existentialImplementsInstance = mkImplementsInstance ifaceTy ifaceTy
+
         existentialExerciseInstances :: [LHsDecl GhcPs]
         existentialExerciseInstances =
             [instDecl
@@ -3261,7 +3266,7 @@ mkInterfaceDecl tycon decls = do
                  pure $ mkTemplateDataDecl l ifChoiceName info
             | L l (InterfaceChoice InterfaceChoiceSignature{..} _) <- decls
             ]
-    pure (toOL (existential : existentialExerciseInstances ++ ifaceMethods ++ ifaceInstances ++ choiceInstances ++ choiceTys ++ choiceDecls))
+    pure (toOL (existential : existentialImplementsInstance : existentialExerciseInstances ++ ifaceMethods ++ ifaceInstances ++ choiceInstances ++ choiceTys ++ choiceDecls))
   where
     ifaceTy = rdrNameToType tycon
     classVar = noLoc $ Unqual (mkTyVarOcc "t")
