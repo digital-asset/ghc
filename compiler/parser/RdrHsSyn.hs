@@ -2637,15 +2637,16 @@ mkPrimInterfaceMethod ifaceTy methodName primArg =
             )
   in mkTemplateClassMethod methodName args rhs Nothing
 
--- | Construct a @data X a b c = X {...} deriving (Eq, Show)@
-mkTemplateDataDecl ::
+data DataDeclName = TemplateName (Located RdrName) | ChoiceName (Located RdrName)
+
+mkDamlDataDecl ::
      SrcSpan                 -- ^ the span to associate with
-  -> Located RdrName         -- ^ template 'T' (or choice 'S')
+  -> DataDeclName            -- ^ template or choice name
   -> (Located RdrName
      , HsConDeclDetails GhcPs
      , Maybe LHsDocString)   -- ^ result of 'splitCon'
   -> LHsDecl GhcPs           -- ^ the resulting @data@ declaration
-mkTemplateDataDecl loc lname@(L nloc _name) (conName, conDetails, conDoc) =
+mkDamlDataDecl loc dataDeclName (conName, conDetails, conDoc) =
   -- NOTE (SM, SF): We assume that the program does not have any
   -- BangPatterns on the fields here. Otherwise, "re-jigging" with
   -- 'nudgeHsSrcBangs' would be required.
@@ -2658,6 +2659,9 @@ mkTemplateDataDecl loc lname@(L nloc _name) (conName, conDetails, conDoc) =
         , con_args   = conDetails
         , con_doc    = conDoc
         }
+      declName (TemplateName x) = x
+      declName (ChoiceName x) = x
+      lname@(L nloc _name) = declName dataDeclName
       mkTyCl = mkLHsSigType . rdrNameToType . L nloc . qualifyDesugar . mkClsOcc
       derivingTys = L nloc $ map mkTyCl ["Eq", "Show"]
       derivingClause = L nloc $ HsDerivingClause noExt Nothing derivingTys
@@ -2666,7 +2670,7 @@ mkTemplateDataDecl loc lname@(L nloc _name) (conName, conDetails, conDoc) =
         { dd_ext     = noExt
         , dd_ND      = DataType
         , dd_cType   = Nothing
-        , dd_ctxt    = noLoc [ghcTypesDamlTemplate]
+        , dd_ctxt    = noLoc [ghcTypesDamlTemplate | TemplateName _name <- [dataDeclName]]
         , dd_cons    = [conDecl]
         , dd_kindSig = Nothing
         , dd_derivs  = L nloc [derivingClause]
@@ -2680,6 +2684,26 @@ mkTemplateDataDecl loc lname@(L nloc _name) (conName, conDetails, conDoc) =
         , tcdDataDefn = dataDefn
         }
   in L loc $ TyClD noExt dataDecl
+
+-- | Construct a @data GHC.Types.DamlTemplate => X a b c = X {...} deriving (Eq, Show)@
+mkTemplateDataDecl ::
+     SrcSpan                 -- ^ the span to associate with
+  -> Located RdrName         -- ^ template 'T'
+  -> (Located RdrName
+     , HsConDeclDetails GhcPs
+     , Maybe LHsDocString)   -- ^ result of 'splitCon'
+  -> LHsDecl GhcPs           -- ^ the resulting @data@ declaration
+mkTemplateDataDecl loc lname con = mkDamlDataDecl loc (TemplateName lname) con
+
+-- | Construct a @data X a b c = X {...} deriving (Eq, Show)@
+mkChoiceDataDecl ::
+     SrcSpan                 -- ^ the span to associate with
+  -> Located RdrName         -- ^ choice 'S'
+  -> (Located RdrName
+     , HsConDeclDetails GhcPs
+     , Maybe LHsDocString)   -- ^ result of 'splitCon'
+  -> LHsDecl GhcPs           -- ^ the resulting @data@ declaration
+mkChoiceDataDecl loc lname con = mkDamlDataDecl loc (ChoiceName lname) con
 
 mkLambda
   :: [Pat GhcPs]                 -- ^ method argument patterns
@@ -2898,7 +2922,7 @@ mkChoiceDataDecls CombinedChoiceData { ccdChoiceData = ChoiceData{..}, ccdSource
       -- Calculate data constructor info from the choice name and record type.
       choiceConInfo <- splitCon [cdChoiceFields, rdrNameToType cdChoiceName]
       let dataLoc = combineLocs cdChoiceName cdChoiceFields
-          dataDecl = mkTemplateDataDecl dataLoc cdChoiceName choiceConInfo
+          dataDecl = mkChoiceDataDecl dataLoc cdChoiceName choiceConInfo
           -- Prepend the choice documentation, if any, as a 'DocNext'.
           mbDocDecl = fmap (fmap (DocD noExt . DocCommentNext)) cdChoiceDoc
       return $ maybeToList mbDocDecl ++ [dataDecl]
