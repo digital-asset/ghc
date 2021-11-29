@@ -3287,7 +3287,7 @@ mkInterfaceDecl tycon decls = do
             ]
     choiceTys <- sequence
             [ do info <- splitCon [ifChoiceFields, rdrNameToType ifChoiceName]
-                 pure $ mkTemplateDataDecl l ifChoiceName info
+                 pure $ mkChoiceDataDecl l ifChoiceName info
             | L l (InterfaceChoice InterfaceChoiceSignature{..} _) <- decls
             ]
     pure (toOL (existential : existentialImplementsInstance : existentialExerciseInstances ++ ifaceMethods ++ ifaceInstances ++ choiceInstances ++ choiceTys ++ choiceDecls))
