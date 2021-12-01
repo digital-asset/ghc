@@ -3320,8 +3320,6 @@ interfaceMethods :: [LHsBind GhcPs]
 interfaceMethods =
     [ mkPrimMethod "toInterface" "EToInterface"
     , mkPrimMethod "fromInterface" "EFromInterface"
-    , mkPrimMethod "toInterfaceContractId" "EToInterfaceContractId"
-    , mkPrimMethod "fromInterfaceContractId" "UFromInterfaceContractId"
     ]
 
 hasInterfaceTypeRepMethods :: [LHsBind GhcPs]

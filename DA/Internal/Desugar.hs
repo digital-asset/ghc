@@ -5,6 +5,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 -- This file contains a minimal setup to allow the compilation of a desugared DAML template.
 
@@ -18,6 +19,7 @@ module DA.Internal.Desugar
 where
 
 import GHC.TypeLits (Symbol)
+import GHC.Types (primitive)
 import Data.String (IsString(..))
 
 data Any
@@ -106,8 +108,19 @@ class HasInterfaceTypeRep i where
 class HasInterfaceTypeRep i => Implements t i where
   toInterface : t -> i
   fromInterface : i -> Optional t
-  toInterfaceContractId : ContractId t -> ContractId i
-  fromInterfaceContractId : ContractId i -> Update (Optional (ContractId t))
+
+coerceContractId : ContractId t -> ContractId i
+coerceContractId = primitive @"BECoerceContractId"
+
+toInterfaceContractId : forall i t. Implements t i => ContractId t -> ContractId i
+toInterfaceContractId = coerceContractId
+
+fromInterfaceContractId : forall t i. (Implements t i, HasFetch i) => ContractId i -> Update (Optional (ContractId t))
+fromInterfaceContractId cid = do
+  iface <- fetch cid
+  pure $ case fromInterface iface of
+    None -> None
+    Some (_ : t) -> Some (coerceContractId cid)
 
 class HasMethod i (m : Symbol) r | i m -> r
 
