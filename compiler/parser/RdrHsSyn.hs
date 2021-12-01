@@ -3212,6 +3212,9 @@ mkImplementsInstance templateType interfaceType =
   where
     implementsConstraint = mkImplementsConstraint templateType interfaceType
 
+hasInterfaceTypeRepClass :: LHsType GhcPs
+hasInterfaceTypeRepClass = mkQualType "HasInterfaceTypeRep"
+
 implementsClass :: LHsType GhcPs
 implementsClass = mkQualType "Implements"
 
@@ -3254,6 +3257,13 @@ mkInterfaceDecl tycon decls = do
                 }
             }
 
+        hasInterfaceTypeRepInstance :: LHsDecl GhcPs
+        hasInterfaceTypeRepInstance =
+          instDecl $
+            classInstDecl
+              (hasInterfaceTypeRepClass `mkAppTy` ifaceTy)
+              (listToBag hasInterfaceTypeRepMethods)
+
         existentialImplementsInstance :: LHsDecl GhcPs
         existentialImplementsInstance = mkImplementsInstance ifaceTy ifaceTy
 
@@ -3290,7 +3300,16 @@ mkInterfaceDecl tycon decls = do
                  pure $ mkChoiceDataDecl l ifChoiceName info
             | L l (InterfaceChoice InterfaceChoiceSignature{..} _) <- decls
             ]
-    pure (toOL (existential : existentialImplementsInstance : existentialExerciseInstances ++ ifaceMethods ++ ifaceInstances ++ choiceInstances ++ choiceTys ++ choiceDecls))
+    pure $ toOL
+      $ existential
+      : hasInterfaceTypeRepInstance
+      : existentialImplementsInstance
+      : existentialExerciseInstances
+      ++ ifaceMethods
+      ++ ifaceInstances
+      ++ choiceInstances
+      ++ choiceTys
+      ++ choiceDecls
   where
     ifaceTy = rdrNameToType tycon
     classVar = noLoc $ Unqual (mkTyVarOcc "t")
@@ -3303,7 +3322,11 @@ interfaceMethods =
     , mkPrimMethod "fromInterface" "EFromInterface"
     , mkPrimMethod "toInterfaceContractId" "EToInterfaceContractId"
     , mkPrimMethod "fromInterfaceContractId" "UFromInterfaceContractId"
-    , mkPrimMethod "interfaceTypeRep" "$TO_TYPE_REP"
+    ]
+
+hasInterfaceTypeRepMethods :: [LHsBind GhcPs]
+hasInterfaceTypeRepMethods =
+    [ mkPrimMethod "interfaceTypeRep" "$TO_TYPE_REP"
     ]
 
 shareTemplateLetBindings :: Located RdrName -> LHsLocalBinds GhcPs -> ([LHsDecl GhcPs], LHsLocalBinds GhcPs)

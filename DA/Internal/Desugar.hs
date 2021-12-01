@@ -1,5 +1,4 @@
 {-# LANGUAGE DamlSyntax #-}
-{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE RankNTypes #-}
@@ -101,12 +100,14 @@ class HasToAnyChoice t c r | t c -> r where
 class HasFromAnyChoice t c r | t c -> r where
   _fromAnyChoice : proxy t -> Any -> Optional c
 
-class Implements t i where
+class HasInterfaceTypeRep i where
+  interfaceTypeRep : i -> TypeRep
+
+class HasInterfaceTypeRep i => Implements t i where
   toInterface : t -> i
   fromInterface : i -> Optional t
   toInterfaceContractId : ContractId t -> ContractId i
   fromInterfaceContractId : ContractId i -> Update (Optional (ContractId t))
-  interfaceTypeRep : t -> TypeRep
 
 class HasMethod i (m : Symbol) r | i m -> r
 
