@@ -837,6 +837,7 @@ data WarningFlag =
    | Opt_WarnImplicitKindVars             -- Since 8.6
    | Opt_WarnSpaceAfterBang
    | Opt_WarnMissingDerivingStrategies    -- Since 8.8
+   | Opt_WarnControllerCan
    deriving (Eq, Show, Enum)
 
 data Language = Haskell98 | Haskell2010
@@ -4051,6 +4052,7 @@ wWarningFlagsDeps = [
   flagSpec "star-binder"                 Opt_WarnStarBinder,
   flagSpec "star-is-type"                Opt_WarnStarIsType,
   flagSpec "missing-space-after-bang"    Opt_WarnSpaceAfterBang,
+  flagSpec "controller-can"              Opt_WarnControllerCan,
   flagSpec "partial-fields"              Opt_WarnPartialFields ]
 
 -- | These @-\<blah\>@ flags can all be reversed with @-no-\<blah\>@
@@ -4764,7 +4766,8 @@ standardWarnings -- see Note [Documenting warning flags]
         Opt_WarnSimplifiableClassConstraints,
         Opt_WarnStarBinder,
         Opt_WarnInaccessibleCode,
-        Opt_WarnSpaceAfterBang
+        Opt_WarnSpaceAfterBang,
+        Opt_WarnControllerCan
       ]
 
 -- | Things you get with -W
