@@ -6,6 +6,8 @@
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE TypeApplications #-}
 
 -- This file contains a minimal setup to allow the compilation of a desugared DAML template.
 
@@ -105,22 +107,32 @@ class HasFromAnyChoice t c r | t c -> r where
 class HasInterfaceTypeRep i where
   interfaceTypeRep : i -> TypeRep
 
-class HasInterfaceTypeRep i => Implements t i where
+class HasToInterface t i where
   toInterface : t -> i
+
+class HasFromInterface t i where
   fromInterface : i -> Optional t
+
+type Implements t i =
+  ( HasInterfaceTypeRep i
+  , HasToInterface t i
+  , HasFromInterface t i
+  )
 
 coerceContractId : ContractId t -> ContractId i
 coerceContractId = primitive @"BECoerceContractId"
 
-toInterfaceContractId : forall i t. Implements t i => ContractId t -> ContractId i
+toInterfaceContractId : forall i t. HasToInterface t i => ContractId t -> ContractId i
 toInterfaceContractId = coerceContractId
 
-fromInterfaceContractId : forall t i. (Implements t i, HasFetch i) => ContractId i -> Update (Optional (ContractId t))
+fromInterfaceContractId : forall t i. (HasFromInterface t i, HasFetch i) => ContractId i -> Update (Optional (ContractId t))
 fromInterfaceContractId cid = do
   iface <- fetch cid
   pure $ case fromInterface iface of
     None -> None
     Some (_ : t) -> Some (coerceContractId cid)
+
+data ImplementsT t i = ImplementsT
 
 class HasMethod i (m : Symbol) r | i m -> r
 
