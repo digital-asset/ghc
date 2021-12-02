@@ -2630,7 +2630,7 @@ mkPrimInterfaceMethod ifaceTy methodName primArg =
         mkPrimitive "primitiveInterface" primArg
         `mkApp`
           mkParExpr (
-            mkQualVar (mkVarOcc "toInterface")
+            mkQualVar (mkVarOcc "_toInterface")
             `mkAppType` noLoc (HsWildCardTy noExt)
             `mkAppType` ifaceTy
             `mkApp` mkUnqualVar t
@@ -3237,7 +3237,7 @@ mkHasToInterfaceInstance :: LHsType GhcPs -> LHsType GhcPs -> LHsDecl GhcPs
 mkHasToInterfaceInstance tplTy ifaceTy =
   instDecl $ classInstDecl
     (hasToInterfaceClass `mkAppTy` tplTy `mkAppTy` ifaceTy)
-    (unitBag (mkPrimMethod "toInterface" "EToInterface"))
+    (unitBag (mkPrimMethod "_toInterface" "EToInterface"))
 
 mkHasFromInterfaceInstance :: LHsType GhcPs -> LHsType GhcPs -> LHsDecl GhcPs
 mkHasFromInterfaceInstance tplTy ifaceTy =

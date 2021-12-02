@@ -108,7 +108,10 @@ class HasInterfaceTypeRep i where
   interfaceTypeRep : i -> TypeRep
 
 class HasToInterface t i where
-  toInterface : t -> i
+  _toInterface : t -> i
+
+toInterface : forall i t. HasToInterface t i => t -> i
+toInterface = _toInterface
 
 class HasFromInterface t i where
   fromInterface : i -> Optional t
