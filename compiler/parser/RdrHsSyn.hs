@@ -2779,7 +2779,7 @@ mkTemplateInstanceDecl sharedBinds templateName conName ValidTemplate{..} =
   , mkInstance "HasToAnyTemplate" $ mkPrimMethod "_toAnyTemplate" "EToAnyTemplate"
   , mkInstance "HasFromAnyTemplate" $ mkPrimMethod "_fromAnyTemplate" "EFromAnyTemplate"
   , mkInstance "HasTemplateTypeRep" $ mkPrimMethod "_templateTypeRep" "ETemplateTypeRep"
-  , mkInstance "HasIsInterfaceType" $ mkMethod "_isInterfaceType" [proxy] (mkQualVar $ mkDataOcc "False")
+  , mkInstance "HasIsInterfaceType" $ mkMethod "_isInterfaceType" [proxy] False (mkQualVar $ mkDataOcc "False")
   ]
   where
     templateType = mkTemplateType templateName
