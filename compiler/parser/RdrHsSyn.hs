@@ -2870,18 +2870,20 @@ mkInterfaceFixedChoiceInstanceDecl :: Located RdrName -> InterfaceChoiceSignatur
 mkInterfaceFixedChoiceInstanceDecl tycon InterfaceChoiceSignature {..} =
   [ mkInstance "HasToAnyChoice" simpleContext (mkPrimMethod "_toAnyChoice" "EToAnyChoice")
   , mkInstance "HasFromAnyChoice" simpleContext (mkPrimMethod "_fromAnyChoice" "EFromAnyChoice")
-  , mkInstance "HasExercise" exerciseContext (mkTemplateClassMethod "exercise" [cid]
-      ((mkPrimitive "primitive" "UExerciseInterface")
+  , mkInstance "HasExercise" exerciseContext (mkTemplateClassMethod "exercise" [cid, arg]
+      (mkPrimitive "primitive" "UExerciseInterface"
         `mkApp` (mkParExpr $ mkQualVar (mkVarOcc "toInterfaceContractId")
                   `mkAppType` paramType
                   `mkAppType` rdrNameToType tycon
                   `mkApp` mkUnqualVar (mkVarOcc "cid"))
+        `mkApp` (mkUnqualVar (mkVarOcc "arg"))
         `mkApp` (mkParExpr $ mkQualVar (mkVarOcc "_typeRepForInterfaceExercise")
                   `mkApp` mkUnqualVar (mkVarOcc "cid")))
       Nothing)
   ]
   where
     cid = mkVarPat $ mkVarOcc "cid"
+    arg = mkVarPat $ mkVarOcc "arg"
     paramVar = noLoc $ Unqual (mkTyVarOcc "t")
     paramType = noLoc $ HsTyVar noExt NotPromoted paramVar
     implementsConstraint = mkParenTy (mkImplementsConstraint paramType (rdrNameToType tycon))
