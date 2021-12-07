@@ -2630,7 +2630,7 @@ mkPrimInterfaceMethod ifaceTy methodName primArg =
         mkPrimitive "primitiveInterface" primArg
         `mkApp`
           mkParExpr (
-            mkQualVar (mkVarOcc "toInterface")
+            mkQualVar (mkVarOcc "_toInterface")
             `mkAppType` noLoc (HsWildCardTy noExt)
             `mkAppType` ifaceTy
             `mkApp` mkUnqualVar t
@@ -2873,7 +2873,6 @@ mkInterfaceFixedChoiceInstanceDecl tycon InterfaceChoiceSignature {..} =
   , mkInstance "HasExercise" exerciseContext (mkTemplateClassMethod "exercise" [cid, arg]
       (mkPrimitive "primitive" "UExerciseInterface"
         `mkApp` (mkParExpr $ mkQualVar (mkVarOcc "toInterfaceContractId")
-                  `mkAppType` paramType
                   `mkAppType` rdrNameToType tycon
                   `mkApp` mkUnqualVar (mkVarOcc "cid"))
         `mkApp` (mkUnqualVar (mkVarOcc "arg"))
@@ -3184,9 +3183,9 @@ mkTemplateDecls templateName fields decls = do
 
 mkInterfaceImplements :: Located RdrName -> Located RdrName -> LHsLocalBinds GhcPs -> ImplementsDeclBlock -> [LHsDecl GhcPs]
 mkInterfaceImplements templateName conName sharedBinds implements =
-  implementsInstance : implementsInterfaceMethods
+  implementsMarker ++ implementsInstances ++ implementsInterfaceMethods
   where
-    implementsInstance = mkImplementsInstance templateType interfaceType
+    implementsInstances = mkImplementsInstances templateType interfaceType
     implementsInterfaceMethods = map mkInterfaceImplementsMethod implementsDefs
     templateType = mkTemplateType (fmap (occNameString . rdrNameOcc) templateName)
     interfaceType = rdrNameToType implementsInterface
@@ -3194,6 +3193,30 @@ mkInterfaceImplements templateName conName sharedBinds implements =
       { implementsInterface
       , implementsDefs
       } = implements
+
+    implementsMarker =
+      let name =
+            mkRdrUnqual $ mkVarOcc $
+              "_implements_"
+                ++ intercalate "_" (rdrNameToString <$> [templateName, implementsInterface])
+          sig =
+            TypeSig noExt [noLoc name] $
+              mkHsWildCardBndrs $ mkHsImplicitBndrs $
+                implementsType `mkAppTy` templateType `mkAppTy` interfaceType
+          rhs =
+            matchGroup noSrcSpan $
+              matchWithBinds
+                (matchContext (noLoc name))
+                []
+                noSrcSpan
+                implementsCon
+                (noLoc emptyLocalBinds)
+          val =
+            FunBind noExt (noLoc name) rhs WpHole []
+      in
+        [ noLoc (SigD noExt sig)
+        , noLoc (ValD noExt val)
+        ]
 
     mkInterfaceImplementsMethod :: Located ImplementsDefinition -> LHsDecl GhcPs
     mkInterfaceImplementsMethod (L loc (ImplementsFunction (name, exp))) =
@@ -3217,19 +3240,47 @@ mkInterfaceImplements templateName conName sharedBinds implements =
         matchGroup = MG noExt (noLoc [noLoc match]) Generated
       in noLoc (ValD noExt (FunBind noExt fullMethodName matchGroup WpHole []))
 
-mkImplementsInstance :: LHsType GhcPs -> LHsType GhcPs -> LHsDecl GhcPs
-mkImplementsInstance templateType interfaceType =
-  instDecl $
-    classInstDecl implementsConstraint $
-      listToBag interfaceMethods
-  where
-    implementsConstraint = mkImplementsConstraint templateType interfaceType
+mkHasInterfaceTypeRepInstance :: LHsType GhcPs -> LHsDecl GhcPs
+mkHasInterfaceTypeRepInstance ifaceTy =
+  instDecl $ classInstDecl
+    (hasInterfaceTypeRepClass `mkAppTy` ifaceTy)
+    (unitBag (mkPrimMethod "interfaceTypeRep" "$TO_TYPE_REP"))
+
+mkHasToInterfaceInstance :: LHsType GhcPs -> LHsType GhcPs -> LHsDecl GhcPs
+mkHasToInterfaceInstance tplTy ifaceTy =
+  instDecl $ classInstDecl
+    (hasToInterfaceClass `mkAppTy` tplTy `mkAppTy` ifaceTy)
+    (unitBag (mkPrimMethod "_toInterface" "EToInterface"))
+
+mkHasFromInterfaceInstance :: LHsType GhcPs -> LHsType GhcPs -> LHsDecl GhcPs
+mkHasFromInterfaceInstance tplTy ifaceTy =
+  instDecl $ classInstDecl
+    (hasFromInterfaceClass `mkAppTy` tplTy `mkAppTy` ifaceTy)
+    (unitBag (mkPrimMethod "fromInterface" "EFromInterface"))
+
+mkImplementsInstances :: LHsType GhcPs -> LHsType GhcPs -> [LHsDecl GhcPs]
+mkImplementsInstances templateType interfaceType =
+  [ mkHasToInterfaceInstance templateType interfaceType
+  , mkHasFromInterfaceInstance templateType interfaceType
+  ]
 
 hasInterfaceTypeRepClass :: LHsType GhcPs
 hasInterfaceTypeRepClass = mkQualType "HasInterfaceTypeRep"
 
+hasToInterfaceClass :: LHsType GhcPs
+hasToInterfaceClass = mkQualType "HasToInterface"
+
+hasFromInterfaceClass :: LHsType GhcPs
+hasFromInterfaceClass = mkQualType "HasFromInterface"
+
 implementsClass :: LHsType GhcPs
 implementsClass = mkQualType "Implements"
+
+implementsType :: LHsType GhcPs
+implementsType = mkQualType "ImplementsT"
+
+implementsCon :: LHsExpr GhcPs
+implementsCon = mkQualVar $ mkDataOcc "ImplementsT"
 
 mkImplementsConstraint :: LHsType GhcPs -> LHsType GhcPs -> LHsType GhcPs
 mkImplementsConstraint t i = implementsClass `mkAppTy` t `mkAppTy` i
@@ -3271,14 +3322,10 @@ mkInterfaceDecl tycon decls = do
             }
 
         hasInterfaceTypeRepInstance :: LHsDecl GhcPs
-        hasInterfaceTypeRepInstance =
-          instDecl $
-            classInstDecl
-              (hasInterfaceTypeRepClass `mkAppTy` ifaceTy)
-              (listToBag hasInterfaceTypeRepMethods)
+        hasInterfaceTypeRepInstance = mkHasInterfaceTypeRepInstance ifaceTy
 
-        existentialImplementsInstance :: LHsDecl GhcPs
-        existentialImplementsInstance = mkImplementsInstance ifaceTy ifaceTy
+        existentialImplementsInstances :: [LHsDecl GhcPs]
+        existentialImplementsInstances = mkImplementsInstances ifaceTy ifaceTy
 
         existentialExerciseInstances :: [LHsDecl GhcPs]
         existentialExerciseInstances =
@@ -3316,8 +3363,8 @@ mkInterfaceDecl tycon decls = do
     pure $ toOL
       $ existential
       : hasInterfaceTypeRepInstance
-      : existentialImplementsInstance
       : existentialExerciseInstances
+      ++ existentialImplementsInstances
       ++ ifaceMethods
       ++ ifaceInstances
       ++ choiceInstances
@@ -3328,19 +3375,6 @@ mkInterfaceDecl tycon decls = do
     classVar = noLoc $ Unqual (mkTyVarOcc "t")
     classTy = noLoc $ HsTyVar noExt NotPromoted classVar
     hasFetch t = mkQualClass "HasFetch" `mkAppTy` t
-
-interfaceMethods :: [LHsBind GhcPs]
-interfaceMethods =
-    [ mkPrimMethod "toInterface" "EToInterface"
-    , mkPrimMethod "fromInterface" "EFromInterface"
-    , mkPrimMethod "toInterfaceContractId" "EToInterfaceContractId"
-    , mkPrimMethod "fromInterfaceContractId" "UFromInterfaceContractId"
-    ]
-
-hasInterfaceTypeRepMethods :: [LHsBind GhcPs]
-hasInterfaceTypeRepMethods =
-    [ mkPrimMethod "interfaceTypeRep" "$TO_TYPE_REP"
-    ]
 
 shareTemplateLetBindings :: Located RdrName -> LHsLocalBinds GhcPs -> ([LHsDecl GhcPs], LHsLocalBinds GhcPs)
 shareTemplateLetBindings conName vtLetBindings =

@@ -5,6 +5,9 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE TypeApplications #-}
 
 -- This file contains a minimal setup to allow the compilation of a desugared DAML template.
 
@@ -18,6 +21,7 @@ module DA.Internal.Desugar
 where
 
 import GHC.TypeLits (Symbol)
+import GHC.Types (primitive)
 import Data.String (IsString(..))
 
 data Any
@@ -103,11 +107,35 @@ class HasFromAnyChoice t c r | t c -> r where
 class HasInterfaceTypeRep i where
   interfaceTypeRep : i -> TypeRep
 
-class HasInterfaceTypeRep i => Implements t i where
-  toInterface : t -> i
+class HasToInterface t i where
+  _toInterface : t -> i
+
+toInterface : forall i t. HasToInterface t i => t -> i
+toInterface = _toInterface
+
+class HasFromInterface t i where
   fromInterface : i -> Optional t
-  toInterfaceContractId : ContractId t -> ContractId i
-  fromInterfaceContractId : ContractId i -> Update (Optional (ContractId t))
+
+type Implements t i =
+  ( HasInterfaceTypeRep i
+  , HasToInterface t i
+  , HasFromInterface t i
+  )
+
+coerceContractId : ContractId t -> ContractId i
+coerceContractId = primitive @"BECoerceContractId"
+
+toInterfaceContractId : forall i t. HasToInterface t i => ContractId t -> ContractId i
+toInterfaceContractId = coerceContractId
+
+fromInterfaceContractId : forall t i. (HasFromInterface t i, HasFetch i) => ContractId i -> Update (Optional (ContractId t))
+fromInterfaceContractId cid = do
+  iface <- fetch cid
+  pure $ case fromInterface iface of
+    None -> None
+    Some (_ : t) -> Some (coerceContractId cid)
+
+data ImplementsT t i = ImplementsT
 
 class HasMethod i (m : Symbol) r | i m -> r
 
