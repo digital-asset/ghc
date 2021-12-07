@@ -2671,8 +2671,7 @@ mkDamlDataDecl loc dataDeclName (conName, conDetails, conDoc) =
         , dd_ND      = DataType
         , dd_cType   = Nothing
         , dd_ctxt    = noLoc [ghcTypesDamlTemplate | TemplateName _name <- [dataDeclName]]
-        , dd_cons    = [conDecl]
-        , dd_kindSig = Nothing
+        , dd_cons    = [conDecl] , dd_kindSig = Nothing
         , dd_derivs  = L nloc [derivingClause]
         }
       dataDecl :: TyClDecl GhcPs
@@ -3230,6 +3229,7 @@ mkMethodExpr = mkQualVar $ mkVarOcc "mkMethod"
 mkInterfaceDecl
   :: Located RdrName -> [Located InterfaceBodyDecl] -> P (OrdList (LHsDecl GhcPs))
 mkInterfaceDecl tycon decls = do
+    (conName, _, mbConDoc) <- splitCon [rdrNameToType tycon]
     let existential :: LHsDecl GhcPs
         existential = noLoc $ TyClD noExt $ DataDecl
             { tcdDExt = noExt
@@ -3243,14 +3243,14 @@ mkInterfaceDecl tycon decls = do
                 , dd_cType = Nothing
                 , dd_kindSig = Nothing
                 , dd_cons =
-                    [ noLoc $ ConDeclH98
+                    [ L (getLoc tycon) $ ConDeclH98
                         { con_ext = noExt
-                        , con_name = L (getLoc tycon) $ Unqual $ mkDataOcc (occNameString $ occName $ unLoc tycon)
+                        , con_name = conName
                         , con_forall = noLoc False
                         , con_ex_tvs = []
                         , con_mb_cxt = Nothing
                         , con_args = PrefixCon [ghcTypesOpaque]
-                        , con_doc = Nothing
+                        , con_doc = mbConDoc
                         }
                     ]
                 , dd_derivs = noLoc []
