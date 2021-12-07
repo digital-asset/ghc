@@ -104,6 +104,15 @@ class HasToAnyChoice t c r | t c -> r where
 class HasFromAnyChoice t c r | t c -> r where
   _fromAnyChoice : proxy t -> Any -> Optional c
 
+class HasIsInterfaceType t where
+  _isInterfaceType : proxy t -> Bool
+
+_typeRepForInterfaceExercise : (HasTemplateTypeRep t, HasIsInterfaceType t) => proxy t -> Optional TypeRep
+_typeRepForInterfaceExercise p =
+  if _isInterfaceType p
+    then None
+    else Some (_templateTypeRep p)
+
 class HasInterfaceTypeRep i where
   interfaceTypeRep : i -> TypeRep
 
