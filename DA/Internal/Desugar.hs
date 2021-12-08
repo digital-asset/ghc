@@ -33,7 +33,12 @@ data Text
 
 data Optional a = None | Some a
 
+optional : b -> (a -> b) -> Optional a -> b
+optional n _ None  = n
+optional _ f (Some x) = f x
+
 data Consuming t = Consuming {}
+data NonConsuming t = NonConsuming {}
 
 data Archive = Archive {}
 
@@ -152,3 +157,13 @@ newtype Method t i (m : Symbol) r = Method { unMethod : t -> r }
 
 mkMethod : (Implements t i, HasMethod i m r) => (t -> r) -> Method t i m r
 mkMethod = Method
+
+class HasExerciseGuarded t c r | t c -> r where
+  exerciseGuarded : (t -> Bool) -> ContractId t -> c -> Update r
+
+_exerciseDefault : HasExerciseGuarded t c r => ContractId t -> c -> Update r
+_exerciseDefault = exerciseGuarded (const True)
+
+_exerciseInterfaceGuard : forall i t. HasFromInterface t i => (t -> Bool) -> (i -> Bool)
+_exerciseInterfaceGuard pred iface =
+  optional False pred (fromInterface iface)

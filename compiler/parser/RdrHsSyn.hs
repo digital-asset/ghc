@@ -2421,6 +2421,13 @@ mkSome e = mkQualVar (mkDataOcc "Some") `mkApp` e
 mkNone :: LHsExpr GhcPs
 mkNone = mkQualVar $ mkDataOcc "None"
 
+-- Boolean constructors
+mkFalse :: LHsExpr GhcPs
+mkFalse = mkQualVar $ mkDataOcc "False"
+
+mkTrue :: LHsExpr GhcPs
+mkTrue = mkQualVar $ mkDataOcc "True"
+
 -- Wrap a type in parentheses, preserving the location of the original type.
 mkParenTy :: LHsType GhcPs -> LHsType GhcPs
 mkParenTy ty = L (getLoc ty) (HsParTy noExt ty)
@@ -2779,14 +2786,14 @@ mkTemplateInstanceDecl sharedBinds templateName conName ValidTemplate{..} =
   , mkInstance "HasToAnyTemplate" $ mkPrimMethod "_toAnyTemplate" "EToAnyTemplate"
   , mkInstance "HasFromAnyTemplate" $ mkPrimMethod "_fromAnyTemplate" "EFromAnyTemplate"
   , mkInstance "HasTemplateTypeRep" $ mkPrimMethod "_templateTypeRep" "ETemplateTypeRep"
-  , mkInstance "HasIsInterfaceType" $ mkTemplateClassMethod "_isInterfaceType" [proxy] (mkQualVar $ mkDataOcc "False") Nothing
+  , mkInstance "HasIsInterfaceType" $ mkTemplateClassMethod "_isInterfaceType" [proxy] mkFalse Nothing
   ]
   where
     templateType = mkTemplateType templateName
 
     signatoryInstance = mkInstance "HasSignatory" $ mkMethod "signatory" [this] True vtSignatories
     observerInstance = mkInstance "HasObserver" $ mkMethod "observer" [this] True vtObservers
-    ensureInstance = mkInstance "HasEnsure" $ mkMethod "ensure" [this] True (fromMaybe (mkQualVar $ mkDataOcc "True") vtEnsure)
+    ensureInstance = mkInstance "HasEnsure" $ mkMethod "ensure" [this] True (fromMaybe mkTrue vtEnsure)
     agreementInstance = mkInstance "HasAgreement" $ mkMethod "agreement" [this] True (fromMaybe emptyString vtAgreement)
     archiveInstance = mkInstance "HasArchive" $ mkMethod "archive" [cid] False $
       mkApp (mkApp (mkQualVar $ mkVarOcc "exercise") (mkUnqualVar $ mkVarOcc "cid"))
@@ -2839,8 +2846,8 @@ mkInterfaceInstanceDecl interfaceType interfacePrecondM =
   , mkInstance "HasSignatory" $ mkPrimMethod "signatory" "ESignatoryInterface"
   , mkInstance "HasObserver" $ mkPrimMethod "observer" "EObserverInterface"
   , mkInstance "HasCreate" $ mkPrimMethod "create" "UCreateInterface"
-  , mkInstance "HasEnsure" $ mkMethod "ensure" [this] (fromMaybe (mkQualVar $ mkDataOcc "True") interfacePrecondM)
-  , mkInstance "HasIsInterfaceType" $ mkMethod "_isInterfaceType" [proxy] (mkQualVar $ mkDataOcc "True")
+  , mkInstance "HasEnsure" $ mkMethod "ensure" [this] (fromMaybe mkTrue interfacePrecondM)
+  , mkInstance "HasIsInterfaceType" $ mkMethod "_isInterfaceType" [proxy] mkTrue
   ]
   where
     mkInstance name method =
@@ -2868,24 +2875,39 @@ mkChoiceInstanceDecl templateName CombinedChoiceData { ccdChoiceData = ChoiceDat
 
 mkInterfaceFixedChoiceInstanceDecl :: Located RdrName -> InterfaceChoiceSignature -> [LHsDecl GhcPs]
 mkInterfaceFixedChoiceInstanceDecl tycon InterfaceChoiceSignature {..} =
-  [ mkInstance "HasToAnyChoice" simpleContext (mkPrimMethod "_toAnyChoice" "EToAnyChoice")
-  , mkInstance "HasFromAnyChoice" simpleContext (mkPrimMethod "_fromAnyChoice" "EFromAnyChoice")
-  , mkInstance "HasExercise" exerciseContext (mkTemplateClassMethod "exercise" [cid, arg]
-      (mkPrimitive "primitive" "UExerciseInterface"
-        `mkApp` (mkParExpr $ mkQualVar (mkVarOcc "toInterfaceContractId")
-                  `mkAppType` rdrNameToType tycon
-                  `mkApp` mkUnqualVar (mkVarOcc "cid"))
-        `mkApp` (mkUnqualVar (mkVarOcc "arg"))
-        `mkApp` (mkParExpr $ mkQualVar (mkVarOcc "_typeRepForInterfaceExercise")
-                  `mkApp` mkUnqualVar (mkVarOcc "cid")))
-      Nothing)
+  [ mkInstance "HasToAnyChoice"
+      simpleContext
+      (mkPrimMethod "_toAnyChoice" "EToAnyChoice")
+  , mkInstance "HasFromAnyChoice"
+      simpleContext
+      (mkPrimMethod "_fromAnyChoice" "EFromAnyChoice")
+  , mkInstance "HasExerciseGuarded"
+      exerciseContext
+      (mkTemplateClassMethod "exerciseGuarded" [pred, cid, arg]
+        (mkPrimitive "primitive" "UExerciseInterface"
+          `mkApp` (mkParExpr $ mkQualVar (mkVarOcc "toInterfaceContractId")
+                    `mkAppType` ifaceType
+                    `mkApp` mkUnqualVar (mkVarOcc "cid"))
+          `mkApp` (mkUnqualVar (mkVarOcc "arg"))
+          `mkApp` (mkParExpr $ mkQualVar (mkVarOcc "_typeRepForInterfaceExercise")
+                    `mkApp` mkUnqualVar (mkVarOcc "cid"))
+          `mkApp` (mkParExpr $ mkQualVar (mkVarOcc "_exerciseInterfaceGuard")
+                    `mkAppType` ifaceType
+                    `mkApp` mkUnqualVar (mkVarOcc "pred")))
+        Nothing)
+  , mkInstance "HasExercise"
+      exerciseContext
+      (mkTemplateClassMethod "exercise" []
+        (mkQualVar (mkVarOcc "_exerciseDefault"))
+        Nothing)
   ]
   where
+    pred = mkVarPat $ mkVarOcc "pred"
     cid = mkVarPat $ mkVarOcc "cid"
     arg = mkVarPat $ mkVarOcc "arg"
     paramVar = noLoc $ Unqual (mkTyVarOcc "t")
     paramType = noLoc $ HsTyVar noExt NotPromoted paramVar
-    implementsConstraint = mkParenTy (mkImplementsConstraint paramType (rdrNameToType tycon))
+    implementsConstraint = mkParenTy (mkImplementsConstraint paramType ifaceType)
     simpleContext = noLoc [ implementsConstraint ]
     exerciseContext = noLoc
       [ mkParenTy (mkQualType "HasIsInterfaceType" `mkAppTy` paramType)
@@ -2893,10 +2915,12 @@ mkInterfaceFixedChoiceInstanceDecl tycon InterfaceChoiceSignature {..} =
       , implementsConstraint
       ]
     addContext ctx = noLoc . HsQualTy noExt ctx
+    ifaceType = rdrNameToType tycon
     choiceType = mkChoiceType ifChoiceName
     returnType = mkParenTy ifChoiceResultType
     mkClass name = foldl' mkAppTy (mkQualClass name) [paramType, choiceType, returnType]
-    mkInstance name ctx method = instDecl $ classInstDecl (addContext ctx (mkClass name)) $ unitBag method
+    mkInstance name ctx method =
+      instDecl $ classInstDecl (addContext ctx (mkClass name)) $ unitBag method
 
 -- | Construct instances for the split-up `TemplateKey` typeclass, i.e., instances fr all single-method typeclasses
 -- that constitute the `Choice` constraint synonym.
