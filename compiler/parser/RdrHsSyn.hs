@@ -2810,7 +2810,7 @@ mkInterfaceMethodDecl ifaceTy classTy methodName methodType =
   , topLevelFuncDef
   ]
   where
-    hasMethodInstance = instDecl $ classInstDecl instanceType emptyBag
+    hasMethodInstance = L loc $ unLoc $ instDecl $ classInstDecl instanceType emptyBag
       where
         instanceType =
           hasMethodClass
@@ -2818,6 +2818,7 @@ mkInterfaceMethodDecl ifaceTy classTy methodName methodType =
           `mkAppTy` methodNameType
           `mkAppTy` mkParenTy methodType
         methodNameType = mkSymbol $ occNameString $ rdrNameOcc $ unLoc methodName
+        loc = getLoc methodName
 
     topLevelFuncSig = noLoc $ SigD noExt $ TypeSig noExt [methodName] (mkLHsSigWcType $ noLoc ty)
       where
