@@ -3370,7 +3370,7 @@ mkInterfaceDecl tycon requires decls = do
         requiresMarker requiredTycon =
             let name =
                   mkRdrUnqual $ mkVarOcc $ concat
-                    [ "_requires_", rdrNameToString tycon,
+                    [ "_requires_", rdrNameToString tycon
                     , "_", rdrNameToString requiredTycon ]
                 sig =
                   TypeSig noExt [noLoc name] $
