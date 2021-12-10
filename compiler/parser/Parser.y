@@ -525,6 +525,7 @@ are the most common patterns, rewritten as regular expressions for clarity:
  'catch'        { L _ ITcatch }
  'interface'    { L _ ITinterface }
  'implements'   { L _ ITimplements }
+ 'requires'     { L _ ITrequires }
 
  '{-# INLINE'             { L _ (ITinline_prag _ _ _) } -- INLINE or INLINABLE
  '{-# SPECIALISE'         { L _ (ITspec_prag _) }
@@ -1352,7 +1353,18 @@ tyapp_ :: { Located TyEl }
 -- interfaces
 
 interface_decl :: { OrdList (LHsDecl GhcPs) }
-  : 'interface' tycon 'where' interface_body {% mkInterfaceDecl $2 (unLoc $4) }
+  : 'interface' tycon requires_clause 'where' interface_body {% mkInterfaceDecl $2 $3 (unLoc $4) }
+
+requires_clause :: { [Located RdrName] }
+  : 'requires' requires_list { $2 }
+  | {- empty -}              { [] }
+
+requires_list :: { [Located RdrName] }
+  : requires_list_rev { reverse $1 }
+
+requires_list_rev :: { [Located RdrName] }
+  : requires_list_rev ',' qtycon { $3 : $1 }
+  | qtycon { [$1] }
 
 interface_body :: { Located [Located InterfaceBodyDecl] }
 interface_body

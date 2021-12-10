@@ -659,6 +659,7 @@ data Token
   | ITcatch
   | ITinterface
   | ITimplements
+  | ITrequires
 
   -- Pragmas, see  note [Pragma source text] in BasicTypes
   | ITinline_prag       SourceText InlineSpec RuleMatchInfo
@@ -904,7 +905,8 @@ reservedWordsFM = listToUFM $
          ( "try",            ITtry,           xbit DamlSyntaxBit),
          ( "catch",          ITcatch,         xbit DamlSyntaxBit),
          ( "interface",      ITinterface,     xbit DamlSyntaxBit),
-         ( "implements",     ITimplements,    xbit DamlSyntaxBit)
+         ( "implements",     ITimplements,    xbit DamlSyntaxBit),
+         ( "requires",       ITrequires,      xbit DamlSyntaxBit)
      ]
 
 {-----------------------------------

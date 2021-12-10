@@ -150,6 +150,7 @@ fromInterfaceContractId cid = do
     Some (_ : t) -> Some (coerceContractId cid)
 
 data ImplementsT t i = ImplementsT
+data RequiresT a b = RequiresT
 
 class HasMethod i (m : Symbol) r | i m -> r
 

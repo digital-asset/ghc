@@ -3309,6 +3309,12 @@ implementsCon = mkQualVar $ mkDataOcc "ImplementsT"
 mkImplementsConstraint :: LHsType GhcPs -> LHsType GhcPs -> LHsType GhcPs
 mkImplementsConstraint t i = implementsClass `mkAppTy` t `mkAppTy` i
 
+requiresType :: LHsType GhcPs
+requiresType = mkQualType "RequiresT"
+
+requiresCon :: LHsExpr GhcPs
+requiresCon = mkQualVar $ mkDataOcc "RequiresT"
+
 hasMethodClass :: LHsType GhcPs
 hasMethodClass = mkQualClass "HasMethod"
 
@@ -3316,8 +3322,8 @@ mkMethodExpr :: LHsExpr GhcPs
 mkMethodExpr = mkQualVar $ mkVarOcc "mkMethod"
 
 mkInterfaceDecl
-  :: Located RdrName -> [Located InterfaceBodyDecl] -> P (OrdList (LHsDecl GhcPs))
-mkInterfaceDecl tycon decls = do
+  :: Located RdrName -> [Located RdrName] -> [Located InterfaceBodyDecl] -> P (OrdList (LHsDecl GhcPs))
+mkInterfaceDecl tycon requires decls = do
     let existential :: LHsDecl GhcPs
         existential = noLoc $ TyClD noExt $ DataDecl
             { tcdDExt = noExt
@@ -3357,6 +3363,34 @@ mkInterfaceDecl tycon decls = do
               (classInstDecl (hasFetch (rdrNameToType tycon))
                  (unitBag (mkPrimMethod "fetch" "UFetchInterface")))]
 
+        requiresMarkers :: [LhsDeclGhcPs]
+        requiresMarkers = concatMap requiresMarker requires
+
+        requiresMarker :: Located RdrName -> [LHsDecl GhcPs]
+        requiresMarker requiredTycon =
+            let name =
+                  mkRdrUnqual $ mkVarOcc $ concat
+                    [ "_requires_", rdrNameToString tycon,
+                    , "_", rdrNameToString requiredTycon ]
+                sig =
+                  TypeSig noExt [noLoc name] $
+                    mkHsWildCardBndrs $ mkHsImplicitBndrs $
+                      requiresType `mkAppTy` rdrNameToType tycon `mkAppTy`  rdrNameToType requiredTycon
+                rhs =
+                  matchGroup noSrcSpan $
+                    matchWithBinds
+                      (matchContext (noLoc name))
+                      []
+                      noSrcSpan
+                      requiresCon
+                      (noLoc emptyLocalBinds)
+                val =
+                  FunBind noExt (noLoc name) rhs WpHole []
+            in
+              [ noLoc (SigD noExt sig)
+              , noLoc (ValD noExt val)
+              ]
+
         ifaceMethods :: [LHsDecl GhcPs]
         ifaceMethods = concat
           [ mkInterfaceMethodDecl ifaceTy classTy methodName methodType
@@ -3389,6 +3423,7 @@ mkInterfaceDecl tycon decls = do
       : hasInterfaceTypeRepInstance
       : existentialExerciseInstances
       ++ existentialImplementsInstances
+      ++ requiresMarkers
       ++ ifaceMethods
       ++ ifaceInstances
       ++ choiceInstances
