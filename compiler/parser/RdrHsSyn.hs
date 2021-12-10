@@ -3417,7 +3417,7 @@ mkInterfaceDecl tycon requires decls = do
         requiresInstances = concat
           [ mkRequiredImplementsInstances ifaceTy (rdrNameToType requiredTycon)
           | requiredTycon <- requires
-          , requiredTycon /= tycon
+          , unLoc requiredTycon /= unLoc tycon
               -- NOTE (Sofia): Circular requirement (self-requirement) is an error, but
               -- we don't want it to turn into a "duplicate instance" error in the
               -- GHC typechecker. We want the circular requirement to be visible
