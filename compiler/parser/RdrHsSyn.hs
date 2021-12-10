@@ -3415,7 +3415,7 @@ mkInterfaceDecl tycon requires decls = do
 
         requiresInstances :: [LHsDecl GhcPs]
         requiresInstances = concat
-          [ mkRequiredImplementsInstances iface (rdrNameToType requiredTycon)
+          [ mkRequiredImplementsInstances ifaceTy (rdrNameToType requiredTycon)
           | requiredTycon <- requires
           ]
 
