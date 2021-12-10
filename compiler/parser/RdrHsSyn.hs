@@ -2229,7 +2229,7 @@ data KeyData = KeyData {
   }
 
 data InterfaceBodyDecl
-  = InterfaceFunctionSignature (Located RdrName, LHsType GhcPs)
+  = InterfaceFunctionSignature (Located RdrName) (LHsType GhcPs) (Maybe LHsDocString)
   | InterfaceChoice InterfaceChoiceSignature InterfaceChoiceBody
   | InterfaceEnsureDecl (LHsExpr GhcPs)
 
@@ -2238,6 +2238,7 @@ data InterfaceChoiceSignature = InterfaceChoiceSignature
       , ifChoiceName :: Located RdrName
       , ifChoiceResultType :: LHsType GhcPs
       , ifChoiceFields :: LHsType GhcPs
+      , ifChoiceDoc :: Maybe (LHsDocString)
       }
 
 data InterfaceChoiceBody = InterfaceChoiceBody
@@ -2810,21 +2811,26 @@ mkTemplateInstanceDecl sharedBinds templateName conName ValidTemplate{..} =
     this = asPatRecWild "this" conName
     cid = mkVarPat $ mkVarOcc "cid"
 
-mkInterfaceMethodDecl :: LHsType GhcPs -> LHsType GhcPs -> Located RdrName -> LHsType GhcPs -> [LHsDecl GhcPs]
-mkInterfaceMethodDecl ifaceTy classTy methodName methodType =
-  [ hasMethodInstance
-  , topLevelFuncSig
+mkInterfaceMethodDecl :: LHsType GhcPs -> LHsType GhcPs -> Located RdrName -> LHsType GhcPs -> Maybe LHsDocString -> [LHsDecl GhcPs]
+mkInterfaceMethodDecl ifaceTy classTy methodName methodType mbDocString =
+  hasMethodInstance :
+  maybeToList mbDocDecl ++
+  [ topLevelFuncSig
   , topLevelFuncDef
   ]
   where
-    hasMethodInstance = instDecl $ classInstDecl instanceType emptyBag
+    mbDocDecl = fmap (\(L l docStr) -> L l (DocD (noExt) (DocCommentPrev docStr))) mbDocString
+    hasMethodInstance = addLoc loc $ instDecl $ classInstDecl instanceType emptyBag
       where
+        addLoc loc = L loc . unLoc
+        loc = combineLocs methodName methodType
         instanceType =
+          addLoc loc $
           hasMethodClass
           `mkAppTy` ifaceTy
           `mkAppTy` methodNameType
           `mkAppTy` mkParenTy methodType
-        methodNameType = mkSymbol $ occNameString $ rdrNameOcc $ unLoc methodName
+        methodNameType = addLoc (getLoc methodName) $ mkSymbol $ occNameString $ rdrNameOcc $ unLoc methodName
 
     topLevelFuncSig = noLoc $ SigD noExt $ TypeSig noExt [methodName] (mkLHsSigWcType $ noLoc ty)
       where
@@ -2953,8 +2959,8 @@ mkKeyInstanceDecl sharedBinds templateName conName ValidTemplate{..}
 mkChoiceDataDecls
   :: CombinedChoiceData  -- ^ choice data for 'S' including relevant type variables
   -> P [LHsDecl GhcPs]   -- ^ resulting declarations
-mkChoiceDataDecls CombinedChoiceData { ccdChoiceData = ChoiceData{..}, ccdSource }
-  | TemplateChoice <- ccdSource = do
+mkChoiceDataDecls CombinedChoiceData { ccdChoiceData = ChoiceData{..}}
+  = do
       -- Calculate data constructor info from the choice name and record type.
       choiceConInfo <- splitCon [cdChoiceFields, rdrNameToType cdChoiceName]
       let dataLoc = combineLocs cdChoiceName cdChoiceFields
@@ -2962,7 +2968,6 @@ mkChoiceDataDecls CombinedChoiceData { ccdChoiceData = ChoiceData{..}, ccdSource
           -- Prepend the choice documentation, if any, as a 'DocNext'.
           mbDocDecl = fmap (fmap (DocD noExt . DocCommentNext)) cdChoiceDoc
       return $ maybeToList mbDocDecl ++ [dataDecl]
-  | otherwise = pure []
 
 -- | Perform preliminary checks on template header and body declarations.
 -- Return consolidated data structure with more precise types.
@@ -3074,7 +3079,7 @@ interfaceChoiceToCombinedChoiceData InterfaceChoiceSignature{..} InterfaceChoice
         , cdChoiceReturnTy = ifChoiceResultType
         , cdChoiceBody = ifChoiceExpr
         , cdChoiceConsuming = noLoc ifChoiceConsumption
-        , cdChoiceDoc = Nothing
+        , cdChoiceDoc = ifChoiceDoc
         }
     , ccdFlexible = True
     , ccdSource = InterfaceFixedChoice
@@ -3428,8 +3433,8 @@ mkInterfaceDecl tycon requires decls = do
 
         ifaceMethods :: [LHsDecl GhcPs]
         ifaceMethods = concat
-          [ mkInterfaceMethodDecl ifaceTy classTy methodName methodType
-          | L _ (InterfaceFunctionSignature (methodName, methodType)) <- decls
+          [ mkInterfaceMethodDecl ifaceTy classTy methodName methodType mbDocString
+          | L _ (InterfaceFunctionSignature methodName methodType mbDocString) <- decls
           ]
 
         ifaceInstances :: [LHsDecl GhcPs]
@@ -3448,10 +3453,9 @@ mkInterfaceDecl tycon requires decls = do
                 (interfaceChoiceToCombinedChoiceData choiceSig choiceBody)
             | L _l (InterfaceChoice choiceSig choiceBody) <- decls
             ]
-    choiceTys <- sequence
-            [ do info <- splitCon [ifChoiceFields, rdrNameToType ifChoiceName]
-                 pure $ mkChoiceDataDecl l ifChoiceName info
-            | L l (InterfaceChoice InterfaceChoiceSignature{..} _) <- decls
+    choiceTys <- concat <$> sequence
+            [ mkChoiceDataDecls $ interfaceChoiceToCombinedChoiceData choiceSig choiceBody
+            | L _l (InterfaceChoice choiceSig choiceBody) <- decls
             ]
     pure $ toOL
       $ existential
