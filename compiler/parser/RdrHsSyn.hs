@@ -3363,7 +3363,7 @@ mkInterfaceDecl tycon requires decls = do
               (classInstDecl (hasFetch (rdrNameToType tycon))
                  (unitBag (mkPrimMethod "fetch" "UFetchInterface")))]
 
-        requiresMarkers :: [LhsDeclGhcPs]
+        requiresMarkers :: [LhsDecl GhcPs]
         requiresMarkers = concatMap requiresMarker requires
 
         requiresMarker :: Located RdrName -> [LHsDecl GhcPs]
