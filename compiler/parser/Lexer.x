@@ -637,7 +637,6 @@ data Token
   | ITunit
   | ITsignature
   | ITdependency
-  | ITrequires
 
   | ITdaml
   | ITtemplate
