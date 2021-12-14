@@ -3288,6 +3288,28 @@ mkImplementsInstances templateType interfaceType =
   , mkHasFromInterfaceInstance templateType interfaceType
   ]
 
+mkSelfImplementsInstances :: LHsType GhcPs -> [LHsDecl GhcPs]
+mkSelfImplementsInstances iface =
+  [ instDecl $ classInstDecl
+      (hasToInterfaceClass `mkAppTy` iface `mkAppTy` iface)
+      (unitBag (mkTemplateClassMethod "_toInterface" [mkVarPat this] (mkUnqualVar this) Nothing))
+  , instDecl $ classInstDecl
+      (hasFromInterfaceClass `mkAppTy` iface `mkAppTy` iface)
+      (unitBag (mkTemplateClassMethod "fromInterface" [mkVarPat this] (mkSome (mkUnqualVar this)) Nothing))
+  ]
+  where
+    this = mkVarOcc "this"
+
+mkRequiredImplementsInstances :: LHsType GhcPs -> LHsType GhcPs -> [LHsDecl GhcPs]
+mkRequiredImplementsInstances requiringIface requiredIface =
+  [ instDecl $ classInstDecl
+      (hasToInterfaceClass `mkAppTy` requiringIface `mkAppTy` requiredIface)
+      (unitBag (mkPrimMethod "_toInterface" "EToRequiredInterface"))
+  , instDecl $ classInstDecl
+      (hasFromInterfaceClass `mkAppTy` requiringIface `mkAppTy` requiredIface)
+      (unitBag (mkPrimMethod "fromInterface" "EFromRequiredInterface"))
+  ]
+
 hasInterfaceTypeRepClass :: LHsType GhcPs
 hasInterfaceTypeRepClass = mkQualType "HasInterfaceTypeRep"
 
@@ -3309,6 +3331,12 @@ implementsCon = mkQualVar $ mkDataOcc "ImplementsT"
 mkImplementsConstraint :: LHsType GhcPs -> LHsType GhcPs -> LHsType GhcPs
 mkImplementsConstraint t i = implementsClass `mkAppTy` t `mkAppTy` i
 
+requiresType :: LHsType GhcPs
+requiresType = mkQualType "RequiresT"
+
+requiresCon :: LHsExpr GhcPs
+requiresCon = mkQualVar $ mkDataOcc "RequiresT"
+
 hasMethodClass :: LHsType GhcPs
 hasMethodClass = mkQualClass "HasMethod"
 
@@ -3316,8 +3344,8 @@ mkMethodExpr :: LHsExpr GhcPs
 mkMethodExpr = mkQualVar $ mkVarOcc "mkMethod"
 
 mkInterfaceDecl
-  :: Located RdrName -> [Located InterfaceBodyDecl] -> P (OrdList (LHsDecl GhcPs))
-mkInterfaceDecl tycon decls = do
+  :: Located RdrName -> [Located RdrName] -> [Located InterfaceBodyDecl] -> P (OrdList (LHsDecl GhcPs))
+mkInterfaceDecl tycon requires decls = do
     let existential :: LHsDecl GhcPs
         existential = noLoc $ TyClD noExt $ DataDecl
             { tcdDExt = noExt
@@ -3349,13 +3377,54 @@ mkInterfaceDecl tycon decls = do
         hasInterfaceTypeRepInstance = mkHasInterfaceTypeRepInstance ifaceTy
 
         existentialImplementsInstances :: [LHsDecl GhcPs]
-        existentialImplementsInstances = mkImplementsInstances ifaceTy ifaceTy
+        existentialImplementsInstances = mkSelfImplementsInstances ifaceTy
 
         existentialExerciseInstances :: [LHsDecl GhcPs]
         existentialExerciseInstances =
             [instDecl
-              (classInstDecl (hasFetch (rdrNameToType tycon))
+              (classInstDecl (hasFetch ifaceTy)
                  (unitBag (mkPrimMethod "fetch" "UFetchInterface")))]
+
+        requiresMarkers :: [LHsDecl GhcPs]
+        requiresMarkers = concatMap requiresMarker requires
+
+        requiresMarker :: Located RdrName -> [LHsDecl GhcPs]
+        requiresMarker requiredTycon =
+          let name =
+                mkRdrUnqual $ mkVarOcc $ concat
+                  [ "_requires_", rdrNameToString tycon
+                  , "_", rdrNameToString requiredTycon ]
+              sig =
+                TypeSig noExt [noLoc name] $
+                  mkHsWildCardBndrs $ mkHsImplicitBndrs $
+                    requiresType `mkAppTy` ifaceTy `mkAppTy` rdrNameToType requiredTycon
+              rhs =
+                matchGroup noSrcSpan $
+                  matchWithBinds
+                    (matchContext (noLoc name))
+                    []
+                    noSrcSpan
+                    requiresCon
+                    (noLoc emptyLocalBinds)
+              val =
+                FunBind noExt (noLoc name) rhs WpHole []
+          in
+            [ noLoc (SigD noExt sig)
+            , noLoc (ValD noExt val)
+            ]
+
+        requiresInstances :: [LHsDecl GhcPs]
+        requiresInstances = concat
+          [ mkRequiredImplementsInstances ifaceTy (rdrNameToType requiredTycon)
+          | requiredTycon <- requires
+          , unLoc requiredTycon /= unLoc tycon
+              -- NOTE (Sofia): Circular requirement (self-requirement) is an error, but
+              -- we don't want it to turn into a "duplicate instance" error in the
+              -- GHC typechecker. We want the circular requirement to be visible
+              -- to damlc so that we can generate nicer error messages. That's why
+              -- we don't generate an instance if tycon == requiredTycon, since it
+              -- conflicts with the usual "HasToInterface iface iface" instance.
+          ]
 
         ifaceMethods :: [LHsDecl GhcPs]
         ifaceMethods = concat
@@ -3389,6 +3458,8 @@ mkInterfaceDecl tycon decls = do
       : hasInterfaceTypeRepInstance
       : existentialExerciseInstances
       ++ existentialImplementsInstances
+      ++ requiresMarkers
+      ++ requiresInstances
       ++ ifaceMethods
       ++ ifaceInstances
       ++ choiceInstances
