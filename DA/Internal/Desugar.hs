@@ -154,10 +154,10 @@ data RequiresT a b = RequiresT
 
 class HasMethod i (m : Symbol) r | i m -> r
 
-newtype Method t i (m : Symbol) r = Method { unMethod : t -> r }
+newtype Method t i (m : Symbol) = Method ()
 
-mkMethod : (Implements t i, HasMethod i m r) => (t -> r) -> Method t i m r
-mkMethod = Method
+mkMethod : (Implements t i, HasMethod i m r) => (t -> r) -> Method t i m
+mkMethod _ = Method ()
 
 class HasExerciseGuarded t c r | t c -> r where
   exerciseGuarded : (t -> Bool) -> ContractId t -> c -> Update r
