@@ -3215,7 +3215,7 @@ mkInterfaceImplements templateName conName sharedBinds implements =
   implementsMarker ++ implementsInstances ++ implementsInterfaceMethods
   where
     implementsInstances = mkImplementsInstances templateType interfaceType
-    implementsInterfaceMethods = map mkInterfaceImplementsMethod implementsDefs
+    implementsInterfaceMethods = concatMap mkInterfaceImplementsMethod implementsDefs
     templateType = mkTemplateType (fmap (occNameString . rdrNameOcc) templateName)
     interfaceType = rdrNameToType implementsInterface
     ImplementsDeclBlock
@@ -3247,13 +3247,18 @@ mkInterfaceImplements templateName conName sharedBinds implements =
         , noLoc (ValD noExt val)
         ]
 
-    mkInterfaceImplementsMethod :: Located ImplementsDefinition -> LHsDecl GhcPs
+    mkInterfaceImplementsMethod :: Located ImplementsDefinition -> [LHsDecl GhcPs]
     mkInterfaceImplementsMethod (L loc (ImplementsFunction (name, exp))) =
       let
         fullMethodName =
           noLoc $ mkRdrUnqual $ mkVarOcc $
             "_method_"
               ++ intercalate "_" (rdrNameToString <$> [templateName, implementsInterface, name])
+        methodNameSymbol = mkSymbol (occNameString $ rdrNameOcc $ unLoc name)
+        sig =
+          TypeSig noExt [fullMethodName] $
+            mkHsWildCardBndrs $ mkHsImplicitBndrs $
+              methodType `mkAppTy` templateType `mkAppTy` interfaceType `mkAppTy` methodNameSymbol
         this = asPatRecWild "this" conName
         args = [this]
         localBinds = allLetBindings True args sharedBinds
@@ -3262,12 +3267,16 @@ mkInterfaceImplements templateName conName sharedBinds implements =
           mkMethodExpr
           `mkAppType` templateType
           `mkAppType` interfaceType
-          `mkAppType` mkSymbol (occNameString $ rdrNameOcc $ unLoc name)
+          `mkAppType` methodNameSymbol
           `mkApp` mkParExpr impl
         ctx = matchContext fullMethodName
         match = matchWithBinds ctx [] loc body (noLoc (EmptyLocalBinds noExt))
         matchGroup = MG noExt (noLoc [noLoc match]) Generated
-      in noLoc (ValD noExt (FunBind noExt fullMethodName matchGroup WpHole []))
+        val = FunBind noExt fullMethodName matchGroup WpHole []
+      in
+        [ noLoc (SigD noExt sig)
+        , noLoc (ValD noExt val)
+        ]
 
 mkHasInterfaceTypeRepInstance :: LHsType GhcPs -> LHsDecl GhcPs
 mkHasInterfaceTypeRepInstance ifaceTy =
@@ -3344,6 +3353,9 @@ requiresCon = mkQualVar $ mkDataOcc "RequiresT"
 
 hasMethodClass :: LHsType GhcPs
 hasMethodClass = mkQualClass "HasMethod"
+
+methodType :: LHsType GhcPs
+methodType = mkQualType "Method"
 
 mkMethodExpr :: LHsExpr GhcPs
 mkMethodExpr = mkQualVar $ mkVarOcc "mkMethod"
