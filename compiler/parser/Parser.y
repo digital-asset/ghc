@@ -4258,8 +4258,8 @@ warnControllerCan span = do
             text "it will be removed in a future version of Daml." $$
             text "Instead, use 'choice ... with ... controller' syntax." $$
             text "Note that 'choice ... with ... controller' syntax does not " $$
-            text "implictly add the controller as an observer," $$
-            text "so it must be added explictly as one (or as a signatory)."
+            text "implicitly add the controller as an observer," $$
+            text "so it must be added explicitly as one (or as a signatory)."
 
 -- When two single quotes don't followed by tyvar or gtycon, we report the
 -- error as empty character literal, or TH quote that missing proper type
