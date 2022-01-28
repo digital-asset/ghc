@@ -1221,7 +1221,7 @@ let_bindings_decl :: { Located ([AddAnn], LHsLocalBinds GhcPs) }
                                              , snd $ unLoc $2) }
 
 implements_group_decl :: { Located ImplementsDeclBlock }
-  : 'implements' tycon 'where' implements_decl_list { sL1 $1 $ ImplementsDeclBlock $2 $4 }
+  : 'implements' qtycon 'where' implements_decl_list { sL1 $1 $ ImplementsDeclBlock $2 $4 }
 
 implements_decl_list :: { [Located ImplementsDefinition] }
   : '{' implements_decls '}' { reverse $2 }
