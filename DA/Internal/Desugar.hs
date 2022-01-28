@@ -109,6 +109,27 @@ class HasToAnyChoice t c r | t c -> r where
 class HasFromAnyChoice t c r | t c -> r where
   _fromAnyChoice : proxy t -> Any -> Optional c
 
+class HasKey t k | t -> k where
+  key : t -> k
+
+class HasLookupByKey t k | t -> k where
+  lookupByKey : k -> Update (Optional (ContractId t))
+
+class HasFetchByKey t k | t -> k where
+  fetchByKey : k -> Update (ContractId t, t)
+
+class HasMaintainer t k | t -> k where
+  _maintainer : proxy t -> k -> [Party]
+
+class HasToAnyContractKey t k | t -> k where
+  _toAnyContractKey : proxy t -> k -> Any
+
+class HasFromAnyContractKey t k | t -> k where
+  _fromAnyContractKey : proxy t -> Any -> Optional k
+
+class HasExerciseByKey t k c r | t -> k, t c -> r where
+  _exerciseByKey : proxy t -> k -> c -> Update r
+
 class HasIsInterfaceType t where
   _isInterfaceType : proxy t -> Bool
 

@@ -2879,6 +2879,19 @@ mkChoiceInstanceDecl templateName CombinedChoiceData { ccdChoiceData = ChoiceDat
     mkClass name = foldl' mkAppTy (mkQualClass name) [templateType, choiceType, returnType]
     mkInstance name method = instDecl $ classInstDecl (mkClass name) $ unitBag method
 
+-- | Construct the HasExerciseByKey instance.
+mkChoiceByKeyInstanceDecl :: Located String -> ValidTemplate -> CombinedChoiceData -> [LHsDecl GhcPs]
+mkChoiceByKeyInstanceDecl templateName ValidTemplate{..} CombinedChoiceData { ccdChoiceData = ChoiceData{..} }
+  | Just (L _ KeyData{..}) <- vtKeyData =
+    let
+      templateType = mkTemplateType templateName
+      choiceType = mkChoiceType cdChoiceName
+      returnType = mkParenTy cdChoiceReturnTy
+      mkClass name = foldl' mkAppTy (mkQualClass name) [templateType, kdKeyType, choiceType, returnType]
+      mkInstance name method = instDecl $ classInstDecl (mkClass name) $ unitBag method
+    in [ mkInstance "HasExerciseByKey" (mkPrimMethod "_exerciseByKey" "UExerciseByKey") ]
+  | otherwise = []
+
 mkInterfaceFixedChoiceInstanceDecl :: Located RdrName -> InterfaceChoiceSignature -> [LHsDecl GhcPs]
 mkInterfaceFixedChoiceInstanceDecl tycon InterfaceChoiceSignature {..} =
   [ mkInstance "HasToAnyChoice"
@@ -2929,7 +2942,7 @@ mkInterfaceFixedChoiceInstanceDecl tycon InterfaceChoiceSignature {..} =
       instDecl $ classInstDecl (addContext ctx (mkClass name)) $ unitBag method
 
 -- | Construct instances for the split-up `TemplateKey` typeclass, i.e., instances fr all single-method typeclasses
--- that constitute the `Choice` constraint synonym.
+-- that constitute the `TemplateKey` constraint synonym.
 mkKeyInstanceDecl :: LHsLocalBinds GhcPs -> Located String -> Located RdrName -> ValidTemplate -> [LHsDecl GhcPs]
 mkKeyInstanceDecl sharedBinds templateName conName ValidTemplate{..}
   | Just (L _ KeyData{..}) <- vtKeyData =
@@ -3203,11 +3216,12 @@ mkTemplateDecls templateName fields decls = do
       choicesWithArchive = mkArchiveChoice : vtChoices
       templateInstances = mkTemplateInstanceDecl sharedBinds templateName conName vt
       choiceInstanceDecls = concatMap (mkChoiceInstanceDecl templateName) choicesWithArchive
+      choiceByKeyInstanceDecls = concatMap (mkChoiceByKeyInstanceDecl templateName vt) choicesWithArchive
       choiceDecls = concatMap (mkChoiceDecls (getLoc templateName) conName sharedBinds) choicesWithArchive
       keyInstanceDecl = mkKeyInstanceDecl sharedBinds templateName conName vt
       templateInterfaceImplements = concatMap (mkInterfaceImplements vtTemplateName conName sharedBinds) vtImplements
   return $ toOL $ templateDataDecl : choiceDataDecls ++ letDecls
-               ++ templateInstances ++ (choiceInstanceDecls ++ choiceDecls ++ keyInstanceDecl)
+               ++ templateInstances ++ (choiceInstanceDecls ++ choiceDecls ++ choiceByKeyInstanceDecls ++ keyInstanceDecl)
                ++ templateInterfaceImplements
 
 mkInterfaceImplements :: Located RdrName -> Located RdrName -> LHsLocalBinds GhcPs -> ImplementsDeclBlock -> [LHsDecl GhcPs]
