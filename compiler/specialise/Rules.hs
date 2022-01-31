@@ -62,7 +62,7 @@ import FastString
 import Maybes
 import Bag
 import Util
-import Data.List
+import Data.List hiding (singleton)
 import Data.Ord
 import Control.Monad    ( guard )
 

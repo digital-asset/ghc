@@ -138,7 +138,7 @@ import PlainPanic
 import Data.Data
 import Data.IORef       ( IORef, newIORef, atomicModifyIORef' )
 import System.IO.Unsafe ( unsafePerformIO )
-import Data.List        hiding (group)
+import Data.List        hiding (group, singleton)
 
 import GHC.Exts
 import GHC.Stack (HasCallStack)
