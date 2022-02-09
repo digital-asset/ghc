@@ -140,7 +140,7 @@ _typeRepForInterfaceExercise p =
     else Some (_templateTypeRep p)
 
 class HasInterfaceTypeRep i where
-  interfaceTypeRep : i -> TypeRep
+  _interfaceTypeRep : i -> TypeRep
 
 class HasToInterface t i where
   _toInterface : t -> i

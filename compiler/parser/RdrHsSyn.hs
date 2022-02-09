@@ -3296,7 +3296,7 @@ mkHasInterfaceTypeRepInstance :: LHsType GhcPs -> LHsDecl GhcPs
 mkHasInterfaceTypeRepInstance ifaceTy =
   instDecl $ classInstDecl
     (hasInterfaceTypeRepClass `mkAppTy` ifaceTy)
-    (unitBag (mkPrimMethod "interfaceTypeRep" "EInterfaceTemplateTypeRep"))
+    (unitBag (mkPrimMethod "_interfaceTypeRep" "EInterfaceTemplateTypeRep"))
 
 mkHasToInterfaceInstance :: LHsType GhcPs -> LHsType GhcPs -> LHsDecl GhcPs
 mkHasToInterfaceInstance tplTy ifaceTy =
