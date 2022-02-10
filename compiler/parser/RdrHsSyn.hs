@@ -2429,6 +2429,17 @@ mkFalse = mkQualVar $ mkDataOcc "False"
 mkTrue :: LHsExpr GhcPs
 mkTrue = mkQualVar $ mkDataOcc "True"
 
+-- Boolean operators
+mkAnd :: LHsExpr GhcPs -> LHsExpr GhcPs -> LHsExpr GhcPs
+mkAnd = mkHsApp2 (mkQualVar $ mkVarOcc "&&")
+
+mkEq :: LHsExpr GhcPs -> LHsExpr GhcPs -> LHsExpr GhcPs
+mkEq = mkHsApp2 (mkQualVar $ mkVarOcc "==")
+
+-- Helper for operators
+mkHsApp2 :: LHsExpr GhcPs -> LHsExpr GhcPs -> LHsExpr GhcPs -> LHsExpr GhcPs
+mkHsApp2 a b c = mkHsApp (mkHsApp a b) c
+
 -- Wrap a type in parentheses, preserving the location of the original type.
 mkParenTy :: LHsType GhcPs -> LHsType GhcPs
 mkParenTy ty = L (getLoc ty) (HsParTy noExt ty)
@@ -2854,6 +2865,7 @@ mkInterfaceInstanceDecl interfaceType interfacePrecondM =
   , mkInstance "HasCreate" $ mkPrimMethod "create" "UCreateInterface"
   , mkInstance "HasEnsure" $ mkMethod "ensure" [this] (fromMaybe mkTrue interfacePrecondM)
   , mkInstance "HasIsInterfaceType" $ mkMethod "_isInterfaceType" [proxy] mkTrue
+  , mkInstance "Eq" eqMethod
   ]
   where
     mkInstance name method =
@@ -2863,6 +2875,37 @@ mkInterfaceInstanceDecl interfaceType interfacePrecondM =
     mkMethod :: String -> [Pat GhcPs] -> LHsExpr GhcPs -> LHsBind GhcPs
     mkMethod methodName args methodBody =
       mkTemplateClassMethod methodName args methodBody Nothing
+
+    eqMethod =
+      let
+        l, lrep, r, rrep :: RdrName
+        l = mkRdrUnqual $ mkVarOcc "l"
+        lrep = mkRdrUnqual $ mkVarOcc "lrep"
+        r = mkRdrUnqual $ mkVarOcc "r"
+        rrep = mkRdrUnqual $ mkVarOcc "rrep"
+
+        lPat, rPat :: Pat GhcPs
+        lPat = mkRdrPat l
+        rPat = mkRdrPat r
+
+        lExp, lrepExp, rExp, rrepExp :: LHsExpr GhcPs
+        lExp = mkRdrExp l
+        lrepExp = mkRdrExp lrep
+        rExp = mkRdrExp r
+        rrepExp = mkRdrExp rrep
+
+        typeRepBinds =
+          let lrepBind = functionBind lrep [] (interfaceTypeRepExp `mkHsApp` lExp)
+              rrepBind = functionBind rrep [] (interfaceTypeRepExp `mkHsApp` rExp)
+          in mkLetBindings $ listToBag $ map noLoc [lrepBind, rrepBind]
+
+      in mkTemplateClassMethod
+        "=="
+        [lPat, rPat]
+        (mkAnd
+          (mkParExpr (mkEq lrepExp rrepExp))
+          (mkParExpr (mkHsApp2 (mkPrimitive "primitive" "BEEqual") lExp rExp)))
+        (Just typeRepBinds)
 
 -- | Construct instances for split-up `Choice` typeclass, i.e., instances for all single-method typeclasses
 -- that constitute the `Choice` constraint synonym.
@@ -3374,6 +3417,9 @@ methodType = mkQualType "Method"
 mkMethodExpr :: LHsExpr GhcPs
 mkMethodExpr = mkQualVar $ mkVarOcc "mkMethod"
 
+interfaceTypeRepExp :: LHsExpr GhcPs
+interfaceTypeRepExp = mkQualVar $ mkVarOcc "interfaceTypeRep"
+
 mkInterfaceDecl
   :: Located RdrName -> [Located RdrName] -> [Located InterfaceBodyDecl] -> P (OrdList (LHsDecl GhcPs))
 mkInterfaceDecl tycon requires decls = do
@@ -3514,7 +3560,7 @@ shareTemplateLetBindings conName vtLetBindings =
     vars = collectLocalBinders (unLoc vtLetBindings)
 
     letDecl :: LHsDecl GhcPs
-    letDecl = functionBind letFnName defArgs (noLoc $ HsLet noExt binds body)
+    letDecl = functionBindDecl letFnName defArgs (noLoc $ HsLet noExt binds body)
       where
         defArgs = [this]
         this = asPatRecWild "this" conName
@@ -3538,13 +3584,16 @@ shareTemplateLetBindings conName vtLetBindings =
         exp :: LHsExpr GhcPs
         exp = mkApp (mkRdrExp letFnName) (mkUnqualVar $ mkVarOcc "this")
 
-
-functionBind :: RdrName -> [Pat GhcPs] -> LHsExpr GhcPs -> LHsDecl GhcPs
+functionBind :: RdrName -> [Pat GhcPs] -> LHsExpr GhcPs -> HsBind GhcPs
 functionBind name args body = do
   let mc = matchContext $ noLoc name
   let match = matchWithBinds mc args noSrcSpan body (noLoc emptyLocalBinds)
   let mg = matchGroup noSrcSpan $ match
-  let bind = funBind (noLoc name) mg
+  funBind (noLoc name) mg
+
+functionBindDecl :: RdrName -> [Pat GhcPs] -> LHsExpr GhcPs -> LHsDecl GhcPs
+functionBindDecl name args body = do
+  let bind = functionBind name args body
   noLoc (ValD noExt bind)
 
 ------------
