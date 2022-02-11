@@ -3424,7 +3424,7 @@ mkInterfaceDecl
   :: Located RdrName -> [Located RdrName] -> [Located InterfaceBodyDecl] -> P (OrdList (LHsDecl GhcPs))
 mkInterfaceDecl tycon requires decls = do
     let existential :: LHsDecl GhcPs
-        existential = noLoc $ TyClD noExt $ DataDecl
+        existential = cL (getLoc tycon) $ TyClD noExt $ DataDecl
             { tcdDExt = noExt
             , tcdLName = tycon
             , tcdTyVars = mkHsQTvs []
