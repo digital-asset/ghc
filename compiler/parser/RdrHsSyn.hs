@@ -2611,14 +2611,23 @@ mkTemplateClassMethod ::
   -> LHsExpr GhcPs               -- ^ function body
   -> Maybe (LHsLocalBinds GhcPs) -- ^ local binds
   -> LHsBind GhcPs               -- ^ function binding
-mkTemplateClassMethod rawMethodName args body mBinds = do
+mkTemplateClassMethod rawMethodName =
   let fullMethodName = noLoc $ mkRdrUnqual $ mkVarOcc rawMethodName
-      ctx = matchContext fullMethodName
+  in mkBind fullMethodName
+
+mkBind ::
+     Located RdrName             -- ^ bound name
+  -> [Pat GhcPs]                 -- ^ argument patterns
+  -> LHsExpr GhcPs               -- ^ RHS
+  -> Maybe (LHsLocalBinds GhcPs) -- ^ local binds
+  -> LHsBind GhcPs               -- ^ function binding
+mkBind boundName args body mBinds = do
+  let ctx = matchContext boundName
       loc = getLoc body
       binds = fromMaybe (noLoc emptyLocalBinds) mBinds
       match = matchWithBinds ctx args loc body binds
       match_group = matchGroup loc match
-  L loc $ funBind fullMethodName match_group
+  L loc $ funBind boundName match_group
 
 mkPrimitive :: String -> String -> LHsExpr GhcPs
 mkPrimitive primitive methodName =
@@ -2641,7 +2650,7 @@ mkPrimMethod :: String -> String -> LHsBind GhcPs
 mkPrimMethod methodName primArg =
   mkTemplateClassMethod methodName [] (mkPrimitive "primitive" primArg) Nothing
 
-mkPrimInterfaceMethod :: LHsType GhcPs -> String -> String -> LHsBind GhcPs
+mkPrimInterfaceMethod :: LHsType GhcPs -> Located RdrName -> String -> LHsBind GhcPs
 mkPrimInterfaceMethod ifaceTy methodName primArg =
   let t = mkVarOcc "t"
       args = [mkVarPat t]
@@ -2654,7 +2663,7 @@ mkPrimInterfaceMethod ifaceTy methodName primArg =
             `mkAppType` ifaceTy
             `mkApp` mkUnqualVar t
             )
-  in mkTemplateClassMethod methodName args rhs Nothing
+  in mkBind methodName args rhs Nothing
 
 data DataDeclName = TemplateName (Located RdrName) | ChoiceName (Located RdrName)
 
@@ -2843,15 +2852,15 @@ mkInterfaceMethodDecl ifaceTy classTy methodName methodType mbDocString =
           `mkAppTy` mkParenTy methodType
         methodNameType = addLoc (getLoc methodName) $ mkSymbol $ occNameString $ rdrNameOcc $ unLoc methodName
 
-    topLevelFuncSig = noLoc $ SigD noExt $ TypeSig noExt [methodName] (mkLHsSigWcType $ noLoc ty)
+    topLevelFuncSig = L (getLoc methodName) $ SigD noExt $ TypeSig noExt [methodName] (mkLHsSigWcType $ noLoc ty)
       where
         ty = HsQualTy noExt tyCtx tyRhs
         tyCtx = noLoc [mkImplementsConstraint classTy ifaceTy]
         tyRhs = noLoc $ HsFunTy noExt classTy methodType
 
-    topLevelFuncDef = noLoc $ ValD noExt (unLoc rhs)
+    topLevelFuncDef = L (getLoc methodName) $ ValD noExt (unLoc rhs)
       where
-        rhs = mkPrimInterfaceMethod ifaceTy name name
+        rhs = mkPrimInterfaceMethod ifaceTy methodName name
         name = occNameString $ occName rdrName
         L _ rdrName = methodName
 
