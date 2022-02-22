@@ -2874,7 +2874,7 @@ mkInterfaceInstanceDecl interfaceType interfacePrecondM =
   , mkInstance "HasCreate" $ mkPrimMethod "create" "UCreateInterface"
   , mkInstance "HasEnsure" $ mkMethod "ensure" [this] (fromMaybe mkTrue interfacePrecondM)
   , mkInstance "HasIsInterfaceType" $ mkMethod "_isInterfaceType" [proxy] mkTrue
-  , mkInstance "Eq" eqMethod
+  , mkInstance "Eq" $ mkPrimMethod "==" "BEEqual"
   ]
   where
     mkInstance name method =
@@ -2884,37 +2884,6 @@ mkInterfaceInstanceDecl interfaceType interfacePrecondM =
     mkMethod :: String -> [Pat GhcPs] -> LHsExpr GhcPs -> LHsBind GhcPs
     mkMethod methodName args methodBody =
       mkTemplateClassMethod methodName args methodBody Nothing
-
-    eqMethod =
-      let
-        l, lrep, r, rrep :: RdrName
-        l = mkRdrUnqual $ mkVarOcc "l"
-        lrep = mkRdrUnqual $ mkVarOcc "lrep"
-        r = mkRdrUnqual $ mkVarOcc "r"
-        rrep = mkRdrUnqual $ mkVarOcc "rrep"
-
-        lPat, rPat :: Pat GhcPs
-        lPat = mkRdrPat l
-        rPat = mkRdrPat r
-
-        lExp, lrepExp, rExp, rrepExp :: LHsExpr GhcPs
-        lExp = mkRdrExp l
-        lrepExp = mkRdrExp lrep
-        rExp = mkRdrExp r
-        rrepExp = mkRdrExp rrep
-
-        typeRepBinds =
-          let lrepBind = functionBind lrep [] (interfaceTypeRepExp `mkHsApp` lExp)
-              rrepBind = functionBind rrep [] (interfaceTypeRepExp `mkHsApp` rExp)
-          in mkLetBindings $ listToBag $ map noLoc [lrepBind, rrepBind]
-
-      in mkTemplateClassMethod
-        "=="
-        [lPat, rPat]
-        (mkAnd
-          (mkParExpr (mkEq lrepExp rrepExp))
-          (mkParExpr (mkHsApp2 (mkPrimitive "primitive" "BEEqual") lExp rExp)))
-        (Just typeRepBinds)
 
 -- | Construct instances for split-up `Choice` typeclass, i.e., instances for all single-method typeclasses
 -- that constitute the `Choice` constraint synonym.
