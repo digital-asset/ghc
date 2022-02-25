@@ -2229,8 +2229,8 @@ data KeyData = KeyData {
   }
 
 data InterfaceBodyDecl
-  = InterfaceFunctionSignature (Located RdrName) (LHsType GhcPs) (Maybe LHsDocString)
-  | InterfaceChoice InterfaceChoiceSignature InterfaceChoiceBody
+  = InterfaceFunctionSignatureDecl (Located RdrName) (LHsType GhcPs) (Maybe LHsDocString)
+  | InterfaceChoiceDecl InterfaceChoiceSignature InterfaceChoiceBody
   | InterfaceEnsureDecl (LHsExpr GhcPs)
 
 data InterfaceChoiceSignature = InterfaceChoiceSignature
@@ -3484,7 +3484,7 @@ mkInterfaceDecl tycon requires decls = do
         ifaceMethods :: [LHsDecl GhcPs]
         ifaceMethods = concat
           [ mkInterfaceMethodDecl ifaceTy classTy methodName methodType mbDocString
-          | L _ (InterfaceFunctionSignature methodName methodType mbDocString) <- decls
+          | L _ (InterfaceFunctionSignatureDecl methodName methodType mbDocString) <- decls
           ]
 
         ifaceInstances :: [LHsDecl GhcPs]
@@ -3494,18 +3494,18 @@ mkInterfaceDecl tycon requires decls = do
         choiceInstances :: [LHsDecl GhcPs]
         choiceInstances = concat $
             [ mkInterfaceFixedChoiceInstanceDecl tycon choiceSig
-            | L _l (InterfaceChoice choiceSig _) <- decls
+            | L _l (InterfaceChoiceDecl choiceSig _) <- decls
             ]
 
         choiceDecls :: [LHsDecl GhcPs]
         choiceDecls = concat $
             [ mkChoiceDecls (getLoc tycon) tycon (noLoc (EmptyLocalBinds noExt))
                 (interfaceChoiceToCombinedChoiceData choiceSig choiceBody)
-            | L _l (InterfaceChoice choiceSig choiceBody) <- decls
+            | L _l (InterfaceChoiceDecl choiceSig choiceBody) <- decls
             ]
     choiceTys <- concat <$> sequence
             [ mkChoiceDataDecls $ interfaceChoiceToCombinedChoiceData choiceSig choiceBody
-            | L _l (InterfaceChoice choiceSig choiceBody) <- decls
+            | L _l (InterfaceChoiceDecl choiceSig choiceBody) <- decls
             ]
     pure $ toOL
       $ existential
