@@ -82,7 +82,8 @@ library
         ghc-boot-th      == @ProjectVersionMunged@,
         ghc-heap         == @ProjectVersionMunged@,
         template-haskell == 2.15.*,
-        transformers     == 0.5.*
+        transformers     == 0.5.*,
+        ghc-prim
 
     if !os(windows)
         Build-Depends: unix >= 2.7 && < 2.9
