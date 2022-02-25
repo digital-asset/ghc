@@ -6,12 +6,13 @@
 
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MagicHash #-}
-{-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE ViewPatterns #-}
 
 module   RdrHsSyn (
         mkHsOpApp,
@@ -2233,6 +2234,63 @@ data InterfaceBodyDecl
   | InterfaceChoiceDecl InterfaceChoiceSignature InterfaceChoiceBody
   | InterfaceEnsureDecl (LHsExpr GhcPs)
 
+data InterfaceBodyDecls = InterfaceBodyDecls
+  { ibdFunctionSignatures :: [(Located RdrName, LHsType GhcPs, Maybe LHsDocString)]
+  , ibdChoices :: [(InterfaceChoiceSignature, InterfaceChoiceBody)]
+  , ibdEnsures :: [LHsExpr GhcPs]
+  }
+
+instance Semigroup InterfaceBodyDecls where
+  a <> b = InterfaceBodyDecls
+    { ibdFunctionSignatures = ibdFunctionSignatures a Monoid.<> ibdFunctionSignatures b
+    , ibdChoices = ibdChoices a Monoid.<> ibdChoices b
+    , ibdEnsures = ibdEnsures a Monoid.<> ibdEnsures b
+    }
+
+instance Monoid InterfaceBodyDecls where
+  mempty = InterfaceBodyDecls [] [] []
+
+interfaceBodyDeclToDecls :: InterfaceBodyDecl -> InterfaceBodyDecls
+interfaceBodyDeclToDecls = \case
+  InterfaceFunctionSignatureDecl name ty mbDocString -> mempty { ibdFunctionSignatures = [(name, ty, mbDocString)] }
+  InterfaceChoiceDecl signature body                 -> mempty { ibdChoices = [(signature, body)] }
+  InterfaceEnsureDecl ensure                         -> mempty { ibdEnsures = [ensure] }
+
+extractInterfaceBodyDecls :: [Located InterfaceBodyDecl] -> InterfaceBodyDecls
+extractInterfaceBodyDecls = foldMap (interfaceBodyDeclToDecls . unLoc)
+
+data ValidInterface = ValidInterface
+  { viInterfaceName :: Located RdrName
+  , viRequiredInterfaces :: [Located RdrName]
+  , viFunctionSignatures :: [(Located RdrName, LHsType GhcPs, Maybe LHsDocString)]
+  , viChoices :: [(InterfaceChoiceSignature, InterfaceChoiceBody)]
+  , viEnsure :: Maybe (LHsExpr GhcPs)
+  }
+
+validateInterface ::
+     Located RdrName
+  -> [Located RdrName]
+  -> [Located InterfaceBodyDecl]
+  -> P ValidInterface
+validateInterface name requires decls = do
+  viEnsure <- case ibdEnsures of
+    [] -> pure Nothing
+    (e:es) -> do
+      mapM_ (\e' -> report (getLoc e') "Multiple 'ensure' declarations") es
+      pure (Just e)
+  pure ValidInterface
+    { viInterfaceName = name
+    , viRequiredInterfaces = requires
+    , viFunctionSignatures = ibdFunctionSignatures
+    , viChoices = ibdChoices
+    , viEnsure = listToMaybe ibdEnsures
+    }
+  where
+    InterfaceBodyDecls {..} = extractInterfaceBodyDecls decls
+
+    report :: SrcSpan -> String -> P a
+    report loc e = addFatalError loc (text e)
+
 data InterfaceChoiceSignature = InterfaceChoiceSignature
       { ifChoiceConsumption :: Maybe ChoiceConsuming
       , ifChoiceName :: Located RdrName
@@ -3401,10 +3459,12 @@ interfaceTypeRepExp = mkQualVar $ mkVarOcc "interfaceTypeRep"
 mkInterfaceDecl
   :: Located RdrName -> [Located RdrName] -> [Located InterfaceBodyDecl] -> P (OrdList (LHsDecl GhcPs))
 mkInterfaceDecl tycon requires decls = do
-    let existential :: LHsDecl GhcPs
-        existential = cL (getLoc tycon) $ TyClD noExt $ DataDecl
+    ValidInterface {..} <- validateInterface tycon requires decls
+    let ifaceTy = rdrNameToType viInterfaceName
+        existential :: LHsDecl GhcPs
+        existential = cL (getLoc viInterfaceName) $ TyClD noExt $ DataDecl
             { tcdDExt = noExt
-            , tcdLName = tycon
+            , tcdLName = viInterfaceName
             , tcdTyVars = mkHsQTvs []
             , tcdFixity = Prefix
             , tcdDataDefn = HsDataDefn
@@ -3416,7 +3476,7 @@ mkInterfaceDecl tycon requires decls = do
                 , dd_cons =
                     [ noLoc $ ConDeclH98
                         { con_ext = noExt
-                        , con_name = L (getLoc tycon) $ Unqual $ mkDataOcc (occNameString $ occName $ unLoc tycon)
+                        , con_name = L (getLoc viInterfaceName) $ Unqual $ mkDataOcc (occNameString $ occName $ unLoc viInterfaceName)
                         , con_forall = noLoc False
                         , con_ex_tvs = []
                         , con_mb_cxt = Nothing
@@ -3441,13 +3501,13 @@ mkInterfaceDecl tycon requires decls = do
                  (unitBag (mkPrimMethod "fetch" "UFetchInterface")))]
 
         requiresMarkers :: [LHsDecl GhcPs]
-        requiresMarkers = concatMap requiresMarker requires
+        requiresMarkers = concatMap requiresMarker viRequiredInterfaces
 
         requiresMarker :: Located RdrName -> [LHsDecl GhcPs]
         requiresMarker requiredTycon =
           let name =
                 mkRdrUnqual $ mkVarOcc $ concat
-                  [ "_requires_", rdrNameToString tycon
+                  [ "_requires_", rdrNameToString viInterfaceName
                   , "_", rdrNameToString requiredTycon ]
               sig =
                 TypeSig noExt [noLoc name] $
@@ -3471,41 +3531,41 @@ mkInterfaceDecl tycon requires decls = do
         requiresInstances :: [LHsDecl GhcPs]
         requiresInstances = concat
           [ mkRequiredImplementsInstances ifaceTy (rdrNameToType requiredTycon)
-          | requiredTycon <- requires
-          , unLoc requiredTycon /= unLoc tycon
+          | requiredTycon <- viRequiredInterfaces
+          , unLoc requiredTycon /= unLoc viInterfaceName
               -- NOTE (Sofia): Circular requirement (self-requirement) is an error, but
               -- we don't want it to turn into a "duplicate instance" error in the
               -- GHC typechecker. We want the circular requirement to be visible
               -- to damlc so that we can generate nicer error messages. That's why
-              -- we don't generate an instance if tycon == requiredTycon, since it
+              -- we don't generate an instance if viInterfaceName == requiredTycon, since it
               -- conflicts with the usual "HasToInterface iface iface" instance.
           ]
 
         ifaceMethods :: [LHsDecl GhcPs]
         ifaceMethods = concat
           [ mkInterfaceMethodDecl ifaceTy classTy methodName methodType mbDocString
-          | L _ (InterfaceFunctionSignatureDecl methodName methodType mbDocString) <- decls
+          | (methodName, methodType, mbDocString) <- viFunctionSignatures
           ]
 
         ifaceInstances :: [LHsDecl GhcPs]
         ifaceInstances =
-          mkInterfaceInstanceDecl ifaceTy (listToMaybe [decl | L _l (InterfaceEnsureDecl decl) <- decls])
+          mkInterfaceInstanceDecl ifaceTy viEnsure
 
         choiceInstances :: [LHsDecl GhcPs]
         choiceInstances = concat $
-            [ mkInterfaceFixedChoiceInstanceDecl tycon choiceSig
-            | L _l (InterfaceChoiceDecl choiceSig _) <- decls
+            [ mkInterfaceFixedChoiceInstanceDecl viInterfaceName choiceSig
+            | (choiceSig, _) <- viChoices
             ]
 
         choiceDecls :: [LHsDecl GhcPs]
         choiceDecls = concat $
-            [ mkChoiceDecls (getLoc tycon) tycon (noLoc (EmptyLocalBinds noExt))
+            [ mkChoiceDecls (getLoc viInterfaceName) viInterfaceName (noLoc (EmptyLocalBinds noExt))
                 (interfaceChoiceToCombinedChoiceData choiceSig choiceBody)
-            | L _l (InterfaceChoiceDecl choiceSig choiceBody) <- decls
+            | (choiceSig, choiceBody) <- viChoices
             ]
     choiceTys <- concat <$> sequence
             [ mkChoiceDataDecls $ interfaceChoiceToCombinedChoiceData choiceSig choiceBody
-            | L _l (InterfaceChoiceDecl choiceSig choiceBody) <- decls
+            | (choiceSig, choiceBody) <- viChoices
             ]
     pure $ toOL
       $ existential
@@ -3520,7 +3580,6 @@ mkInterfaceDecl tycon requires decls = do
       ++ choiceTys
       ++ choiceDecls
   where
-    ifaceTy = rdrNameToType tycon
     classVar = noLoc $ Unqual (mkTyVarOcc "t")
     classTy = noLoc $ HsTyVar noExt NotPromoted classVar
     hasFetch t = mkQualClass "HasFetch" `mkAppTy` t
