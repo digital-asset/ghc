@@ -413,7 +413,10 @@ mkRoleAnnotDecl loc tycon roles
 
 --  | Groups together bindings for a single function
 cvTopDecls :: OrdList (LHsDecl GhcPs) -> [LHsDecl GhcPs]
-cvTopDecls decls = go (fromOL decls)
+cvTopDecls decls = groupValDecls (fromOL decls)
+
+groupValDecls :: [LHsDecl GhcPs] -> [LHsDecl GhcPs]
+groupValDecls = go
   where
     go :: [LHsDecl GhcPs] -> [LHsDecl GhcPs]
     go []                     = []
@@ -3135,7 +3138,7 @@ validateTemplate vtTemplateName tbd@TemplateBodyDecls{..}
 
     validateImplementsBlock :: Located ParsedImplementsDeclBlock -> P ValidImplementsDeclBlock
     validateImplementsBlock (L _ (ParsedImplementsDeclBlock iface decls)) = do
-      impls <- mapM validateMethodImpl decls
+      impls <- mapM validateMethodImpl (groupValDecls (reverse decls))
       pure (ValidImplementsDeclBlock iface impls)
 
     validateMethodImpl :: LHsDecl GhcPs -> P (Located ValidImplementsMethodDecl)
