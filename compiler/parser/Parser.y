@@ -1341,7 +1341,7 @@ tyapp_ :: { Located TyEl }
 -- interfaces
 
 interface_decl :: { OrdList (LHsDecl GhcPs) }
-  : 'interface' tycon requires_clause 'where' interface_body {% mkInterfaceDecl $2 $3 (unLoc $5) }
+  : 'interface' tycon requires_clause 'where' interface_body {% mkInterfaceDecl $2 $3 (reverse (unLoc $5)) }
 
 requires_clause :: { [Located RdrName] }
   : 'requires' requires_list { $2 }

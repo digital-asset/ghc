@@ -2261,7 +2261,7 @@ interfaceBodyDeclToDecls = \case
   InterfaceEnsureDecl ensure                         -> mempty { ibdEnsures = [ensure] }
 
 extractInterfaceBodyDecls :: [Located InterfaceBodyDecl] -> InterfaceBodyDecls
-extractInterfaceBodyDecls = foldMap (interfaceBodyDeclToDecls . unLoc) . reverse
+extractInterfaceBodyDecls = foldMap (interfaceBodyDeclToDecls . unLoc)
 
 data ValidInterface = ValidInterface
   { viInterfaceName :: Located RdrName
