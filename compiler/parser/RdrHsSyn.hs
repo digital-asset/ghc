@@ -3138,7 +3138,7 @@ validateTemplate vtTemplateName tbd@TemplateBodyDecls{..}
 
     validateImplementsBlock :: Located ParsedImplementsDeclBlock -> P ValidImplementsDeclBlock
     validateImplementsBlock (L _ (ParsedImplementsDeclBlock iface decls)) = do
-      impls <- mapM validateMethodImpl (groupValDecls (reverse decls))
+      impls <- mapM validateMethodImpl (groupValDecls decls)
       pure (ValidImplementsDeclBlock iface impls)
 
     validateMethodImpl :: LHsDecl GhcPs -> P (Located ValidImplementsMethodDecl)

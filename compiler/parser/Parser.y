@@ -1224,7 +1224,7 @@ implements_group_decl :: { Located ParsedImplementsDeclBlock }
   : 'implements' qtycon where_impl { sL1 $1 $ ParsedImplementsDeclBlock $2 $3 }
 
 where_impl :: { [LHsDecl GhcPs] }
-  : where_inst { reverse (fromOL (snd (unLoc $1))) }
+  : where_inst { fromOL (snd (unLoc $1)) }
 
 choice_group_decl :: { Located (LHsExpr GhcPs , Located [Located ChoiceData]) }
   : 'controller' party_list 'can' choice_decl_list
