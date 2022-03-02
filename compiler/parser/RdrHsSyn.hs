@@ -145,6 +145,8 @@ import DynFlags ( WarningFlag(..) )
 import Control.Monad
 import Text.ParserCombinators.ReadP as ReadP
 import Data.Char
+import Data.Function (on)
+import Data.List (groupBy, sortOn)
 import qualified Data.Monoid as Monoid
 import Data.Data       ( dataTypeOf, fromConstr, dataTypeConstrs )
 import Bag
@@ -3139,7 +3141,27 @@ validateTemplate vtTemplateName tbd@TemplateBodyDecls{..}
     validateImplementsBlock :: Located ParsedImplementsDeclBlock -> P ValidImplementsDeclBlock
     validateImplementsBlock (L _ (ParsedImplementsDeclBlock iface decls)) = do
       impls <- mapM validateMethodImpl (groupValDecls decls)
+      checkMultipleDecls iface impls
       pure (ValidImplementsDeclBlock iface impls)
+
+    checkMultipleDecls :: Located RdrName -> [Located ValidImplementsMethodDecl] -> P ()
+    checkMultipleDecls iface impls = mapM_ emitError multipleDecls
+      where
+        emitError ds@(L loc (ValidImplementsMethodDecl methodName _):_) =
+          addFatalError loc $ vcat
+            [ text "Multiple declarations of method"
+              <+> quotes (ppr methodName)
+              <+> text "in template"
+              <+> quotes (ppr vtTemplateName)
+              <+> text "implementation of interface"
+              <+> quotes (ppr iface)
+            , text "Declared at:"
+              <+> vcat (map (ppr . getLoc) ds)
+            ]
+        emitError [] = pure ()
+
+        multipleDecls = filter ((>1) . length) $ groupBy ((==) `on` name) $ sortOn name $ impls
+        name = unLoc . vimdId . unLoc
 
     validateMethodImpl :: LHsDecl GhcPs -> P (Located ValidImplementsMethodDecl)
     validateMethodImpl (L loc decl) =
