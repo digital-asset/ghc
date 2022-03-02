@@ -1220,23 +1220,11 @@ let_bindings_decl :: { Located ([AddAnn], LHsLocalBinds GhcPs) }
   : 'let' binds                 { sLL $1 $> (mj AnnWhere $1 : (fst $ unLoc $2)
                                              , snd $ unLoc $2) }
 
-implements_group_decl :: { Located ImplementsDeclBlock }
-  : 'implements' qtycon 'where' implements_decl_list { sL1 $1 $ ImplementsDeclBlock $2 $4 }
+implements_group_decl :: { Located ParsedImplementsDeclBlock }
+  : 'implements' qtycon where_impl { sL1 $1 $ ParsedImplementsDeclBlock $2 $3 }
 
-implements_decl_list :: { [Located ImplementsDefinition] }
-  : '{' implements_decls '}' { reverse $2 }
-  | vocurly implements_decls close { reverse $2 }
-
-implements_decls :: { [Located ImplementsDefinition] }
-implements_decls
-  : implements_decls ';' implements_decl { $3 : $1 }
-  | implements_decls ';' { $1 }
-  | implements_decl { [ $1 ] }
-  | {- empty -} { [] }
-
-implements_decl :: { Located ImplementsDefinition }
-  : 'let' vocurly var '=' exp close { sL1 $1 $ ImplementsFunction ($3, $5) }
-  | 'let' '{' var '=' exp '}' { sL1 $1 $ ImplementsFunction ($3, $5) }
+where_impl :: { [LHsDecl GhcPs] }
+  : where_inst { fromOL (snd (unLoc $1)) }
 
 choice_group_decl :: { Located (LHsExpr GhcPs , Located [Located ChoiceData]) }
   : 'controller' party_list 'can' choice_decl_list
@@ -1353,7 +1341,7 @@ tyapp_ :: { Located TyEl }
 -- interfaces
 
 interface_decl :: { OrdList (LHsDecl GhcPs) }
-  : 'interface' tycon requires_clause 'where' interface_body {% mkInterfaceDecl $2 $3 (unLoc $5) }
+  : 'interface' tycon requires_clause 'where' interface_body {% mkInterfaceDecl $2 $3 (reverse (unLoc $5)) }
 
 requires_clause :: { [Located RdrName] }
   : 'requires' requires_list { $2 }
