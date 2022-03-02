@@ -10,6 +10,7 @@ pkgs.mkShell {
     autoconf
     automake
     cabal-install
+    libiconv
     gmp
     git
     haskell.packages.ghc865Binary.ghc
