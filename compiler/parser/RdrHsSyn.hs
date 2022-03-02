@@ -3142,6 +3142,7 @@ validateTemplate vtTemplateName tbd@TemplateBodyDecls{..}
     validateImplementsBlock (L _ (ParsedImplementsDeclBlock iface decls)) = do
       impls <- mapM validateMethodImpl (groupValDecls decls)
       checkMultipleDecls iface impls
+      mapM_ (checkNumArgs iface) impls
       pure (ValidImplementsDeclBlock iface impls)
 
     checkMultipleDecls :: Located RdrName -> [Located ValidImplementsMethodDecl] -> P ()
@@ -3162,6 +3163,31 @@ validateTemplate vtTemplateName tbd@TemplateBodyDecls{..}
 
         multipleDecls = filter ((>1) . length) $ groupBy ((==) `on` name) $ sortOn name $ impls
         name = unLoc . vimdId . unLoc
+
+    checkNumArgs :: Located RdrName -> Located ValidImplementsMethodDecl -> P ()
+    checkNumArgs iface (L loc (ValidImplementsMethodDecl methodName matches)) =
+      case numArgs of
+        [] -> pure ()
+        (match1@(L l1 n1):matches) -> do
+          let badMatches = [m | m@(L _ n) <- matches, n /= n1]
+          when (notNull badMatches) $
+            addFatalError loc $ vcat
+              [ text "Equations for method"
+                <+> quotes (ppr methodName)
+                <+> text "in template"
+                <+> quotes (ppr vtTemplateName)
+                <+> text "implementation of interface"
+                <+> quotes (ppr iface)
+                <+> text "have different numbers of arguments"
+              , nest 2 (ppr (getLoc match1))
+              , nest 2 (ppr (getLoc (head badMatches)))
+              ]
+      where
+        numArgs =
+          [ L l (length m_pats)
+          | MG {mg_alts} <- [matches]
+          , L l Match {m_pats} <- unLoc mg_alts
+          ]
 
     validateMethodImpl :: LHsDecl GhcPs -> P (Located ValidImplementsMethodDecl)
     validateMethodImpl (L loc decl) =
