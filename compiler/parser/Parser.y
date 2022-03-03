@@ -1341,7 +1341,7 @@ tyapp_ :: { Located TyEl }
 -- interfaces
 
 interface_decl :: { OrdList (LHsDecl GhcPs) }
-  : 'interface' tycon requires_clause 'where' interface_body {% mkInterfaceDecl $2 $3 (reverse (unLoc $5)) }
+  : 'interface' tycon requires_clause where_interface {% mkInterfaceDecl $2 $3 (reverse (unLoc $4)) }
 
 requires_clause :: { [Located RdrName] }
   : 'requires' requires_list { $2 }
@@ -1353,6 +1353,10 @@ requires_list :: { [Located RdrName] }
 requires_list_rev :: { [Located RdrName] }
   : requires_list_rev ',' qtycon { $3 : $1 }
   | qtycon { [$1] }
+
+where_interface :: { Located [Located InterfaceBodyDecl] }
+  : 'where' interface_body { sLL $1 $> (unLoc $2) }
+  | {- empty -} { sL0 [] }
 
 interface_body :: { Located [Located InterfaceBodyDecl] }
 interface_body
