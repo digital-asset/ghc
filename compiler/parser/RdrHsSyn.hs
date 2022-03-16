@@ -3000,10 +3000,9 @@ mkInterfaceFixedChoiceInstanceDecl tycon InterfaceChoiceSignature {..} =
                     `mkAppType` ifaceType
                     `mkApp` mkUnqualVar (mkVarOcc "cid"))
           `mkApp` (mkUnqualVar (mkVarOcc "arg"))
-          `mkApp` (mkParExpr $ mkQualVar (mkVarOcc "_typeRepForInterfaceExercise")
-                    `mkApp` mkUnqualVar (mkVarOcc "cid"))
           `mkApp` (mkParExpr $ mkQualVar (mkVarOcc "_exerciseInterfaceGuard")
                     `mkAppType` ifaceType
+                    `mkApp` mkUnqualVar (mkVarOcc "cid")
                     `mkApp` mkUnqualVar (mkVarOcc "pred")))
         Nothing)
   , mkInstance "HasExercise"
