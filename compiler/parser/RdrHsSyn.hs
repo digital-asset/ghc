@@ -3523,7 +3523,10 @@ mkHasFromInterfaceInstance :: LHsType GhcPs -> LHsType GhcPs -> LHsDecl GhcPs
 mkHasFromInterfaceInstance tplTy ifaceTy =
   instDecl $ classInstDecl
     (hasFromInterfaceClass `mkAppTy` tplTy `mkAppTy` ifaceTy)
-    (unitBag (mkPrimMethod "fromInterface" "EFromInterface"))
+    (listToBag
+      [ mkPrimMethod "fromInterface" "EFromInterface"
+      , mkPrimMethod "unsafeFromInterface" "EUnsafeFromInterface"
+      ])
 
 mkImplementsInstances :: LHsType GhcPs -> LHsType GhcPs -> [LHsDecl GhcPs]
 mkImplementsInstances templateType interfaceType =
@@ -3538,10 +3541,14 @@ mkSelfImplementsInstances iface =
       (unitBag (mkTemplateClassMethod "_toInterface" [mkVarPat this] (mkUnqualVar this) Nothing))
   , instDecl $ classInstDecl
       (hasFromInterfaceClass `mkAppTy` iface `mkAppTy` iface)
-      (unitBag (mkTemplateClassMethod "fromInterface" [mkVarPat this] (mkSome (mkUnqualVar this)) Nothing))
+      (listToBag
+        [ mkTemplateClassMethod "fromInterface" [mkVarPat this] (mkSome (mkUnqualVar this)) Nothing
+        , mkTemplateClassMethod "unsafeFromInterface" [proxy, mkVarPat this] (mkUnqualVar this) Nothing
+        ])
   ]
   where
     this = mkVarOcc "this"
+    proxy = WildPat noExt
 
 mkRequiredImplementsInstances :: LHsType GhcPs -> LHsType GhcPs -> [LHsDecl GhcPs]
 mkRequiredImplementsInstances requiringIface requiredIface =
@@ -3550,7 +3557,10 @@ mkRequiredImplementsInstances requiringIface requiredIface =
       (unitBag (mkPrimMethod "_toInterface" "EToRequiredInterface"))
   , instDecl $ classInstDecl
       (hasFromInterfaceClass `mkAppTy` requiringIface `mkAppTy` requiredIface)
-      (unitBag (mkPrimMethod "fromInterface" "EFromRequiredInterface"))
+      (listToBag
+        [ mkPrimMethod "fromInterface" "EFromRequiredInterface"
+        , mkPrimMethod "unsafeFromInterface" "EUnsafeFromRequiredInterface"
+        ])
   ]
 
 hasInterfaceTypeRepClass :: LHsType GhcPs
