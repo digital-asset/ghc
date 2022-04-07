@@ -2827,16 +2827,16 @@ mkChoiceDecls templateLoc conName binds (CombinedChoiceData controllers observer
         consumingSig = (unLoc . mkQualType . show . fromMaybe Consuming <$> cdChoiceConsuming) `mkAppTy` templateType
         consumingDef = unLoc . mkQualVar . mkDataOcc . show . fromMaybe Consuming <$> cdChoiceConsuming
         controllerSig = mkFunTy templateType (mkFunTy choiceType partiesType)
-        controllerDef = mkLambda controllerDefArgs controllers (Just (extendLetBindings binds (dummyBinds controllerDefArgs)))
+        controllerDef = mkLambda controllerDefArgs controllers (noLetBindingsIfArchive (extendLetBindings binds (dummyBinds controllerDefArgs)))
         controllerDefArgs = [this, if flexible then arg else WildPat noExt]
         observersSig = mkOptional (mkParenTy (mkFunTy templateType (mkFunTy choiceType partiesType)))
         observersDef = case observersM of
           Nothing -> mkNone
           Just observers ->
-            mkSome $ mkLambda observerDefArgs observers (Just (extendLetBindings binds (dummyBinds observerDefArgs)))
+            mkSome $ mkLambda observerDefArgs observers (noLetBindingsIfArchive (extendLetBindings binds (dummyBinds observerDefArgs)))
         observerDefArgs = [this, arg]
         actionSig = mkFunTy contractIdType (mkFunTy templateType (mkFunTy choiceType choiceReturnType))
-        actionDef = mkLambda actionDefArgs cdChoiceBody (Just (extendLetBindings binds (dummyBinds actionDefArgs)))
+        actionDef = mkLambda actionDefArgs cdChoiceBody (noLetBindingsIfArchive (extendLetBindings binds (dummyBinds actionDefArgs)))
         actionDefArgs = [self, this, arg]
         arg = argPatOfChoice (noLoc $ choiceNameToRdrName $ mkDataOcc choiceName) cdChoiceFields
         choiceName = rdrNameToString cdChoiceName
@@ -2850,6 +2850,7 @@ mkChoiceDecls templateLoc conName binds (CombinedChoiceData controllers observer
         choiceType = mkChoiceType cdChoiceName
         choiceReturnType = mkUpdate $ mkParenTy cdChoiceReturnTy
         contractIdType = mkContractId templateType
+        noLetBindingsIfArchive x = if choiceName == "Archive" then Nothing else Just x
 
 emptyString :: LHsExpr GhcPs
 emptyString = noLoc $ HsLit noExt $ HsString NoSourceText $ fsLit ""
