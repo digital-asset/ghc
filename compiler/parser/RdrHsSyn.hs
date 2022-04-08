@@ -2827,29 +2827,33 @@ mkChoiceDecls templateLoc conName binds (CombinedChoiceData controllers observer
         consumingSig = (unLoc . mkQualType . show . fromMaybe Consuming <$> cdChoiceConsuming) `mkAppTy` templateType
         consumingDef = unLoc . mkQualVar . mkDataOcc . show . fromMaybe Consuming <$> cdChoiceConsuming
         controllerSig = mkFunTy templateType (mkFunTy choiceType partiesType)
-        controllerDef = mkLambda controllerDefArgs controllers (Just (extendLetBindings binds (dummyBinds controllerDefArgs)))
+        controllerDef = mkLambda controllerDefArgs controllers (noLetBindingsIfArchive (extendLetBindings binds (dummyBinds controllerDefArgs)))
         controllerDefArgs = [this, if flexible then arg else WildPat noExt]
         observersSig = mkOptional (mkParenTy (mkFunTy templateType (mkFunTy choiceType partiesType)))
         observersDef = case observersM of
           Nothing -> mkNone
           Just observers ->
-            mkSome $ mkLambda observerDefArgs observers (Just (extendLetBindings binds (dummyBinds observerDefArgs)))
+            mkSome $ mkLambda observerDefArgs observers (noLetBindingsIfArchive (extendLetBindings binds (dummyBinds observerDefArgs)))
         observerDefArgs = [this, arg]
         actionSig = mkFunTy contractIdType (mkFunTy templateType (mkFunTy choiceType choiceReturnType))
-        actionDef = mkLambda actionDefArgs cdChoiceBody (Just (extendLetBindings binds (dummyBinds actionDefArgs)))
-        actionDefArgs = [self, this, arg]
+        actionDef = mkLambda actionDefArgs cdChoiceBody (noLetBindingsIfArchive (extendLetBindings binds (dummyBinds actionDefArgs)))
+        actionDefArgs = if isArchive then [wildPat, wildPat, wildPat] else [self, this, arg]
         arg = argPatOfChoice (noLoc $ choiceNameToRdrName $ mkDataOcc choiceName) cdChoiceFields
         choiceName = rdrNameToString cdChoiceName
-        choiceNameToRdrName = if choiceName == "Archive" then qualifyDesugar else mkRdrUnqual
+        choiceNameToRdrName = if isArchive then qualifyDesugar else mkRdrUnqual
         self = mkVarPat $ mkVarOcc "self"
         this
           | InterfaceFixedChoice <- source = mkVarPat $ mkVarOcc "this"
+          | isArchive = mkVarPat $ mkVarOcc "this"
           | otherwise = asPatRecWild "this" conName
         templateType = mkTemplateType templateName
         templateName = L templateLoc $ rdrNameToString conName
         choiceType = mkChoiceType cdChoiceName
         choiceReturnType = mkUpdate $ mkParenTy cdChoiceReturnTy
         contractIdType = mkContractId templateType
+        noLetBindingsIfArchive x = if isArchive then Nothing else Just x
+        wildPat = WildPat noExt
+        isArchive = choiceName == "Archive"
 
 emptyString :: LHsExpr GhcPs
 emptyString = noLoc $ HsLit noExt $ HsString NoSourceText $ fsLit ""
