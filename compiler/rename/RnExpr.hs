@@ -2198,7 +2198,7 @@ getMonadFailOp
 -- rec. Hence, compared to the ghc implementation, the arguments are switched here.
 mkSetField :: Name -> LHsExpr GhcRn -> Located FieldLabelString -> LHsExpr GhcRn -> HsExpr GhcRn
 mkSetField set_field a (L _ field) b =
-  genHsApp (genHsApp (genHsVar set_field `genAppType` genHsTyLit field)  b) a
+  genHsPar (genHsApp (genHsApp (genHsVar set_field `genAppType` genHsTyLit field) b) a)
 
 mkGet :: Name -> [LHsExpr GhcRn] -> Located FieldLabelString -> [LHsExpr GhcRn]
 mkGet get_field l@(r : _) (L _ field) =
@@ -2253,6 +2253,9 @@ rnHsUpdProjs us = do
     rnRecUpdProj (L l (HsRecField fs arg pun))
       = do { (arg, fv) <- rnLExpr arg
            ; return $ (L l (HsRecField { hsRecFieldLbl = fs, hsRecFieldArg = arg, hsRecPun = pun}), fv) }
+
+genHsPar :: HsExpr GhcRn -> HsExpr GhcRn
+genHsPar = HsPar noExt . wrapGenSpan
 
 genHsApp :: HsExpr GhcRn -> LHsExpr GhcRn -> HsExpr GhcRn
 genHsApp fun arg = HsApp noExt (wrapGenSpan fun) arg
