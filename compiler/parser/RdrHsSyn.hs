@@ -3813,7 +3813,7 @@ mkTryCatchExpr tryExpr@(L tryLoc _) (L catchLoc (_, rawAlts)) = do
 
       -- Convert "PATTERN" into "(fromAnyException -> Some PATTERN)"
       convertLPat :: LPat GhcPs -> P (LPat GhcPs)
-      convertLPat p = pure . noLoc . ViewPat noExt fromAnyExceptionVar . noLoc
+      convertLPat p = pure . noLoc . ParPat noExt . ViewPat noExt fromAnyExceptionVar . noLoc
           $ ConPatIn (noLoc . qualifyDesugar $ mkDataOcc "Some") (PrefixCon [p])
 
       -- Convert right-hand side "EXPR" into "Some EXPR"
