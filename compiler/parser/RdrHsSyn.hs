@@ -2436,7 +2436,7 @@ mkTuplePat [p] = p
 mkTuplePat ps = TuplePat noExt ps Boxed
 
 mkRdrPat :: RdrName -> Pat GhcPs
-mkRdrPat = XPat . noLoc . VarPat noExt . noLoc
+mkRdrPat = VarPat noExt . noLoc
 
 mkRdrExp :: RdrName -> LHsExpr GhcPs
 mkRdrExp = noLoc . HsVar noExt . noLoc
@@ -2531,7 +2531,7 @@ mkChoiceType :: Located RdrName -> LHsType GhcPs
 mkChoiceType choiceName = rdrNameToType choiceName
 
 mkVarPat :: OccName -> Pat GhcPs
-mkVarPat = XPat . noLoc . VarPat noExt . noLoc . mkRdrUnqual
+mkVarPat = VarPat noExt . noLoc . mkRdrUnqual
 
 -- Name conversions
 
@@ -2562,9 +2562,9 @@ applyConcat (L loc ps) =
 -- | Utility for constructing patterns of the form 'arg@T'.
 asPatPrefixCon :: String -> Located RdrName -> Pat GhcPs
 asPatPrefixCon varName conName =
-  XPat (noLoc $ AsPat noExt
+  AsPat noExt
     (noLoc $ mkRdrUnqual (mkVarOcc varName))
-    (noLoc $ XPat (noLoc $ ConPatIn conName $ PrefixCon [])))
+    (noLoc $ ConPatIn conName $ PrefixCon [])
 
 -- | The "-Wunused-matches hack." Construct dummy bindings of the form
 -- @_ = this@ or @_ = self@. We use this hack to suppress warnings of
@@ -2581,7 +2581,7 @@ dummyBinds args = listToBag [dummyBind n | Just n <- map patToRdrName args]
     patToRdrName (dL -> L _ (AsPat _ n _)) = Just n
     patToRdrName _ = Nothing
     wildCard :: Pat GhcPs
-    wildCard = XPat $ (noLoc (WildPat noExt))
+    wildCard = WildPat noExt
 -- | Part of the -Wunused-matches hack.
 mkLetBindings :: Bag (LHsBind GhcPs) -> LHsLocalBinds GhcPs
 mkLetBindings binds = noLoc $ HsValBinds noExt (ValBinds noExt binds [])
@@ -2595,10 +2595,10 @@ extendLetBindings _ _ = error "unexpected: extendLetBindings"
 -- | Utility for constructing patterns of the form 'arg@T{..}'.
 asPatRecWild :: String -> Located RdrName -> Pat GhcPs
 asPatRecWild varName conName =
-  XPat (noLoc $ AsPat noExt
+  AsPat noExt
     (noLoc $ mkRdrUnqual (mkVarOcc varName))
-    (noLoc $ XPat (noLoc $ ConPatIn conName $
-      RecCon $ HsRecFields { rec_flds = [], rec_dotdot = Just 0 })))
+    (noLoc $ ConPatIn conName $
+      RecCon $ HsRecFields { rec_flds = [], rec_dotdot = Just 0 })
 
 -- | Utility function for constructing patterns of the form 'arg@X'
 -- where 'X' is either a record wildcard pattern or a prefix
