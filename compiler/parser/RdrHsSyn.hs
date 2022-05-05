@@ -3171,20 +3171,22 @@ validateTemplate vtTemplateName tbd@TemplateBodyDecls{..}
     checkNumArgs iface (L loc (ValidImplementsMethodDecl methodName matches)) =
       case numArgs of
         [] -> pure ()
-        (match1@(L l1 n1):matches) -> do
+        (L loc1 n1 : matches) -> do
           let badMatches = [m | m@(L _ n) <- matches, n /= n1]
-          when (notNull badMatches) $
-            addFatalError loc $ vcat
-              [ text "Equations for method"
-                <+> quotes (ppr methodName)
-                <+> text "in template"
-                <+> quotes (ppr vtTemplateName)
-                <+> text "implementation of interface"
-                <+> quotes (ppr iface)
-                <+> text "have different numbers of arguments"
-              , nest 2 (ppr (getLoc match1))
-              , nest 2 (ppr (getLoc (head badMatches)))
-              ]
+          case badMatches of
+            [] -> pure ()
+            (L locBad _ : _) ->
+              addFatalError loc $ vcat
+                [ text "Equations for method"
+                  <+> quotes (ppr methodName)
+                  <+> text "in template"
+                  <+> quotes (ppr vtTemplateName)
+                  <+> text "implementation of interface"
+                  <+> quotes (ppr iface)
+                  <+> text "have different numbers of arguments"
+                , nest 2 (ppr loc1)
+                , nest 2 (ppr locBad)
+                ]
       where
         numArgs =
           [ L l (length m_pats)
