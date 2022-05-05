@@ -2289,7 +2289,7 @@ validateInterface name requires decls = do
     , viRequiredInterfaces = requires
     , viFunctionSignatures = ibdFunctionSignatures
     , viChoices = ibdChoices
-    , viEnsure = listToMaybe ibdEnsures
+    , viEnsure
     }
   where
     InterfaceBodyDecls {..} = extractInterfaceBodyDecls decls
