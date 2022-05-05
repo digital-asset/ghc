@@ -2425,11 +2425,7 @@ addExceptionBodyDecl ebd ebds@ExceptionBodyDecls{..} = case ebd of
   ExceptionMessageDecl m -> ebds { ebdMessage = m : ebdMessage }
 
 --------------------------------------------------------------------------------
--- Utilities for constructing types and values
-
-mkTupleExp :: [LHsExpr GhcPs] -> LHsExpr GhcPs
-mkTupleExp [e] = e
-mkTupleExp es = noLoc $ ExplicitTuple noExt (map (noLoc . Present noExt) es) Boxed
+-- Utilities for constructing patterns
 
 mkTuplePat :: [Pat GhcPs] -> Pat GhcPs
 mkTuplePat [p] = p
@@ -2437,6 +2433,39 @@ mkTuplePat ps = TuplePat noExt ps Boxed
 
 mkRdrPat :: RdrName -> Pat GhcPs
 mkRdrPat = VarPat noExt . noLoc
+
+mkVarPat :: OccName -> Pat GhcPs
+mkVarPat = VarPat noExt . noLoc . mkRdrUnqual
+
+-- | Utility for constructing patterns of the form 'arg@T'.
+asPatPrefixCon :: String -> Located RdrName -> Pat GhcPs
+asPatPrefixCon varName conName =
+  AsPat noExt
+    (noLoc $ mkRdrUnqual (mkVarOcc varName))
+    (noLoc $ ConPatIn conName $ PrefixCon [])
+
+-- | Utility for constructing patterns of the form 'arg@T{..}'.
+asPatRecWild :: String -> Located RdrName -> Pat GhcPs
+asPatRecWild varName conName =
+  AsPat noExt
+    (noLoc $ mkRdrUnqual (mkVarOcc varName))
+    (noLoc $ ConPatIn conName $
+      RecCon $ HsRecFields { rec_flds = [], rec_dotdot = Just 0 })
+
+-- | Utility function for constructing patterns of the form 'arg@X'
+-- where 'X' is either a record wildcard pattern or a prefix
+-- constructor pattern depending on whether a non-empty record field
+-- list is provided.
+argPatOfChoice :: Located RdrName -> LHsType GhcPs -> Pat GhcPs
+argPatOfChoice choiceConName (L _ (HsRecTy _ [])) = asPatPrefixCon "arg" choiceConName
+argPatOfChoice choiceConName _ = asPatRecWild "arg" choiceConName
+
+--------------------------------------------------------------------------------
+-- Utilities for constructing types and values
+
+mkTupleExp :: [LHsExpr GhcPs] -> LHsExpr GhcPs
+mkTupleExp [e] = e
+mkTupleExp es = noLoc $ ExplicitTuple noExt (map (noLoc . Present noExt) es) Boxed
 
 mkRdrExp :: RdrName -> LHsExpr GhcPs
 mkRdrExp = noLoc . HsVar noExt . noLoc
@@ -2519,9 +2548,6 @@ mkTemplateType templateName = mkUnqualType templateName
 mkChoiceType :: Located RdrName -> LHsType GhcPs
 mkChoiceType choiceName = rdrNameToType choiceName
 
-mkVarPat :: OccName -> Pat GhcPs
-mkVarPat = VarPat noExt . noLoc . mkRdrUnqual
-
 -- Name conversions
 
 rdrNameToType :: Located RdrName -> LHsType GhcPs
@@ -2548,13 +2574,6 @@ applyConcat (L loc ps) =
     (L loc $ HsVar noExt $ L loc $ qualifyDesugar $ mkVarOcc "concat")
     (L loc $ ExplicitList noExt Nothing ps)
 
--- | Utility for constructing patterns of the form 'arg@T'.
-asPatPrefixCon :: String -> Located RdrName -> Pat GhcPs
-asPatPrefixCon varName conName =
-  AsPat noExt
-    (noLoc $ mkRdrUnqual (mkVarOcc varName))
-    (noLoc $ ConPatIn conName $ PrefixCon [])
-
 -- | The "-Wunused-matches hack." Construct dummy bindings of the form
 -- @_ = this@ or @_ = self@. We use this hack to suppress warnings of
 -- the form "Defined but not used: ‘this’".
@@ -2580,22 +2599,6 @@ extendLetBindings (L _ (HsValBinds _ (ValBinds _ orig sigs))) new =
   noLoc $ HsValBinds noExt (ValBinds noExt (unionBags orig new) sigs)
 extendLetBindings (L _ (EmptyLocalBinds _)) new = mkLetBindings new
 extendLetBindings _ _ = error "unexpected: extendLetBindings"
-
--- | Utility for constructing patterns of the form 'arg@T{..}'.
-asPatRecWild :: String -> Located RdrName -> Pat GhcPs
-asPatRecWild varName conName =
-  AsPat noExt
-    (noLoc $ mkRdrUnqual (mkVarOcc varName))
-    (noLoc $ ConPatIn conName $
-      RecCon $ HsRecFields { rec_flds = [], rec_dotdot = Just 0 })
-
--- | Utility function for constructing patterns of the form 'arg@X'
--- where 'X' is either a record wildcard pattern or a prefix
--- constructor pattern depending on whether a non-empty record field
--- list is provided.
-argPatOfChoice :: Located RdrName -> LHsType GhcPs -> Pat GhcPs
-argPatOfChoice choiceConName (L _ (HsRecTy _ [])) = asPatPrefixCon "arg" choiceConName
-argPatOfChoice choiceConName _ = asPatRecWild "arg" choiceConName
 
 -- | Utility for constructing a match context.
 matchContext :: Located RdrName -> HsMatchContext RdrName
