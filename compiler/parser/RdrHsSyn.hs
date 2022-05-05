@@ -2838,8 +2838,15 @@ mkLambda args body mBinds =
   in noLoc $ HsLam noExt match_group
 
 
-mkChoiceDecls :: SrcSpan -> Located RdrName -> Pat GhcPs -> LHsLocalBinds GhcPs -> CombinedChoiceData -> [LHsDecl GhcPs]
-mkChoiceDecls templateLoc conName thisPatWithFields binds (CombinedChoiceData controllers observersM ChoiceData{..} flexible source) =
+mkChoiceDecls ::
+     SrcSpan
+  -> Located RdrName
+  -> Pat GhcPs
+  -> (String -> Located RdrName -> LHsType GhcPs -> Pat GhcPs)
+  -> LHsLocalBinds GhcPs
+  -> CombinedChoiceData
+  -> [LHsDecl GhcPs]
+mkChoiceDecls templateLoc conName thisPatWithFields mkChoicePat binds (CombinedChoiceData controllers observersM ChoiceData{..} flexible source) =
     [ noLoc (SigD noExt (TypeSig noExt [noLoc name] (mkHsWildCardBndrs (mkHsImplicitBndrs $ noLoc $ HsTupleTy noExt HsBoxedOrConstraintTuple [controllerSig, actionSig, consumingSig, observersSig]))))
     , noLoc (ValD noExt (FunBind noExt (noLoc name) (matchGroup noSrcSpan $ matchWithBinds (matchContext $ noLoc name) [] noSrcSpan (noLoc $ ExplicitTuple noExt (map (noLoc . Present noExt) [controllerDef, actionDef, consumingDef, observersDef]) Boxed) (noLoc emptyLocalBinds)) WpHole []))
     ]
@@ -2859,7 +2866,7 @@ mkChoiceDecls templateLoc conName thisPatWithFields binds (CombinedChoiceData co
         actionSig = mkFunTy contractIdType (mkFunTy templateType (mkFunTy choiceType choiceReturnType))
         actionDef = mkLambda actionDefArgs cdChoiceBody (noLetBindingsIfArchive (extendLetBindings binds (dummyBinds actionDefArgs)))
         actionDefArgs = if isArchive then [wildPat, wildPat, wildPat] else [self, this, arg]
-        arg = asPatRecWild "arg" (noLoc $ choiceNameToRdrName $ mkDataOcc choiceName) cdChoiceFields
+        arg = mkChoicePat "arg" (noLoc $ choiceNameToRdrName $ mkDataOcc choiceName) cdChoiceFields
         choiceName = rdrNameToString cdChoiceName
         choiceNameToRdrName = if isArchive then qualifyDesugar else mkRdrUnqual
         self = mkVarPat $ mkVarOcc "self"
@@ -3427,12 +3434,17 @@ mkTemplateDecls templateName fields decls = do
   let templateName = occNameString . rdrNameOcc <$> vtTemplateName
       templateDataDecl = mkTemplateDataDecl (combineLocs vtTemplateName fields) vtTemplateName ci
       thisPat = asPatRecWild "this" conName fields
+      mkChoicePat arg =
+        if arg `elem` recFieldNames fields then
+          patRecWild
+        else
+          asPatRecWild arg
       (letDecls,sharedBinds) = shareTemplateLetBindings conName thisPat vtLetBindings
       choicesWithArchive = mkArchiveChoice : vtChoices
       templateInstances = mkTemplateInstanceDecl sharedBinds templateName thisPat vt
       choiceInstanceDecls = concatMap (mkChoiceInstanceDecl templateName) choicesWithArchive
       choiceByKeyInstanceDecls = concatMap (mkChoiceByKeyInstanceDecl templateName vt) choicesWithArchive
-      choiceDecls = concatMap (mkChoiceDecls (getLoc templateName) conName thisPat sharedBinds) choicesWithArchive
+      choiceDecls = concatMap (mkChoiceDecls (getLoc templateName) conName thisPat mkChoicePat sharedBinds) choicesWithArchive
       keyInstanceDecl = mkKeyInstanceDecl sharedBinds templateName thisPat vt
       templateInterfaceImplements = concatMap (mkInterfaceImplements vtTemplateName thisPat sharedBinds) vtImplements
   return $ toOL $ templateDataDecl : choiceDataDecls ++ letDecls
@@ -3629,6 +3641,9 @@ mkInterfaceDecl tycon requires decls = do
         thisPat :: Pat GhcPs
         thisPat = mkVarPat $ mkVarOcc "this"
 
+        mkChoicePat :: String -> Located RdrName -> LHsType GhcPs -> Pat GhcPs
+        mkChoicePat = asPatRecWild
+
         existential :: LHsDecl GhcPs
         existential = cL (getLoc viInterfaceName) $ TyClD noExt $ DataDecl
             { tcdDExt = noExt
@@ -3731,6 +3746,7 @@ mkInterfaceDecl tycon requires decls = do
                 (getLoc viInterfaceName)
                 viInterfaceName
                 thisPat
+                mkChoicePat
                 (noLoc (EmptyLocalBinds noExt))
                 (interfaceChoiceToCombinedChoiceData choiceSig choiceBody)
             | (choiceSig, choiceBody) <- viChoices
