@@ -2500,17 +2500,6 @@ mkFalse = mkQualVar $ mkDataOcc "False"
 mkTrue :: LHsExpr GhcPs
 mkTrue = mkQualVar $ mkDataOcc "True"
 
--- Boolean operators
-mkAnd :: LHsExpr GhcPs -> LHsExpr GhcPs -> LHsExpr GhcPs
-mkAnd = mkHsApp2 (mkQualVar $ mkVarOcc "&&")
-
-mkEq :: LHsExpr GhcPs -> LHsExpr GhcPs -> LHsExpr GhcPs
-mkEq = mkHsApp2 (mkQualVar $ mkVarOcc "==")
-
--- Helper for operators
-mkHsApp2 :: LHsExpr GhcPs -> LHsExpr GhcPs -> LHsExpr GhcPs -> LHsExpr GhcPs
-mkHsApp2 a b c = mkHsApp (mkHsApp a b) c
-
 -- Wrap a type in parentheses, preserving the location of the original type.
 mkParenTy :: LHsType GhcPs -> LHsType GhcPs
 mkParenTy ty = L (getLoc ty) (HsParTy noExt ty)
@@ -3604,9 +3593,6 @@ methodType = mkQualType "Method"
 
 mkMethodExpr :: LHsExpr GhcPs
 mkMethodExpr = mkQualVar $ mkVarOcc "mkMethod"
-
-interfaceTypeRepExp :: LHsExpr GhcPs
-interfaceTypeRepExp = mkQualVar $ mkVarOcc "interfaceTypeRep"
 
 mkInterfaceDecl
   :: Located RdrName -> [Located RdrName] -> [Located InterfaceBodyDecl] -> P (OrdList (LHsDecl GhcPs))
