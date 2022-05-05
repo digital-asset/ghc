@@ -2809,8 +2809,8 @@ mkLambda args body mBinds =
   in noLoc $ HsLam noExt match_group
 
 
-mkChoiceDecls :: SrcSpan -> Located RdrName -> LHsLocalBinds GhcPs -> CombinedChoiceData -> [LHsDecl GhcPs]
-mkChoiceDecls templateLoc conName binds (CombinedChoiceData controllers observersM ChoiceData{..} flexible source) =
+mkChoiceDecls :: SrcSpan -> Located RdrName -> Pat GhcPs -> LHsLocalBinds GhcPs -> CombinedChoiceData -> [LHsDecl GhcPs]
+mkChoiceDecls templateLoc conName thisPatWithFields binds (CombinedChoiceData controllers observersM ChoiceData{..} flexible source) =
     [ noLoc (SigD noExt (TypeSig noExt [noLoc name] (mkHsWildCardBndrs (mkHsImplicitBndrs $ noLoc $ HsTupleTy noExt HsBoxedOrConstraintTuple [controllerSig, actionSig, consumingSig, observersSig]))))
     , noLoc (ValD noExt (FunBind noExt (noLoc name) (matchGroup noSrcSpan $ matchWithBinds (matchContext $ noLoc name) [] noSrcSpan (noLoc $ ExplicitTuple noExt (map (noLoc . Present noExt) [controllerDef, actionDef, consumingDef, observersDef]) Boxed) (noLoc emptyLocalBinds)) WpHole []))
     ]
@@ -2834,10 +2834,11 @@ mkChoiceDecls templateLoc conName binds (CombinedChoiceData controllers observer
         choiceName = rdrNameToString cdChoiceName
         choiceNameToRdrName = if isArchive then qualifyDesugar else mkRdrUnqual
         self = mkVarPat $ mkVarOcc "self"
+        thisPatNoFields = mkVarPat $ mkVarOcc "this"
         this
-          | InterfaceFixedChoice <- source = mkVarPat $ mkVarOcc "this"
-          | isArchive = mkVarPat $ mkVarOcc "this"
-          | otherwise = asPatRecWild "this" conName
+          | InterfaceFixedChoice <- source = thisPatNoFields
+          | isArchive = thisPatNoFields
+          | otherwise = thisPatWithFields
         templateType = mkTemplateType templateName
         templateName = L templateLoc $ rdrNameToString conName
         choiceType = mkChoiceType cdChoiceName
@@ -2862,8 +2863,8 @@ allLetBindings includeBindings args vtLetBindings =
 
 -- | Construct instances for split-up Template typeclass, i.e., instances for all the single-method typeclasses
 -- that constitute the Template constraint synonym.
-mkTemplateInstanceDecl :: LHsLocalBinds GhcPs -> Located String -> Located RdrName -> ValidTemplate -> [LHsDecl GhcPs]
-mkTemplateInstanceDecl sharedBinds templateName conName ValidTemplate{..} =
+mkTemplateInstanceDecl :: LHsLocalBinds GhcPs -> Located String -> Pat GhcPs -> ValidTemplate -> [LHsDecl GhcPs]
+mkTemplateInstanceDecl sharedBinds templateName this ValidTemplate{..} =
   [ signatoryInstance
   , observerInstance
   , ensureInstance
@@ -2895,7 +2896,6 @@ mkTemplateInstanceDecl sharedBinds templateName conName ValidTemplate{..} =
       allLetBindings includeBindings args sharedBinds
 
     proxy = WildPat noExt
-    this = asPatRecWild "this" conName
     cid = mkVarPat $ mkVarOcc "cid"
 
 mkInterfaceMethodDecl :: LHsType GhcPs -> LHsType GhcPs -> Located RdrName -> LHsType GhcPs -> Maybe LHsDocString -> [LHsDecl GhcPs]
@@ -2931,8 +2931,8 @@ mkInterfaceMethodDecl ifaceTy classTy methodName methodType mbDocString =
         name = occNameString $ occName rdrName
         L _ rdrName = methodName
 
-mkInterfaceInstanceDecl :: LHsType GhcPs -> Maybe (LHsExpr GhcPs) -> [LHsDecl GhcPs]
-mkInterfaceInstanceDecl interfaceType interfacePrecondM =
+mkInterfaceInstanceDecl :: LHsType GhcPs -> Pat GhcPs -> Maybe (LHsExpr GhcPs) -> [LHsDecl GhcPs]
+mkInterfaceInstanceDecl interfaceType this interfacePrecondM =
   [ mkInstance "HasToAnyTemplate" $ mkPrimMethod "_toAnyTemplate" "EToAnyTemplate"
   , mkInstance "HasFromAnyTemplate" $ mkPrimMethod "_fromAnyTemplate" "EFromAnyTemplate"
   , mkInstance "HasTemplateTypeRep" $ mkPrimMethod "_templateTypeRep" "ETemplateTypeRep"
@@ -2946,7 +2946,6 @@ mkInterfaceInstanceDecl interfaceType interfacePrecondM =
   where
     mkInstance name method =
         instDecl $ classInstDecl (mkQualClass name `mkAppTy` interfaceType) $ unitBag method
-    this = mkVarPat $ mkVarOcc "this"
     proxy = WildPat noExt
     mkMethod :: String -> [Pat GhcPs] -> LHsExpr GhcPs -> LHsBind GhcPs
     mkMethod methodName args methodBody =
@@ -3030,8 +3029,8 @@ mkInterfaceFixedChoiceInstanceDecl tycon InterfaceChoiceSignature {..} =
 
 -- | Construct instances for the split-up `TemplateKey` typeclass, i.e., instances fr all single-method typeclasses
 -- that constitute the `TemplateKey` constraint synonym.
-mkKeyInstanceDecl :: LHsLocalBinds GhcPs -> Located String -> Located RdrName -> ValidTemplate -> [LHsDecl GhcPs]
-mkKeyInstanceDecl sharedBinds templateName conName ValidTemplate{..}
+mkKeyInstanceDecl :: LHsLocalBinds GhcPs -> Located String -> Pat GhcPs -> ValidTemplate -> [LHsDecl GhcPs]
+mkKeyInstanceDecl sharedBinds templateName this ValidTemplate{..}
   | Just (L _ KeyData{..}) <- vtKeyData =
     let templateType = mkTemplateType templateName
         mkClass name = mkQualClass name `mkAppTy` templateType `mkAppTy` kdKeyType
@@ -3053,7 +3052,6 @@ mkKeyInstanceDecl sharedBinds templateName conName ValidTemplate{..}
   where
     proxy = WildPat noExt
     key = mkVarPat $ mkVarOcc "key"
-    this = asPatRecWild "this" conName
 
 -- | Contruct a @data S a b c = S {...}@ for a single choice 'S'.
 mkChoiceDataDecls
@@ -3315,8 +3313,14 @@ mkExceptionDecls
 mkExceptionDecls name fields decls = do
   ci@(conName, _, _) <- splitCon [fields, rdrNameToType name]
   ve@ValidException{..} <- validateException name conName fields (extractExceptionBodyDecls decls)
-  let exceptionDataDecl = mkExceptionDataDecl (combineLocs name fields) name ci
-      exceptionInstanceDecls = mkExceptionInstanceDecls ve
+  let this =
+        case veFields of
+          L _ (HsRecTy _ []) ->
+            asPatPrefixCon "this" veConName
+          _ ->
+            asPatRecWild "this" veConName
+      exceptionDataDecl = mkExceptionDataDecl (combineLocs name fields) name ci
+      exceptionInstanceDecls = mkExceptionInstanceDecls ve this
   return $ toOL (exceptionDataDecl : exceptionInstanceDecls)
 
 -- Make the exception data decl, @data DamlException => E = E {...} deriving (Eq, Show)@
@@ -3358,8 +3362,9 @@ mkExceptionDataDecl loc lname@(L nloc _name) (conName, conDetails, conDoc) =
 
 mkExceptionInstanceDecls
   :: ValidException -- ^ valid exception data
+  -> Pat GhcPs
   -> [LHsDecl GhcPs]
-mkExceptionInstanceDecls ValidException{..} =
+mkExceptionInstanceDecls ValidException{..} this =
     [ mkInstance "HasMessage" $ messageMethod
     , mkInstance "HasThrow" $ mkPrimMethod "throwPure" "EThrow"
     , mkInstance "HasToAnyException" $ mkPrimMethod "toAnyException" "EToAnyException"
@@ -3367,12 +3372,6 @@ mkExceptionInstanceDecls ValidException{..} =
     ]
   where
     exceptionType = rdrNameToType veExnName
-    this =
-      case veFields of
-        L _ (HsRecTy _ []) ->
-          asPatPrefixCon "this" veConName
-        _ ->
-          asPatRecWild "this" veConName
     messageMethod =
       case veMessage of
         Nothing ->
@@ -3403,25 +3402,26 @@ mkTemplateDecls templateName fields decls = do
   choiceDataDecls <- concat <$> traverse mkChoiceDataDecls vtChoices
   let templateName = occNameString . rdrNameOcc <$> vtTemplateName
       templateDataDecl = mkTemplateDataDecl (combineLocs vtTemplateName fields) vtTemplateName ci
-      (letDecls,sharedBinds) = shareTemplateLetBindings conName vtLetBindings
+      thisPat = asPatRecWild "this" conName
+      (letDecls,sharedBinds) = shareTemplateLetBindings conName thisPat vtLetBindings
       choicesWithArchive = mkArchiveChoice : vtChoices
-      templateInstances = mkTemplateInstanceDecl sharedBinds templateName conName vt
+      templateInstances = mkTemplateInstanceDecl sharedBinds templateName thisPat vt
       choiceInstanceDecls = concatMap (mkChoiceInstanceDecl templateName) choicesWithArchive
       choiceByKeyInstanceDecls = concatMap (mkChoiceByKeyInstanceDecl templateName vt) choicesWithArchive
-      choiceDecls = concatMap (mkChoiceDecls (getLoc templateName) conName sharedBinds) choicesWithArchive
-      keyInstanceDecl = mkKeyInstanceDecl sharedBinds templateName conName vt
-      templateInterfaceImplements = concatMap (mkInterfaceImplements vtTemplateName conName sharedBinds) vtImplements
+      choiceDecls = concatMap (mkChoiceDecls (getLoc templateName) conName thisPat sharedBinds) choicesWithArchive
+      keyInstanceDecl = mkKeyInstanceDecl sharedBinds templateName thisPat vt
+      templateInterfaceImplements = concatMap (mkInterfaceImplements vtTemplateName thisPat sharedBinds) vtImplements
   return $ toOL $ templateDataDecl : choiceDataDecls ++ letDecls
                ++ templateInstances ++ (choiceInstanceDecls ++ choiceDecls ++ choiceByKeyInstanceDecls ++ keyInstanceDecl)
                ++ templateInterfaceImplements
 
 mkInterfaceImplements ::
      Located RdrName
-  -> Located RdrName
+  -> Pat GhcPs
   -> LHsLocalBinds GhcPs
   -> ValidImplementsDeclBlock
   -> [LHsDecl GhcPs]
-mkInterfaceImplements templateName conName sharedBinds implements =
+mkInterfaceImplements templateName this sharedBinds implements =
   implementsMarker ++ implementsInstances ++ implementsInterfaceMethods
   where
     implementsInstances = mkImplementsInstances templateType interfaceType
@@ -3469,7 +3469,6 @@ mkInterfaceImplements templateName conName sharedBinds implements =
           TypeSig noExt [fullMethodName] $
             mkHsWildCardBndrs $ mkHsImplicitBndrs $
               methodType `mkAppTy` templateType `mkAppTy` interfaceType `mkAppTy` methodNameSymbol
-        this = asPatRecWild "this" conName
         args = [this]
         localBinds = allLetBindings True args sharedBinds
         exp =
@@ -3532,20 +3531,20 @@ mkImplementsInstances templateType interfaceType =
   , mkHasFromInterfaceInstance templateType interfaceType
   ]
 
-mkSelfImplementsInstances :: LHsType GhcPs -> [LHsDecl GhcPs]
-mkSelfImplementsInstances iface =
+mkSelfImplementsInstances :: LHsType GhcPs -> Pat GhcPs -> [LHsDecl GhcPs]
+mkSelfImplementsInstances iface thisPat =
   [ instDecl $ classInstDecl
       (hasToInterfaceClass `mkAppTy` iface `mkAppTy` iface)
-      (unitBag (mkTemplateClassMethod "_toInterface" [mkVarPat this] (mkUnqualVar this) Nothing))
+      (unitBag (mkTemplateClassMethod "_toInterface" [thisPat] thisVar Nothing))
   , instDecl $ classInstDecl
       (hasFromInterfaceClass `mkAppTy` iface `mkAppTy` iface)
       (listToBag
-        [ mkTemplateClassMethod "fromInterface" [mkVarPat this] (mkSome (mkUnqualVar this)) Nothing
-        , mkTemplateClassMethod "unsafeFromInterface" [proxy, mkVarPat this] (mkUnqualVar this) Nothing
+        [ mkTemplateClassMethod "fromInterface" [thisPat] (mkSome thisVar) Nothing
+        , mkTemplateClassMethod "unsafeFromInterface" [proxy, thisPat] thisVar Nothing
         ])
   ]
   where
-    this = mkVarOcc "this"
+    thisVar = mkUnqualVar $ mkVarOcc "this"
     proxy = WildPat noExt
 
 mkRequiredImplementsInstances :: LHsType GhcPs -> LHsType GhcPs -> [LHsDecl GhcPs]
@@ -3602,6 +3601,10 @@ mkInterfaceDecl
 mkInterfaceDecl tycon requires decls = do
     ValidInterface {..} <- validateInterface tycon requires decls
     let ifaceTy = rdrNameToType viInterfaceName
+
+        thisPat :: Pat GhcPs
+        thisPat = mkVarPat $ mkVarOcc "this"
+
         existential :: LHsDecl GhcPs
         existential = cL (getLoc viInterfaceName) $ TyClD noExt $ DataDecl
             { tcdDExt = noExt
@@ -3633,7 +3636,7 @@ mkInterfaceDecl tycon requires decls = do
         hasInterfaceTypeRepInstance = mkHasInterfaceTypeRepInstance ifaceTy
 
         existentialImplementsInstances :: [LHsDecl GhcPs]
-        existentialImplementsInstances = mkSelfImplementsInstances ifaceTy
+        existentialImplementsInstances = mkSelfImplementsInstances ifaceTy thisPat
 
         existentialExerciseInstances :: [LHsDecl GhcPs]
         existentialExerciseInstances =
@@ -3690,7 +3693,7 @@ mkInterfaceDecl tycon requires decls = do
 
         ifaceInstances :: [LHsDecl GhcPs]
         ifaceInstances =
-          mkInterfaceInstanceDecl ifaceTy viEnsure
+          mkInterfaceInstanceDecl ifaceTy thisPat viEnsure
 
         choiceInstances :: [LHsDecl GhcPs]
         choiceInstances = concat $
@@ -3700,7 +3703,11 @@ mkInterfaceDecl tycon requires decls = do
 
         choiceDecls :: [LHsDecl GhcPs]
         choiceDecls = concat $
-            [ mkChoiceDecls (getLoc viInterfaceName) viInterfaceName (noLoc (EmptyLocalBinds noExt))
+            [ mkChoiceDecls
+                (getLoc viInterfaceName)
+                viInterfaceName
+                thisPat
+                (noLoc (EmptyLocalBinds noExt))
                 (interfaceChoiceToCombinedChoiceData choiceSig choiceBody)
             | (choiceSig, choiceBody) <- viChoices
             ]
@@ -3725,8 +3732,8 @@ mkInterfaceDecl tycon requires decls = do
     classTy = noLoc $ HsTyVar noExt NotPromoted classVar
     hasFetch t = mkQualClass "HasFetch" `mkAppTy` t
 
-shareTemplateLetBindings :: Located RdrName -> LHsLocalBinds GhcPs -> ([LHsDecl GhcPs], LHsLocalBinds GhcPs)
-shareTemplateLetBindings conName vtLetBindings =
+shareTemplateLetBindings :: Located RdrName -> Pat GhcPs -> LHsLocalBinds GhcPs -> ([LHsDecl GhcPs], LHsLocalBinds GhcPs)
+shareTemplateLetBindings conName this vtLetBindings =
   case vars of
     [] -> ([],noLoc emptyLocalBinds)
     _ -> ([letDecl],sharedBinds)
@@ -3741,7 +3748,6 @@ shareTemplateLetBindings conName vtLetBindings =
     letDecl = functionBindDecl letFnName defArgs (noLoc $ HsLet noExt binds body)
       where
         defArgs = [this]
-        this = asPatRecWild "this" conName
         binds = extendLetBindings vtLetBindings (dummyBinds defArgs)
 
         body :: LHsExpr GhcPs
