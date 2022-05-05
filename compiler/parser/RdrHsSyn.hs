@@ -2437,28 +2437,57 @@ mkRdrPat = VarPat noExt . noLoc
 mkVarPat :: OccName -> Pat GhcPs
 mkVarPat = VarPat noExt . noLoc . mkRdrUnqual
 
--- | Utility for constructing patterns of the form 'arg@T'.
-asPatPrefixCon :: String -> Located RdrName -> Pat GhcPs
-asPatPrefixCon varName conName =
-  AsPat noExt
-    (noLoc $ mkRdrUnqual (mkVarOcc varName))
-    (noLoc $ ConPatIn conName $ PrefixCon [])
+-- | Utility for constructing patterns of the form 'arg@T{..}',
+-- omitting the '..' for types without labelled fields, and
+-- omitting the 'arg' binding for types with a field of the same name.
+asPatRecWild :: String -> Located RdrName -> LHsType GhcPs -> Pat GhcPs
+asPatRecWild varName conName conType =
+  asPatRecWild' varName conName (recFieldNames conType)
 
--- | Utility for constructing patterns of the form 'arg@T{..}'.
-asPatRecWild :: String -> Located RdrName -> Pat GhcPs
-asPatRecWild varName conName =
-  AsPat noExt
-    (noLoc $ mkRdrUnqual (mkVarOcc varName))
-    (noLoc $ ConPatIn conName $
-      RecCon $ HsRecFields { rec_flds = [], rec_dotdot = Just 0 })
+-- | Like 'asPatRecWild', but takes the field names as a list of strings
+-- instead of extracting them from an 'LHsType GhcPs'
+asPatRecWild' :: String -> Located RdrName -> [String] -> Pat GhcPs
+asPatRecWild' varName conName fieldNames = do
+  asPat $ patRecWild' conName fieldNames
+  where
+    asPat =
+      if varName `elem` fieldNames then
+        id
+      else
+        AsPat noExt (noLoc $ mkRdrUnqual $ mkVarOcc varName) . noLoc
 
--- | Utility function for constructing patterns of the form 'arg@X'
--- where 'X' is either a record wildcard pattern or a prefix
--- constructor pattern depending on whether a non-empty record field
--- list is provided.
-argPatOfChoice :: Located RdrName -> LHsType GhcPs -> Pat GhcPs
-argPatOfChoice choiceConName (L _ (HsRecTy _ [])) = asPatPrefixCon "arg" choiceConName
-argPatOfChoice choiceConName _ = asPatRecWild "arg" choiceConName
+-- | Utility for constructing patterns of the form 'T{..}',
+-- omitting the '..' for types without labelled fields.
+patRecWild :: Located RdrName -> LHsType GhcPs -> Pat GhcPs
+patRecWild conName conType =
+  patRecWild' conName (recFieldNames conType)
+
+-- | Like 'patRecWild', but takes the field names as a list of strings
+-- instead of extracting them from an 'LHsType GhcPs'
+patRecWild' :: Located RdrName -> [String] -> Pat GhcPs
+patRecWild' conName fieldNames =
+  ConPatIn conName $
+    RecCon $
+      HsRecFields
+        { rec_flds = []
+        , rec_dotdot
+        }
+  where
+    rec_dotdot =
+      if null fieldNames then
+        Nothing
+      else
+        Just 0
+
+-- | Extracts the names of the fields from an HsRecTy, otherwise
+-- returns the empty list.
+recFieldNames :: LHsType GhcPs -> [String]
+recFieldNames ty =
+  [ rdrNameToString rdrNameFieldOcc
+  | L _ (HsRecTy _ fields) <- [ty]
+  , L _ ConDeclField {cd_fld_names} <- fields
+  , L _ FieldOcc {rdrNameFieldOcc} <- cd_fld_names
+  ]
 
 --------------------------------------------------------------------------------
 -- Utilities for constructing types and values
@@ -2830,7 +2859,7 @@ mkChoiceDecls templateLoc conName thisPatWithFields binds (CombinedChoiceData co
         actionSig = mkFunTy contractIdType (mkFunTy templateType (mkFunTy choiceType choiceReturnType))
         actionDef = mkLambda actionDefArgs cdChoiceBody (noLetBindingsIfArchive (extendLetBindings binds (dummyBinds actionDefArgs)))
         actionDefArgs = if isArchive then [wildPat, wildPat, wildPat] else [self, this, arg]
-        arg = argPatOfChoice (noLoc $ choiceNameToRdrName $ mkDataOcc choiceName) cdChoiceFields
+        arg = asPatRecWild "arg" (noLoc $ choiceNameToRdrName $ mkDataOcc choiceName) cdChoiceFields
         choiceName = rdrNameToString cdChoiceName
         choiceNameToRdrName = if isArchive then qualifyDesugar else mkRdrUnqual
         self = mkVarPat $ mkVarOcc "self"
@@ -3313,12 +3342,7 @@ mkExceptionDecls
 mkExceptionDecls name fields decls = do
   ci@(conName, _, _) <- splitCon [fields, rdrNameToType name]
   ve@ValidException{..} <- validateException name conName fields (extractExceptionBodyDecls decls)
-  let this =
-        case veFields of
-          L _ (HsRecTy _ []) ->
-            asPatPrefixCon "this" veConName
-          _ ->
-            asPatRecWild "this" veConName
+  let this = asPatRecWild "this" veConName veFields
       exceptionDataDecl = mkExceptionDataDecl (combineLocs name fields) name ci
       exceptionInstanceDecls = mkExceptionInstanceDecls ve this
   return $ toOL (exceptionDataDecl : exceptionInstanceDecls)
@@ -3402,7 +3426,7 @@ mkTemplateDecls templateName fields decls = do
   choiceDataDecls <- concat <$> traverse mkChoiceDataDecls vtChoices
   let templateName = occNameString . rdrNameOcc <$> vtTemplateName
       templateDataDecl = mkTemplateDataDecl (combineLocs vtTemplateName fields) vtTemplateName ci
-      thisPat = asPatRecWild "this" conName
+      thisPat = asPatRecWild "this" conName fields
       (letDecls,sharedBinds) = shareTemplateLetBindings conName thisPat vtLetBindings
       choicesWithArchive = mkArchiveChoice : vtChoices
       templateInstances = mkTemplateInstanceDecl sharedBinds templateName thisPat vt

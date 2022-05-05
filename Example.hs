@@ -26,7 +26,10 @@ template TheTemplate
     signatory s
     agreement "my agreement"
 
-    choice MyObservedChoice : () with obs : [Party]
+    choice MyObservedChoice : ()
+      with
+        obs : [Party]
+        arg : Party
       observer obs
       controller s
       do return ()
