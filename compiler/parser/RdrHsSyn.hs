@@ -2289,7 +2289,7 @@ validateInterface name requires decls = do
     , viRequiredInterfaces = requires
     , viFunctionSignatures = ibdFunctionSignatures
     , viChoices = ibdChoices
-    , viEnsure = listToMaybe ibdEnsures
+    , viEnsure
     }
   where
     InterfaceBodyDecls {..} = extractInterfaceBodyDecls decls
@@ -2425,18 +2425,47 @@ addExceptionBodyDecl ebd ebds@ExceptionBodyDecls{..} = case ebd of
   ExceptionMessageDecl m -> ebds { ebdMessage = m : ebdMessage }
 
 --------------------------------------------------------------------------------
--- Utilities for constructing types and values
-
-mkTupleExp :: [LHsExpr GhcPs] -> LHsExpr GhcPs
-mkTupleExp [e] = e
-mkTupleExp es = noLoc $ ExplicitTuple noExt (map (noLoc . Present noExt) es) Boxed
+-- Utilities for constructing patterns
 
 mkTuplePat :: [Pat GhcPs] -> Pat GhcPs
 mkTuplePat [p] = p
 mkTuplePat ps = TuplePat noExt ps Boxed
 
 mkRdrPat :: RdrName -> Pat GhcPs
-mkRdrPat = XPat . noLoc . VarPat noExt . noLoc
+mkRdrPat = VarPat noExt . noLoc
+
+mkVarPat :: OccName -> Pat GhcPs
+mkVarPat = VarPat noExt . noLoc . mkRdrUnqual
+
+-- | Utility for constructing patterns of the form 'arg@T'.
+asPatPrefixCon :: String -> Located RdrName -> Pat GhcPs
+asPatPrefixCon varName conName =
+  AsPat noExt
+    (noLoc $ mkRdrUnqual (mkVarOcc varName))
+    (noLoc $ ConPatIn conName $ PrefixCon [])
+
+-- | Utility for constructing patterns of the form 'arg@T{..}'.
+asPatRecWild :: String -> Located RdrName -> Pat GhcPs
+asPatRecWild varName conName =
+  AsPat noExt
+    (noLoc $ mkRdrUnqual (mkVarOcc varName))
+    (noLoc $ ConPatIn conName $
+      RecCon $ HsRecFields { rec_flds = [], rec_dotdot = Just 0 })
+
+-- | Utility function for constructing patterns of the form 'arg@X'
+-- where 'X' is either a record wildcard pattern or a prefix
+-- constructor pattern depending on whether a non-empty record field
+-- list is provided.
+argPatOfChoice :: Located RdrName -> LHsType GhcPs -> Pat GhcPs
+argPatOfChoice choiceConName (L _ (HsRecTy _ [])) = asPatPrefixCon "arg" choiceConName
+argPatOfChoice choiceConName _ = asPatRecWild "arg" choiceConName
+
+--------------------------------------------------------------------------------
+-- Utilities for constructing types and values
+
+mkTupleExp :: [LHsExpr GhcPs] -> LHsExpr GhcPs
+mkTupleExp [e] = e
+mkTupleExp es = noLoc $ ExplicitTuple noExt (map (noLoc . Present noExt) es) Boxed
 
 mkRdrExp :: RdrName -> LHsExpr GhcPs
 mkRdrExp = noLoc . HsVar noExt . noLoc
@@ -2500,17 +2529,6 @@ mkFalse = mkQualVar $ mkDataOcc "False"
 mkTrue :: LHsExpr GhcPs
 mkTrue = mkQualVar $ mkDataOcc "True"
 
--- Boolean operators
-mkAnd :: LHsExpr GhcPs -> LHsExpr GhcPs -> LHsExpr GhcPs
-mkAnd = mkHsApp2 (mkQualVar $ mkVarOcc "&&")
-
-mkEq :: LHsExpr GhcPs -> LHsExpr GhcPs -> LHsExpr GhcPs
-mkEq = mkHsApp2 (mkQualVar $ mkVarOcc "==")
-
--- Helper for operators
-mkHsApp2 :: LHsExpr GhcPs -> LHsExpr GhcPs -> LHsExpr GhcPs -> LHsExpr GhcPs
-mkHsApp2 a b c = mkHsApp (mkHsApp a b) c
-
 -- Wrap a type in parentheses, preserving the location of the original type.
 mkParenTy :: LHsType GhcPs -> LHsType GhcPs
 mkParenTy ty = L (getLoc ty) (HsParTy noExt ty)
@@ -2529,9 +2547,6 @@ mkTemplateType templateName = mkUnqualType templateName
 
 mkChoiceType :: Located RdrName -> LHsType GhcPs
 mkChoiceType choiceName = rdrNameToType choiceName
-
-mkVarPat :: OccName -> Pat GhcPs
-mkVarPat = XPat . noLoc . VarPat noExt . noLoc . mkRdrUnqual
 
 -- Name conversions
 
@@ -2559,13 +2574,6 @@ applyConcat (L loc ps) =
     (L loc $ HsVar noExt $ L loc $ qualifyDesugar $ mkVarOcc "concat")
     (L loc $ ExplicitList noExt Nothing ps)
 
--- | Utility for constructing patterns of the form 'arg@T'.
-asPatPrefixCon :: String -> Located RdrName -> Pat GhcPs
-asPatPrefixCon varName conName =
-  XPat (noLoc $ AsPat noExt
-    (noLoc $ mkRdrUnqual (mkVarOcc varName))
-    (noLoc $ XPat (noLoc $ ConPatIn conName $ PrefixCon [])))
-
 -- | The "-Wunused-matches hack." Construct dummy bindings of the form
 -- @_ = this@ or @_ = self@. We use this hack to suppress warnings of
 -- the form "Defined but not used: ‘this’".
@@ -2581,7 +2589,7 @@ dummyBinds args = listToBag [dummyBind n | Just n <- map patToRdrName args]
     patToRdrName (dL -> L _ (AsPat _ n _)) = Just n
     patToRdrName _ = Nothing
     wildCard :: Pat GhcPs
-    wildCard = XPat $ (noLoc (WildPat noExt))
+    wildCard = WildPat noExt
 -- | Part of the -Wunused-matches hack.
 mkLetBindings :: Bag (LHsBind GhcPs) -> LHsLocalBinds GhcPs
 mkLetBindings binds = noLoc $ HsValBinds noExt (ValBinds noExt binds [])
@@ -2591,22 +2599,6 @@ extendLetBindings (L _ (HsValBinds _ (ValBinds _ orig sigs))) new =
   noLoc $ HsValBinds noExt (ValBinds noExt (unionBags orig new) sigs)
 extendLetBindings (L _ (EmptyLocalBinds _)) new = mkLetBindings new
 extendLetBindings _ _ = error "unexpected: extendLetBindings"
-
--- | Utility for constructing patterns of the form 'arg@T{..}'.
-asPatRecWild :: String -> Located RdrName -> Pat GhcPs
-asPatRecWild varName conName =
-  XPat (noLoc $ AsPat noExt
-    (noLoc $ mkRdrUnqual (mkVarOcc varName))
-    (noLoc $ XPat (noLoc $ ConPatIn conName $
-      RecCon $ HsRecFields { rec_flds = [], rec_dotdot = Just 0 })))
-
--- | Utility function for constructing patterns of the form 'arg@X'
--- where 'X' is either a record wildcard pattern or a prefix
--- constructor pattern depending on whether a non-empty record field
--- list is provided.
-argPatOfChoice :: Located RdrName -> LHsType GhcPs -> Pat GhcPs
-argPatOfChoice choiceConName (L _ (HsRecTy _ [])) = asPatPrefixCon "arg" choiceConName
-argPatOfChoice choiceConName _ = asPatRecWild "arg" choiceConName
 
 -- | Utility for constructing a match context.
 matchContext :: Located RdrName -> HsMatchContext RdrName
@@ -3171,20 +3163,22 @@ validateTemplate vtTemplateName tbd@TemplateBodyDecls{..}
     checkNumArgs iface (L loc (ValidImplementsMethodDecl methodName matches)) =
       case numArgs of
         [] -> pure ()
-        (match1@(L l1 n1):matches) -> do
+        (L loc1 n1 : matches) -> do
           let badMatches = [m | m@(L _ n) <- matches, n /= n1]
-          when (notNull badMatches) $
-            addFatalError loc $ vcat
-              [ text "Equations for method"
-                <+> quotes (ppr methodName)
-                <+> text "in template"
-                <+> quotes (ppr vtTemplateName)
-                <+> text "implementation of interface"
-                <+> quotes (ppr iface)
-                <+> text "have different numbers of arguments"
-              , nest 2 (ppr (getLoc match1))
-              , nest 2 (ppr (getLoc (head badMatches)))
-              ]
+          case badMatches of
+            [] -> pure ()
+            (L locBad _ : _) ->
+              addFatalError loc $ vcat
+                [ text "Equations for method"
+                  <+> quotes (ppr methodName)
+                  <+> text "in template"
+                  <+> quotes (ppr vtTemplateName)
+                  <+> text "implementation of interface"
+                  <+> quotes (ppr iface)
+                  <+> text "have different numbers of arguments"
+                , nest 2 (ppr loc1)
+                , nest 2 (ppr locBad)
+                ]
       where
         numArgs =
           [ L l (length m_pats)
@@ -3602,9 +3596,6 @@ methodType = mkQualType "Method"
 
 mkMethodExpr :: LHsExpr GhcPs
 mkMethodExpr = mkQualVar $ mkVarOcc "mkMethod"
-
-interfaceTypeRepExp :: LHsExpr GhcPs
-interfaceTypeRepExp = mkQualVar $ mkVarOcc "interfaceTypeRep"
 
 mkInterfaceDecl
   :: Located RdrName -> [Located RdrName] -> [Located InterfaceBodyDecl] -> P (OrdList (LHsDecl GhcPs))
