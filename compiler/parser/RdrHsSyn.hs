@@ -3432,12 +3432,20 @@ mkInterfaceImplements templateName conName sharedBinds implements =
       { vidbInterface = implementsInterface
       , vidbDefs = implementsDefs
       } = implements
-
+    mangle = concatMap mangleC
+      where
+        mangleC '$' = "$$"
+        mangleC '_' = "$_"
+        mangleC x = [x]
+    templateInterfaceName =
+      let interfaceComponents = case isQual_maybe $ unLoc implementsInterface of
+            Just (modName, occName) -> [moduleNameString modName, occNameString occName]
+            Nothing -> [rdrNameToString implementsInterface]
+      in intercalate "_" (mangle <$> (rdrNameToString templateName : interfaceComponents))
     implementsMarker =
-      let name =
-            mkRdrUnqual $ mkVarOcc $
-              "_implements_"
-                ++ intercalate "_" (rdrNameToString <$> [templateName, implementsInterface])
+      let
+          name =
+            mkRdrUnqual $ mkVarOcc $ "_implements_" ++ templateInterfaceName
           sig =
             TypeSig noExt [noLoc name] $
               mkHsWildCardBndrs $ mkHsImplicitBndrs $
@@ -3462,8 +3470,7 @@ mkInterfaceImplements templateName conName sharedBinds implements =
       let
         fullMethodName =
           noLoc $ mkRdrUnqual $ mkVarOcc $
-            "_method_"
-              ++ intercalate "_" (rdrNameToString <$> [templateName, implementsInterface, name])
+            "_method_" ++ templateInterfaceName ++ "_" ++ mangle (rdrNameToString name)
         methodNameSymbol = mkSymbol (occNameString $ rdrNameOcc $ unLoc name)
         sig =
           TypeSig noExt [fullMethodName] $
