@@ -38,6 +38,7 @@ import qualified Distribution.Text                             as C
 import qualified Distribution.Types.LocalBuildInfo             as C
 import qualified Distribution.Types.CondTree                   as C
 import qualified Distribution.Types.MungedPackageId            as C
+import qualified Distribution.Utils.ShortText                  as C
 import qualified Distribution.Verbosity                        as C
 import Hadrian.Expression
 import Hadrian.Haskell.Cabal
@@ -67,7 +68,7 @@ parsePackageData pkg = do
         sorted  = sort [ C.unPackageName p | C.Dependency p _ _ <- allDeps ]
         deps    = nubOrd sorted \\ [name]
         depPkgs = catMaybes $ map findPackageByName deps
-    return $ PackageData name version (C.synopsis pd) (C.description pd) depPkgs gpd
+    return $ PackageData name version (C.fromShortText $ C.synopsis pd) (C.fromShortText $ C.description pd) depPkgs gpd
   where
     -- Collect an overapproximation of dependencies by ignoring conditionals
     collectDeps :: Maybe (C.CondTree v [C.Dependency] a) -> [C.Dependency]
