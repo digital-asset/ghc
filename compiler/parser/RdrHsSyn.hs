@@ -2489,6 +2489,12 @@ mkAppType e ty = noLoc $ HsAppType noExt e (mkHsWildCardBndrs ty)
 mkParExpr :: LHsExpr GhcPs -> LHsExpr GhcPs
 mkParExpr exp@(L loc _) = L loc (HsPar noExt exp)
 
+mkExprWithType :: LHsExpr GhcPs -> LHsType GhcPs -> LHsExpr GhcPs
+mkExprWithType expr typ@(L loc _) = mkParExpr $ L loc (ExprWithTySig noExt expr $ mkHsWildCardBndrs $ mkHsImplicitBndrs typ)
+
+mkListType :: LHsType GhcPs -> LHsType GhcPs
+mkListType typ@(L loc _) = L loc (HsListTy noExt typ)
+
 mkUnqualType :: Located String -> LHsType GhcPs
 mkUnqualType (L loc tyName) =
   rdrNameToType $ L loc $ mkRdrUnqual $ mkTcOcc tyName
@@ -2957,8 +2963,8 @@ mkInterfaceInstanceDecl interfaceType interfacePrecondM =
 mkChoiceInstanceDecl :: Located String -> CombinedChoiceData -> [LHsDecl GhcPs]
 mkChoiceInstanceDecl templateName CombinedChoiceData { ccdChoiceData = ChoiceData{..} } =
   [ mkInstance "HasExercise" (mkPrimMethod "exercise" "UExercise")
-  , mkInstance "HasToAnyChoice" (mkPrimMethod "_toAnyChoice" "EToAnyChoice")
-  , mkInstance "HasFromAnyChoice" (mkPrimMethod "_fromAnyChoice" "EFromAnyChoice")
+  , mkInstance "HasToAnyChoice" (mkPrimMethod "_toAnyChoice" "EToAnyTemplateChoice")
+  , mkInstance "HasFromAnyChoice" (mkPrimMethod "_fromAnyChoice" "EFromAnyTemplateChoice")
   ]
   where
     templateType = mkTemplateType templateName
@@ -2984,10 +2990,10 @@ mkInterfaceFixedChoiceInstanceDecl :: Located RdrName -> InterfaceChoiceSignatur
 mkInterfaceFixedChoiceInstanceDecl tycon InterfaceChoiceSignature {..} =
   [ mkInstance "HasToAnyChoice"
       simpleContext
-      (mkPrimMethod "_toAnyChoice" "EToAnyChoice")
+       (mkTemplateClassMethod "_toAnyChoice" [proxy] (mkPrimitive "primitive" "EToAnyInterfaceChoice" `mkApp` nil ifaceType) Nothing)
   , mkInstance "HasFromAnyChoice"
       simpleContext
-      (mkPrimMethod "_fromAnyChoice" "EFromAnyChoice")
+      (mkTemplateClassMethod "_fromAnyChoice" [proxy] (mkPrimitive "primitive" "EFromAnyInterfaceChoice" `mkApp` nil ifaceType) Nothing)
   , mkInstance "HasExerciseGuarded"
       exerciseContext
       (mkTemplateClassMethod "exerciseGuarded" [pred, cid, arg]
@@ -3011,6 +3017,8 @@ mkInterfaceFixedChoiceInstanceDecl tycon InterfaceChoiceSignature {..} =
     pred = mkVarPat $ mkVarOcc "pred"
     cid = mkVarPat $ mkVarOcc "cid"
     arg = mkVarPat $ mkVarOcc "arg"
+    proxy = WildPat noExt
+    nil typ = mkExprWithType (noLoc $ ExplicitList noExt Nothing []) (mkListType typ)
     paramVar = noLoc $ Unqual (mkTyVarOcc "t")
     paramType = noLoc $ HsTyVar noExt NotPromoted paramVar
     implementsConstraint = mkParenTy (mkImplementsConstraint paramType ifaceType)
