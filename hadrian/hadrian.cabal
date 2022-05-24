@@ -133,6 +133,7 @@ executable hadrian
                            , unordered-containers
         build-tools:         alex
                            , happy
+        cpp-options:       -DWITH_BAZEL
     else
         build-depends:       base                 >= 4.8     && < 5
                            , Cabal                >= 3.0     && < 3.1
