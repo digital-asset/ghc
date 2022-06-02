@@ -9,6 +9,7 @@ These are Uniquable, hence we can build Maps with Modules as
 the keys.
 -}
 
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 
@@ -1088,10 +1089,16 @@ See Note [The integer library] in PrelNames.
 integerUnitId, primUnitId,
   baseUnitId, rtsUnitId,
   thUnitId, mainUnitId, thisGhcUnitId, interactiveUnitId  :: UnitId
+#ifdef DAML_PRIM
 primUnitId        = fsToUnitId (fsLit "daml-prim")
 integerUnitId     = primUnitId
-   -- See Note [The integer library] in PrelNames
 baseUnitId        = primUnitId
+#else
+primUnitId        = fsToUnitId (fsLit "ghc-prim")
+integerUnitId     = fsToUnitId (fsLit "integer-wired-in")
+   -- See Note [The integer library] in PrelNames
+baseUnitId        = fsToUnitId (fsLit "base")
+#endif
 rtsUnitId         = fsToUnitId (fsLit "rts")
 thUnitId          = fsToUnitId (fsLit "template-haskell")
 thisGhcUnitId     = fsToUnitId (fsLit "ghc")
