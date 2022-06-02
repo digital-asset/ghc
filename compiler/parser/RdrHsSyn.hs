@@ -3676,9 +3676,11 @@ mkInterfaceDecl tycon requires decls = do
         requiresMarker :: Located RdrName -> [LHsDecl GhcPs]
         requiresMarker requiredTycon =
           let name =
-                mkRdrUnqual $ mkVarOcc $ concat
-                  [ "_requires_", rdrNameToString viInterfaceName
-                  , "_", rdrNameToString requiredTycon ]
+                mkRdrUnqual $ mkVarOcc $
+                  ("_requires_" ++) $ intercalate "_" $ mangle <$>
+                    [ rdrNameToString viInterfaceName
+                    , rdrNameToQualString requiredTycon
+                    ]
               sig =
                 TypeSig noExt [noLoc name] $
                   mkHsWildCardBndrs $ mkHsImplicitBndrs $
