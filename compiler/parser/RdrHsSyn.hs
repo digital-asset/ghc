@@ -2562,6 +2562,25 @@ rdrNameToType lname@(L loc _) = L loc $ HsTyVar noExt NotPromoted lname
 rdrNameToString :: Located RdrName -> String
 rdrNameToString = occNameString . rdrNameOcc . unLoc
 
+-- | Like 'rdrNameToString', but if the input is qualified, prepends the
+-- the module name, with ":" as the separator.
+rdrNameToQualString :: Located RdrName -> String
+rdrNameToQualString rdrName =
+  case isQual_maybe (unLoc rdrName) of
+    Just (modName, occName) ->
+      moduleNameString modName ++ ":" ++ occNameString occName
+    Nothing ->
+      rdrNameToString rdrName
+
+-- | Simple mangling function, used to avoid clashes when using
+-- underscores as separators in strings constructed from 'RdrName's.
+mangle :: String -> String
+mangle = concatMap mangleC
+  where
+    mangleC '$' = "$$"
+    mangleC '_' = "$_"
+    mangleC x = [x]
+
 -- | Calculates the application of a 'toParties' function to an
 -- expression (invoked from Parser.y).
 applyToParties :: LHsExpr GhcPs -> LHsExpr GhcPs
@@ -3440,16 +3459,11 @@ mkInterfaceImplements templateName conName sharedBinds implements =
       { vidbInterface = implementsInterface
       , vidbDefs = implementsDefs
       } = implements
-    mangle = concatMap mangleC
-      where
-        mangleC '$' = "$$"
-        mangleC '_' = "$_"
-        mangleC x = [x]
     templateInterfaceName =
-      let interfaceComponents = case isQual_maybe $ unLoc implementsInterface of
-            Just (modName, occName) -> [moduleNameString modName, occNameString occName]
-            Nothing -> [rdrNameToString implementsInterface]
-      in intercalate "_" (mangle <$> (rdrNameToString templateName : interfaceComponents))
+      intercalate "_" $ mangle <$>
+        [ rdrNameToString templateName
+        , rdrNameToQualString implementsInterface
+        ]
     implementsMarker =
       let
           name =
@@ -3662,9 +3676,11 @@ mkInterfaceDecl tycon requires decls = do
         requiresMarker :: Located RdrName -> [LHsDecl GhcPs]
         requiresMarker requiredTycon =
           let name =
-                mkRdrUnqual $ mkVarOcc $ concat
-                  [ "_requires_", rdrNameToString viInterfaceName
-                  , "_", rdrNameToString requiredTycon ]
+                mkRdrUnqual $ mkVarOcc $
+                  ("_requires_" ++) $ intercalate "_" $ mangle <$>
+                    [ rdrNameToString viInterfaceName
+                    , rdrNameToQualString requiredTycon
+                    ]
               sig =
                 TypeSig noExt [noLoc name] $
                   mkHsWildCardBndrs $ mkHsImplicitBndrs $
