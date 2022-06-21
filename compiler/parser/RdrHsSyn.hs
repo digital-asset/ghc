@@ -2364,7 +2364,7 @@ data ValidTemplate = ValidTemplate {
     , vtLetBindings :: LHsLocalBinds GhcPs
     , vtChoices :: [CombinedChoiceData]
     , vtKeyData :: Maybe (Located KeyData)
-    , vtImplements :: [ValidImplementsDeclBlock]
+    , vtImplements :: [Located ValidImplementsDeclBlock]
     }
 
 instance Semigroup TemplateBodyDecls where
@@ -3157,11 +3157,11 @@ validateTemplate vtTemplateName tbd@TemplateBodyDecls{..}
 
     validateImplementsBlocks ::
          [Located ParsedImplementsDeclBlock]
-      -> P [ValidImplementsDeclBlock]
-    validateImplementsBlocks = mapM validateImplementsBlock
+      -> P [Located ValidImplementsDeclBlock]
+    validateImplementsBlocks = mapM $ traverse validateImplementsBlock
 
-    validateImplementsBlock :: Located ParsedImplementsDeclBlock -> P ValidImplementsDeclBlock
-    validateImplementsBlock (L _ (ParsedImplementsDeclBlock iface decls)) = do
+    validateImplementsBlock :: ParsedImplementsDeclBlock -> P ValidImplementsDeclBlock
+    validateImplementsBlock (ParsedImplementsDeclBlock iface decls) = do
       impls <- mapM validateMethodImpl (groupValDecls decls)
       checkMultipleDecls iface impls
       mapM_ (checkNumArgs iface) impls
@@ -3446,9 +3446,9 @@ mkInterfaceImplements ::
      Located RdrName
   -> Located RdrName
   -> LHsLocalBinds GhcPs
-  -> ValidImplementsDeclBlock
+  -> Located ValidImplementsDeclBlock
   -> [LHsDecl GhcPs]
-mkInterfaceImplements templateName conName sharedBinds implements =
+mkInterfaceImplements templateName conName sharedBinds (L loc implements) =
   implementsMarker ++ implementsInstances ++ implementsInterfaceMethods
   where
     implementsInstances = mkImplementsInstances templateType interfaceType
@@ -3469,22 +3469,22 @@ mkInterfaceImplements templateName conName sharedBinds implements =
           name =
             mkRdrUnqual $ mkVarOcc $ "_implements_" ++ templateInterfaceName
           sig =
-            TypeSig noExt [noLoc name] $
+            TypeSig noExt [cL loc name] $
               mkHsWildCardBndrs $ mkHsImplicitBndrs $
                 implementsType `mkAppTy` templateType `mkAppTy` interfaceType
           rhs =
             matchGroup noSrcSpan $
               matchWithBinds
-                (matchContext (noLoc name))
+                (matchContext (cL loc name))
                 []
                 noSrcSpan
                 implementsCon
                 (noLoc emptyLocalBinds)
           val =
-            FunBind noExt (noLoc name) rhs WpHole []
+            FunBind noExt (cL loc name) rhs WpHole []
       in
-        [ noLoc (SigD noExt sig)
-        , noLoc (ValD noExt val)
+        [ cL loc (SigD noExt sig)
+        , cL loc (ValD noExt val)
         ]
 
     mkInterfaceImplementsMethod :: Located ValidImplementsMethodDecl -> [LHsDecl GhcPs]
