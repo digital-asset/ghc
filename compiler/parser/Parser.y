@@ -1221,7 +1221,7 @@ let_bindings_decl :: { Located ([AddAnn], LHsLocalBinds GhcPs) }
                                              , snd $ unLoc $2) }
 
 implements_group_decl :: { Located ParsedImplementsDeclBlock }
-  : 'implements' qtycon where_impl { sL1 $1 $ ParsedImplementsDeclBlock $2 $3 }
+  : 'implements' qtycon where_impl { sLL $1 $2 $ ParsedImplementsDeclBlock $2 $3 }
 
 where_impl :: { [LHsDecl GhcPs] }
   : where_inst { fromOL (snd (unLoc $1)) }
