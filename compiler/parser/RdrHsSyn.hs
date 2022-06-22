@@ -3674,7 +3674,7 @@ mkInterfaceDecl tycon requires decls = do
         requiresMarkers = concatMap requiresMarker viRequiredInterfaces
 
         requiresMarker :: Located RdrName -> [LHsDecl GhcPs]
-        requiresMarker requiredTycon =
+        requiresMarker requiredTycon@(LL loc _) =
           let name =
                 mkRdrUnqual $ mkVarOcc $
                   ("_requires_" ++) $ intercalate "_" $ mangle <$>
@@ -3682,13 +3682,13 @@ mkInterfaceDecl tycon requires decls = do
                     , rdrNameToQualString requiredTycon
                     ]
               sig =
-                TypeSig noExt [noLoc name] $
+                TypeSig noExt [cL loc name] $
                   mkHsWildCardBndrs $ mkHsImplicitBndrs $
                     requiresType `mkAppTy` ifaceTy `mkAppTy` rdrNameToType requiredTycon
               rhs =
                 matchGroup noSrcSpan $
                   matchWithBinds
-                    (matchContext (noLoc name))
+                    (matchContext (cL loc name))
                     []
                     noSrcSpan
                     requiresCon
@@ -3696,8 +3696,8 @@ mkInterfaceDecl tycon requires decls = do
               val =
                 FunBind noExt (noLoc name) rhs WpHole []
           in
-            [ noLoc (SigD noExt sig)
-            , noLoc (ValD noExt val)
+            [ cL loc (SigD noExt sig)
+            , cL loc (ValD noExt val)
             ]
 
         requiresInstances :: [LHsDecl GhcPs]
