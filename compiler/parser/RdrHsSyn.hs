@@ -3627,8 +3627,8 @@ mkMethodExpr :: LHsExpr GhcPs
 mkMethodExpr = mkQualVar $ mkVarOcc "mkMethod"
 
 mkInterfaceDecl
-  :: Located RdrName -> [Located RdrName] -> [Located InterfaceBodyDecl] -> P (OrdList (LHsDecl GhcPs))
-mkInterfaceDecl tycon requires decls = do
+  :: Located RdrName -> Located [Located RdrName] -> [Located InterfaceBodyDecl] -> P (OrdList (LHsDecl GhcPs))
+mkInterfaceDecl tycon (LL requiresLoc requires) decls = do
     ValidInterface {..} <- validateInterface tycon requires decls
     let ifaceTy = rdrNameToType viInterfaceName
         existential :: LHsDecl GhcPs
@@ -3682,22 +3682,22 @@ mkInterfaceDecl tycon requires decls = do
                     , rdrNameToQualString requiredTycon
                     ]
               sig =
-                TypeSig noExt [noLoc name] $
+                TypeSig noExt [cL requiresLoc name] $
                   mkHsWildCardBndrs $ mkHsImplicitBndrs $
                     requiresType `mkAppTy` ifaceTy `mkAppTy` rdrNameToType requiredTycon
               rhs =
                 matchGroup noSrcSpan $
                   matchWithBinds
-                    (matchContext (noLoc name))
+                    (matchContext (cL requiresLoc name))
                     []
                     noSrcSpan
                     requiresCon
                     (noLoc emptyLocalBinds)
               val =
-                FunBind noExt (noLoc name) rhs WpHole []
+                FunBind noExt (cL requiresLoc name) rhs WpHole []
           in
-            [ noLoc (SigD noExt sig)
-            , noLoc (ValD noExt val)
+            [ cL requiresLoc (SigD noExt sig)
+            , cL requiresLoc (ValD noExt val)
             ]
 
         requiresInstances :: [LHsDecl GhcPs]
