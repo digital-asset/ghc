@@ -151,10 +151,15 @@ toInterface = _toInterface
 class HasFromInterface t i where
   fromInterface : i -> Optional t
 
+type family InterfaceView i :: *
+class HasInterfaceView t i where
+  _view :: proxy i -> t -> InterfaceView i
+
 type Implements t i =
   ( HasInterfaceTypeRep i
   , HasToInterface t i
   , HasFromInterface t i
+  , HasInterfaceView t i
   )
 
 coerceContractId : ContractId t -> ContractId i
