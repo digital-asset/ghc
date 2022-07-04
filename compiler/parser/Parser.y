@@ -526,6 +526,7 @@ are the most common patterns, rewritten as regular expressions for clarity:
  'interface'    { L _ ITinterface }
  'implements'   { L _ ITimplements }
  'requires'     { L _ ITrequires }
+ 'view'         { L _ ITview }
 
  '{-# INLINE'             { L _ (ITinline_prag _ _ _) } -- INLINE or INLINABLE
  '{-# SPECIALISE'         { L _ (ITspec_prag _) }
@@ -1373,11 +1374,16 @@ interface_body_decls
 interface_body_decl :: { Located InterfaceBodyDecl }
 interface_body_decl
   : ensure_decl                                  { sL1 $1 $ InterfaceEnsureDecl $1 }
+  | interface_view_type_decl { $1 }
   | 'choice' tycon OF_TYPE btype_ maybe_docprev arecord_with_opt interface_choice_body
         { sL (comb3 $2 $6 $>) $ InterfaceChoiceDecl (InterfaceChoiceSignature Nothing $2 $4 $6 $5) (unLoc $7) }
   | consuming_ 'choice' tycon OF_TYPE btype_ maybe_docprev arecord_with_opt interface_choice_body
         { sL (comb3 $3 $7 $>) $ InterfaceChoiceDecl (InterfaceChoiceSignature (Just (unLoc $1)) $3 $5 $7 $6) (unLoc $8) }
   | var OF_TYPE sigtype maybe_docprev { sL1 $1 $ InterfaceFunctionSignatureDecl $1 $3 $4 }
+
+interface_view_type_decl :: { Located InterfaceBodyDecl }
+interface_view_type_decl
+  : 'type' 'view' '=' ktypedoc { sLL $1 $> (InterfaceViewDecl $4) }
 
 interface_choice_body :: { Located InterfaceChoiceBody }
 interface_choice_body
