@@ -8,6 +8,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeFamilies #-}
 
 -- This file contains a minimal setup to allow the compilation of a desugared DAML template.
 
@@ -151,9 +152,10 @@ toInterface = _toInterface
 class HasFromInterface t i where
   fromInterface : i -> Optional t
 
-type family InterfaceView i :: *
+type family InterfaceView i
+
 class HasInterfaceView t i where
-  _view :: proxy i -> t -> InterfaceView i
+  interfaceView : proxy i -> t -> InterfaceView i
 
 type Implements t i =
   ( HasInterfaceTypeRep i

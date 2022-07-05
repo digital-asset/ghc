@@ -526,7 +526,7 @@ are the most common patterns, rewritten as regular expressions for clarity:
  'interface'    { L _ ITinterface }
  'implements'   { L _ ITimplements }
  'requires'     { L _ ITrequires }
- 'view'         { L _ ITview }
+ 'viewtype'     { L _ ITviewtype }
 
  '{-# INLINE'             { L _ (ITinline_prag _ _ _) } -- INLINE or INLINABLE
  '{-# SPECIALISE'         { L _ (ITspec_prag _) }
@@ -1383,7 +1383,7 @@ interface_body_decl
 
 interface_view_type_decl :: { Located InterfaceBodyDecl }
 interface_view_type_decl
-  : 'type' 'view' '=' ktypedoc { sLL $1 $> (InterfaceViewDecl $4) }
+  : 'viewtype' ktypedoc { sLL $1 $> (InterfaceViewDecl $2) }
 
 interface_choice_body :: { Located InterfaceChoiceBody }
 interface_choice_body
