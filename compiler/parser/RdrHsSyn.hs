@@ -2977,13 +2977,6 @@ mkInterfaceViewTypeDecl iface viewType = sequence
         viewType)
   ]
 
-mkInterfaceViewMethod :: Located RdrName -> ValidImplementsDeclBlock -> P [LHsDecl GhcPs]
-mkInterfaceViewMethod template vidb =
-  let ValidImplementsDeclBlock interface _ (L loc view) = vidb
-      ValidImplementsMethodDecl vimdId vimdMatches = view
-  in
-  [] -- mkTemplateClassMethod "interfaceView" [WildPat noExt]
-
 mkInterfaceInstanceDecl :: LHsType GhcPs -> Maybe (LHsExpr GhcPs) -> [LHsDecl GhcPs]
 mkInterfaceInstanceDecl interfaceType interfacePrecondM =
   [ mkInstance "HasToAnyTemplate" $ mkPrimMethod "_toAnyTemplate" "EToAnyTemplate"
@@ -3473,7 +3466,7 @@ mkTemplateDecls templateName fields decls = do
       choiceByKeyInstanceDecls = concatMap (mkChoiceByKeyInstanceDecl templateName vt) choicesWithArchive
       choiceDecls = concatMap (mkChoiceDecls (getLoc templateName) conName sharedBinds) choicesWithArchive
       keyInstanceDecl = mkKeyInstanceDecl sharedBinds templateName conName vt
-      templateInterfaceImplements = concatMap (mkInterfaceImplements vtTemplateName conName sharedBinds) vtImplements
+  templateInterfaceImplements <- concat <$> traverse (mkInterfaceImplements vtTemplateName conName sharedBinds) vtImplements
   return $ toOL $ templateDataDecl : choiceDataDecls ++ letDecls
                ++ templateInstances ++ (choiceInstanceDecls ++ choiceDecls ++ choiceByKeyInstanceDecls ++ keyInstanceDecl)
                ++ templateInterfaceImplements
@@ -3483,11 +3476,11 @@ mkInterfaceImplements ::
   -> Located RdrName
   -> LHsLocalBinds GhcPs
   -> Located ValidImplementsDeclBlock
-  -> [LHsDecl GhcPs]
-mkInterfaceImplements templateName conName sharedBinds (L loc implements) =
-  implementsMarker ++ implementsInstances ++ implementsInterfaceMethods ++ implementsView
+  -> P [LHsDecl GhcPs]
+mkInterfaceImplements templateName conName sharedBinds (L loc implements) = do
+  implementsView <- mkImplementsView
+  pure $ implementsMarker ++ implementsInstances ++ implementsInterfaceMethods ++ implementsView
   where
-    implementsView = mkInterfaceViewMethod templateName implements
     implementsInstances = mkImplementsInstances templateType interfaceType
     implementsInterfaceMethods = concatMap mkInterfaceImplementsMethod implementsDefs
     templateType = mkTemplateType (fmap (occNameString . rdrNameOcc) templateName)
@@ -3523,6 +3516,25 @@ mkInterfaceImplements templateName conName sharedBinds (L loc implements) =
         [ cL loc (SigD noExt sig)
         , cL loc (ValD noExt val)
         ]
+
+    mkImplementsView :: P [LHsDecl GhcPs]
+    mkImplementsView = do
+      let ValidImplementsDeclBlock iface _ (L loc view) = implements
+          ValidImplementsMethodDecl _ vimdMatches = view
+      body <- case unLoc $ mg_alts vimdMatches of
+        [matches] -> case m_pats $ unLoc matches of
+          [] -> case grhssGRHSs $ m_grhss $ unLoc matches of
+            [L _ (GRHS _ [] body)] -> pure body
+            _ -> addFatalError loc (text "Interface view methods cannot have guards.")
+          _ -> addFatalError loc (text "Interface view methods cannot take arguments.")
+        _ -> addFatalError loc (text "Interface view methods must only have one definition.")
+      pure [instDecl $ classInstDecl
+        (mkQualType "HasInterfaceView" `mkAppTy` rdrNameToType templateName `mkAppTy` rdrNameToType iface)
+        (unitBag $ mkTemplateClassMethod
+          "interfaceView"
+          [WildPat noExt, asPatRecWild "this" conName]
+          body
+          Nothing)]
 
     mkInterfaceImplementsMethod :: Located ValidImplementsMethodDecl -> [LHsDecl GhcPs]
     mkInterfaceImplementsMethod (L loc ValidImplementsMethodDecl { vimdId = name, vimdMatches }) =
