@@ -2968,14 +2968,14 @@ mkInterfaceMethodDecl ifaceTy classTy methodName methodType mbDocString =
         name = occNameString $ occName rdrName
         L _ rdrName = methodName
 
-mkInterfaceViewTypeDecl :: Located RdrName -> LHsType GhcPs -> P [LHsDecl GhcPs]
-mkInterfaceViewTypeDecl iface viewType = sequence
-  [ fmap mkInstD $ mkTyFamInst (getLoc viewType) =<< fmap fst
-      (mkTyFamInstEqn
-        Nothing
-        (mkQualType "InterfaceView" `mkAppTy` noLoc (HsTyVar NoExt NotPromoted iface))
-        viewType)
-  ]
+mkHasInterfaceViewDecl :: Located RdrName -> LHsType GhcPs -> LHsDecl GhcPs
+mkHasInterfaceViewDecl iface viewType =
+  L (getLoc iface) $ unLoc $
+    instDecl $ classInstDecl
+      (hasInterfaceViewClass
+        `mkAppTy` rdrNameToType iface
+        `mkAppTy` viewType)
+      emptyBag
 
 mkInterfaceInstanceDecl :: LHsType GhcPs -> Maybe (LHsExpr GhcPs) -> [LHsDecl GhcPs]
 mkInterfaceInstanceDecl interfaceType interfacePrecondM =
@@ -3521,20 +3521,49 @@ mkInterfaceImplements templateName conName sharedBinds (L loc implements) = do
     mkImplementsView = do
       let ValidImplementsDeclBlock iface _ (L loc view) = implements
           ValidImplementsMethodDecl _ vimdMatches = view
-      body <- case unLoc $ mg_alts vimdMatches of
+
+      extractedBody <- case unLoc $ mg_alts vimdMatches of
         [matches] -> case m_pats $ unLoc matches of
           [] -> case grhssGRHSs $ m_grhss $ unLoc matches of
             [L _ (GRHS _ [] body)] -> pure body
             _ -> addFatalError loc (text "Interface view methods cannot have guards.")
           _ -> addFatalError loc (text "Interface view methods cannot take arguments.")
         _ -> addFatalError loc (text "Interface view methods must only have one definition.")
-      pure [instDecl $ classInstDecl
-        (mkQualType "HasInterfaceView" `mkAppTy` rdrNameToType templateName `mkAppTy` rdrNameToType iface)
-        (unitBag $ mkTemplateClassMethod
-          "interfaceView"
-          [WildPat noExt, asPatRecWild "this" conName]
-          body
-          Nothing)]
+
+      let
+        fullViewName =
+          noLoc $ mkRdrUnqual $ mkVarOcc $
+            "_view_" ++ templateInterfaceName
+        shortViewName = noLoc $ mkRdrUnqual $ mkVarOcc "view"
+        signature = TypeSig noExt [fullViewName] $
+          mkHsWildCardBndrs $ mkHsImplicitBndrs $
+            interfaceViewType `mkAppTy` templateType `mkAppTy` interfaceType
+        args = [asPatRecWild "this" conName]
+        exp =
+          L loc
+            (HsLet noExt
+              (noLoc
+                (HsValBinds noExt
+                  (ValBinds noExt
+                    (unitBag
+                      (noLoc
+                        (FunBind noExt shortViewName vimdMatches WpHole [])))
+                    [])))
+              (noLoc (HsVar noExt shortViewName)))
+        body =
+          mkInterfaceViewExpr
+          `mkAppType` templateType
+          `mkAppType` interfaceType
+          `mkApp` mkLambda args exp (allLetBindings True args sharedBinds)
+        ctx = matchContext fullViewName
+        match = matchWithBinds ctx [] loc body (noLoc (EmptyLocalBinds noExt))
+        matchGroup = MG noExt (noLoc [noLoc match]) Generated
+        val = FunBind noExt fullViewName matchGroup WpHole []
+
+      pure
+        [ noLoc (SigD noExt signature)
+        , noLoc (ValD noExt val)
+        ]
 
     mkInterfaceImplementsMethod :: Located ValidImplementsMethodDecl -> [LHsDecl GhcPs]
     mkInterfaceImplementsMethod (L loc ValidImplementsMethodDecl { vimdId = name, vimdMatches }) =
@@ -3666,6 +3695,15 @@ requiresType = mkQualType "RequiresT"
 requiresCon :: LHsExpr GhcPs
 requiresCon = mkQualVar $ mkDataOcc "RequiresT"
 
+hasInterfaceViewClass :: LHsType GhcPs
+hasInterfaceViewClass = mkQualType "HasInterfaceView"
+
+interfaceViewType :: LHsType GhcPs
+interfaceViewType = mkQualType "InterfaceView"
+
+mkInterfaceViewExpr :: LHsExpr GhcPs
+mkInterfaceViewExpr = mkQualVar $ mkVarOcc "mkInterfaceView"
+
 hasMethodClass :: LHsType GhcPs
 hasMethodClass = mkQualClass "HasMethod"
 
@@ -3785,7 +3823,8 @@ mkInterfaceDecl tycon (LL requiresLoc requires) decls = do
             | (choiceSig, choiceBody) <- viChoices
             ]
 
-    viewTypeDecls <- mkInterfaceViewTypeDecl tycon viViewType
+        viewTypeDecl :: LHsDecl GhcPs
+        viewTypeDecl = mkHasInterfaceViewDecl tycon viViewType
 
     choiceTys <- concat <$> sequence
             [ mkChoiceDataDecls $ interfaceChoiceToCombinedChoiceData choiceSig choiceBody
@@ -3803,7 +3842,7 @@ mkInterfaceDecl tycon (LL requiresLoc requires) decls = do
       ++ choiceInstances
       ++ choiceTys
       ++ choiceDecls
-      ++ viewTypeDecls
+      ++ [viewTypeDecl]
   where
     classVar = noLoc $ Unqual (mkTyVarOcc "t")
     classTy = noLoc $ HsTyVar noExt NotPromoted classVar

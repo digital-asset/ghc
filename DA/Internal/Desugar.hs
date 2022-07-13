@@ -154,10 +154,12 @@ class HasFromInterface t i where
   fromInterface : i -> Optional t
   unsafeFromInterface : ContractId i -> i -> t
 
-type family InterfaceView i
+-- Read: Interface `i` has a view of type `r`
+class HasInterfaceView i v | i -> v
 
-class HasInterfaceView t i where
-  interfaceView : proxy i -> t -> InterfaceView i
+-- | This is only a marker for the container, it doesn't contain the
+-- actual implementation of the method.
+newtype InterfaceView t i = InterfaceView ()
 
 type Implements t i =
   ( HasInterfaceTypeRep i
