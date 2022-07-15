@@ -154,18 +154,17 @@ class HasFromInterface t i where
   fromInterface : i -> Optional t
   unsafeFromInterface : ContractId i -> i -> t
 
--- Read: Interface `i` has a view of type `r`
 class HasInterfaceView i v | i -> v
 
--- | This is only a marker for the container, it doesn't contain the
--- actual implementation of the method.
 newtype InterfaceView t i = InterfaceView ()
+
+mkInterfaceView : (Implements t i, HasInterfaceView i v) => (t -> v) -> InterfaceView t i
+mkInterfaceView _ = InterfaceView ()
 
 type Implements t i =
   ( HasInterfaceTypeRep i
   , HasToInterface t i
   , HasFromInterface t i
-  , HasInterfaceView t i
   )
 
 coerceContractId : ContractId t -> ContractId i
