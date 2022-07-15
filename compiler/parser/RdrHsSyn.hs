@@ -2275,7 +2275,7 @@ data ValidInterface = ValidInterface
   , viFunctionSignatures :: [(Located RdrName, LHsType GhcPs, Maybe LHsDocString)]
   , viChoices :: [(InterfaceChoiceSignature, InterfaceChoiceBody)]
   , viEnsure :: Maybe (LHsExpr GhcPs)
-  , viViewType :: LHsType GhcPs
+  , viViewType :: Maybe (LHsType GhcPs) -- Check for presence of viewtype occurs during conversion
   }
 
 validateInterface ::
@@ -2290,10 +2290,10 @@ validateInterface name requires decls = do
       mapM_ (\e' -> report (getLoc e') "Multiple 'ensure' declarations") es
       pure (Just e)
   viViewType <- case ibdViewDecls of
-    [] -> report (getLoc name) "No 'viewtype' declaration."
+    [] -> pure Nothing
     (ty:tys) -> do
       mapM_ (\ty -> report (getLoc ty) "Multiple 'viewtype' declarations") tys
-      pure ty
+      pure (Just ty)
   pure ValidInterface
     { viInterfaceName = name
     , viRequiredInterfaces = requires
@@ -2968,8 +2968,9 @@ mkInterfaceMethodDecl ifaceTy classTy methodName methodType mbDocString =
         name = occNameString $ occName rdrName
         L _ rdrName = methodName
 
-mkHasInterfaceViewDecl :: Located RdrName -> LHsType GhcPs -> LHsDecl GhcPs
-mkHasInterfaceViewDecl iface viewType =
+mkHasInterfaceViewDecl :: Located RdrName -> Maybe (LHsType GhcPs) -> [LHsDecl GhcPs]
+mkHasInterfaceViewDecl iface Nothing = []
+mkHasInterfaceViewDecl iface (Just viewType) = pure $
   L (getLoc iface) $ unLoc $
     instDecl $ classInstDecl
       (hasInterfaceViewClass
@@ -3823,8 +3824,8 @@ mkInterfaceDecl tycon (LL requiresLoc requires) decls = do
             | (choiceSig, choiceBody) <- viChoices
             ]
 
-        viewTypeDecl :: LHsDecl GhcPs
-        viewTypeDecl = mkHasInterfaceViewDecl tycon viViewType
+        viewTypeDecls :: [LHsDecl GhcPs]
+        viewTypeDecls = mkHasInterfaceViewDecl tycon viViewType
 
     choiceTys <- concat <$> sequence
             [ mkChoiceDataDecls $ interfaceChoiceToCombinedChoiceData choiceSig choiceBody
@@ -3842,7 +3843,7 @@ mkInterfaceDecl tycon (LL requiresLoc requires) decls = do
       ++ choiceInstances
       ++ choiceTys
       ++ choiceDecls
-      ++ [viewTypeDecl]
+      ++ viewTypeDecls
   where
     classVar = noLoc $ Unqual (mkTyVarOcc "t")
     classTy = noLoc $ HsTyVar noExt NotPromoted classVar
