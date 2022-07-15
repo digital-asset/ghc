@@ -3196,7 +3196,7 @@ validateTemplate vtTemplateName tbd@TemplateBodyDecls{..}
         _ -> addFatalError loc (text "implements block has more than one view method")
 
       pure (L loc (ValidImplementsDeclBlock iface nonViewImpls viewImpl))
-  
+
     checkMultipleDecls :: Located RdrName -> [Located ValidImplementsMethodDecl] -> P ()
     checkMultipleDecls iface impls = mapM_ emitError multipleDecls
       where
