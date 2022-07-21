@@ -2290,7 +2290,7 @@ validateInterface name requires decls = do
       mapM_ (\e' -> report (getLoc e') "Multiple 'ensure' declarations") es
       pure (Just e)
   viViewType <- case ibdViewDecls of
-    [] -> pure Nothing
+    [] -> pure Nothing -- TODO: Fail on missing viewtype when PR #14486 merged in & tests fixed
     (ty:tys) -> do
       mapM_ (\ty -> report (getLoc ty) "Multiple 'viewtype' declarations") tys
       pure (Just ty)
@@ -3191,7 +3191,7 @@ validateTemplate vtTemplateName tbd@TemplateBodyDecls{..}
       let isViewImpl impl = rdrNameToString (vimdId impl) == "view"
       let (viewImpls, nonViewImpls) = partition (isViewImpl . unLoc) impls
       viewImpl <- case viewImpls of
-        [] -> pure $ Nothing
+        [] -> pure Nothing -- TODO: Fail on missing viewtype when PR #14486 merged in & tests fixed
         [viewImpl] -> pure $ Just viewImpl
         _ -> addFatalError loc (text "implements block has more than one view method")
 
