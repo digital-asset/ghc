@@ -1383,7 +1383,7 @@ interface_body_decl
 
 interface_view_type_decl :: { Located InterfaceBodyDecl }
 interface_view_type_decl
-  : 'viewtype' ktypedoc { sLL $1 $> (InterfaceViewDecl $2) }
+  : 'viewtype' btype { sLL $1 $> (InterfaceViewDecl $2) }
 
 interface_choice_body :: { Located InterfaceChoiceBody }
 interface_choice_body
