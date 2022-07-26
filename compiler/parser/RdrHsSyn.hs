@@ -2976,7 +2976,7 @@ mkHasInterfaceViewDecl iface (Just viewType) = pure $
       (hasInterfaceViewClass
         `mkAppTy` rdrNameToType iface
         `mkAppTy` viewType)
-      emptyBag
+      (unitBag (mkPrimMethod "_view" "EViewInterface"))
 
 mkInterfaceInstanceDecl :: LHsType GhcPs -> Maybe (LHsExpr GhcPs) -> [LHsDecl GhcPs]
 mkInterfaceInstanceDecl interfaceType interfacePrecondM =

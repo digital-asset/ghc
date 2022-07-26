@@ -155,6 +155,7 @@ class HasFromInterface t i where
   unsafeFromInterface : ContractId i -> i -> t
 
 class HasInterfaceView i v | i -> v
+  _view : i -> v
 
 newtype InterfaceView t i = InterfaceView ()
 
