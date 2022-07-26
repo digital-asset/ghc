@@ -8,8 +8,10 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeFamilies #-}
 
--- This file contains a minimal setup to allow the compilation of a desugared DAML template.
+-- This file contains a minimal setup to allow the compilation of a desugared
+-- DAML template and interface.
 
 module DA.Internal.Desugar
   ( module DA.Internal.Desugar
@@ -150,6 +152,15 @@ toInterface = _toInterface
 
 class HasFromInterface t i where
   fromInterface : i -> Optional t
+  unsafeFromInterface : ContractId i -> i -> t
+
+class HasInterfaceView i v | i -> v
+  _view : i -> v
+
+newtype InterfaceView t i = InterfaceView ()
+
+mkInterfaceView : (Implements t i, HasInterfaceView i v) => (t -> v) -> InterfaceView t i
+mkInterfaceView _ = InterfaceView ()
 
 type Implements t i =
   ( HasInterfaceTypeRep i
