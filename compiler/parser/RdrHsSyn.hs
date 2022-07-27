@@ -2238,7 +2238,6 @@ data KeyData = KeyData {
 data InterfaceBodyDecl
   = InterfaceFunctionSignatureDecl (Located RdrName) (LHsType GhcPs) (Maybe LHsDocString)
   | InterfaceChoiceDecl InterfaceChoiceSignature InterfaceChoiceBody
-  | InterfaceEnsureDecl (LHsExpr GhcPs)
   | InterfaceViewDecl (LHsType GhcPs)
 
 data InterfaceBodyDecls = InterfaceBodyDecls
@@ -2263,7 +2262,6 @@ interfaceBodyDeclToDecls :: InterfaceBodyDecl -> InterfaceBodyDecls
 interfaceBodyDeclToDecls = \case
   InterfaceFunctionSignatureDecl name ty mbDocString -> mempty { ibdFunctionSignatures = [(name, ty, mbDocString)] }
   InterfaceChoiceDecl signature body                 -> mempty { ibdChoices = [(signature, body)] }
-  InterfaceEnsureDecl ensure                         -> mempty { ibdEnsures = [ensure] }
   InterfaceViewDecl viewType                         -> mempty { ibdViewDecls = [viewType] }
 
 extractInterfaceBodyDecls :: [Located InterfaceBodyDecl] -> InterfaceBodyDecls
