@@ -2272,7 +2272,6 @@ data ValidInterface = ValidInterface
   , viRequiredInterfaces :: [Located RdrName]
   , viFunctionSignatures :: [(Located RdrName, LHsType GhcPs, Maybe LHsDocString)]
   , viChoices :: [(InterfaceChoiceSignature, InterfaceChoiceBody)]
-  , viEnsure :: Maybe (LHsExpr GhcPs)
   , viViewType :: Maybe (LHsType GhcPs) -- Check for presence of viewtype occurs during LF conversion
   }
 
@@ -2282,11 +2281,6 @@ validateInterface ::
   -> [Located InterfaceBodyDecl]
   -> P ValidInterface
 validateInterface name requires decls = do
-  viEnsure <- case ibdEnsures of
-    [] -> pure Nothing
-    (e:es) -> do
-      mapM_ (\e' -> report (getLoc e') "Multiple 'ensure' declarations") es
-      pure (Just e)
   viViewType <- case ibdViewDecls of
     [] -> pure Nothing -- TODO: Fail on missing viewtype when PR #14486 merged in & tests fixed
     (ty:tys) -> do
@@ -2297,7 +2291,6 @@ validateInterface name requires decls = do
     , viRequiredInterfaces = requires
     , viFunctionSignatures = ibdFunctionSignatures
     , viChoices = ibdChoices
-    , viEnsure
     , viViewType
     }
   where
@@ -2967,7 +2960,7 @@ mkInterfaceMethodDecl ifaceTy classTy methodName methodType mbDocString =
         L _ rdrName = methodName
 
 mkHasInterfaceViewDecl :: Located RdrName -> Maybe (LHsType GhcPs) -> [LHsDecl GhcPs]
-mkHasInterfaceViewDecl iface Nothing = []
+mkHasInterfaceViewDecl _ Nothing = []
 mkHasInterfaceViewDecl iface (Just viewType) = pure $
   L (getLoc iface) $ unLoc $
     instDecl $ classInstDecl
@@ -2976,22 +2969,20 @@ mkHasInterfaceViewDecl iface (Just viewType) = pure $
         `mkAppTy` viewType)
       (unitBag (mkPrimMethod "_view" "EViewInterface"))
 
-mkInterfaceInstanceDecl :: LHsType GhcPs -> Maybe (LHsExpr GhcPs) -> [LHsDecl GhcPs]
-mkInterfaceInstanceDecl interfaceType interfacePrecondM =
+mkInterfaceInstanceDecl :: LHsType GhcPs -> [LHsDecl GhcPs]
+mkInterfaceInstanceDecl interfaceType =
   [ mkInstance "HasToAnyTemplate" $ mkPrimMethod "_toAnyTemplate" "EToAnyTemplate"
   , mkInstance "HasFromAnyTemplate" $ mkPrimMethod "_fromAnyTemplate" "EFromAnyTemplate"
   , mkInstance "HasTemplateTypeRep" $ mkPrimMethod "_templateTypeRep" "ETemplateTypeRep"
   , mkInstance "HasSignatory" $ mkPrimMethod "signatory" "ESignatoryInterface"
   , mkInstance "HasObserver" $ mkPrimMethod "observer" "EObserverInterface"
   , mkInstance "HasCreate" $ mkPrimMethod "create" "UCreateInterface"
-  , mkInstance "HasEnsure" $ mkMethod "ensure" [this] (fromMaybe mkTrue interfacePrecondM)
   , mkInstance "HasIsInterfaceType" $ mkMethod "_isInterfaceType" [proxy] mkTrue
   , mkInstance "Eq" $ mkPrimMethod "==" "BEEqual"
   ]
   where
     mkInstance name method =
         instDecl $ classInstDecl (mkQualClass name `mkAppTy` interfaceType) $ unitBag method
-    this = mkVarPat $ mkVarOcc "this"
     proxy = WildPat noExt
     mkMethod :: String -> [Pat GhcPs] -> LHsExpr GhcPs -> LHsBind GhcPs
     mkMethod methodName args methodBody =
@@ -3518,7 +3509,7 @@ mkInterfaceImplements templateName conName sharedBinds (L loc implements) = do
 
     mkImplementsView :: P [LHsDecl GhcPs]
     mkImplementsView = do
-      let ValidImplementsDeclBlock iface _ view = implements
+      let ValidImplementsDeclBlock _ _ view = implements
 
       case view of
         Nothing -> pure []
@@ -3708,7 +3699,7 @@ mkMethodExpr = mkQualVar $ mkVarOcc "mkMethod"
 
 mkInterfaceDecl
   :: Located RdrName -> Located [Located RdrName] -> [Located InterfaceBodyDecl] -> P (OrdList (LHsDecl GhcPs))
-mkInterfaceDecl tycon (LL requiresLoc requires) decls = do
+mkInterfaceDecl tycon (L requiresLoc requires) decls = do
     ValidInterface {..} <- validateInterface tycon requires decls
     let ifaceTy = rdrNameToType viInterfaceName
         existential :: LHsDecl GhcPs
@@ -3801,7 +3792,7 @@ mkInterfaceDecl tycon (LL requiresLoc requires) decls = do
 
         ifaceInstances :: [LHsDecl GhcPs]
         ifaceInstances =
-          mkInterfaceInstanceDecl ifaceTy viEnsure
+          mkInterfaceInstanceDecl ifaceTy
 
         choiceInstances :: [LHsDecl GhcPs]
         choiceInstances = concat $
