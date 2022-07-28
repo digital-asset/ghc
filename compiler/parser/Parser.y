@@ -1373,8 +1373,7 @@ interface_body_decls
 
 interface_body_decl :: { Located InterfaceBodyDecl }
 interface_body_decl
-  : ensure_decl                                  { sL1 $1 $ InterfaceEnsureDecl $1 }
-  | interface_view_type_decl { $1 }
+  : interface_view_type_decl { $1 }
   | 'choice' tycon OF_TYPE btype_ maybe_docprev arecord_with_opt interface_choice_body
         { sL (comb3 $2 $6 $>) $ InterfaceChoiceDecl (InterfaceChoiceSignature Nothing $2 $4 $6 $5) (unLoc $7) }
   | consuming_ 'choice' tycon OF_TYPE btype_ maybe_docprev arecord_with_opt interface_choice_body
