@@ -2348,7 +2348,7 @@ data TemplateBodyDecls = TemplateBodyDecls {
 data ValidImplementsDeclBlock = ValidImplementsDeclBlock
   { vidbInterface :: Located RdrName
   , vidbDefs :: [Located ValidImplementsMethodDecl]
-  , vidbView :: Maybe (Located ValidImplementsMethodDecl)  -- Check for presence of view occurs during LF conversion
+  , vidbView :: Located ValidImplementsMethodDecl
   }
 
 data ValidImplementsMethodDecl = ValidImplementsMethodDecl
@@ -3180,8 +3180,8 @@ validateTemplate vtTemplateName tbd@TemplateBodyDecls{..}
       let isViewImpl impl = rdrNameToString (vimdId impl) == "view"
       let (viewImpls, nonViewImpls) = partition (isViewImpl . unLoc) impls
       viewImpl <- case viewImpls of
-        [] -> pure Nothing -- TODO: Fail on missing viewtype when PR #14486 merged in & tests fixed
-        [viewImpl] -> pure $ Just viewImpl
+        [] -> addFatalError loc (text "implements block does not have a view method")
+        [viewImpl] -> pure viewImpl
         _ -> addFatalError loc (text "implements block has more than one view method")
 
       pure (L loc (ValidImplementsDeclBlock iface nonViewImpls viewImpl))
@@ -3468,7 +3468,6 @@ mkInterfaceImplements ::
   -> Located ValidImplementsDeclBlock
   -> P [LHsDecl GhcPs]
 mkInterfaceImplements templateName conName sharedBinds (L loc implements) = do
-  implementsView <- mkImplementsView
   pure $ implementsMarker ++ implementsInstances ++ implementsInterfaceMethods ++ implementsView
   where
     implementsInstances = mkImplementsInstances templateType interfaceType
@@ -3507,47 +3506,43 @@ mkInterfaceImplements templateName conName sharedBinds (L loc implements) = do
         , cL loc (ValD noExt val)
         ]
 
-    mkImplementsView :: P [LHsDecl GhcPs]
-    mkImplementsView = do
+    implementsView :: [LHsDecl GhcPs]
+    implementsView =
       let ValidImplementsDeclBlock _ _ view = implements
+          L loc (ValidImplementsMethodDecl _ vimdMatches) = view
 
-      case view of
-        Nothing -> pure []
-        Just (L loc (ValidImplementsMethodDecl _ vimdMatches)) -> do
-          let
-            fullViewName =
-              noLoc $ mkRdrUnqual $ mkVarOcc $
-                "_view_" ++ templateInterfaceName
-            shortViewName = noLoc $ mkRdrUnqual $ mkVarOcc "view"
-            signature = TypeSig noExt [fullViewName] $
-              mkHsWildCardBndrs $ mkHsImplicitBndrs $
-                interfaceViewType `mkAppTy` templateType `mkAppTy` interfaceType
-            args = [asPatRecWild "this" conName]
-            exp =
-              L loc
-                (HsLet noExt
-                  (noLoc
-                    (HsValBinds noExt
-                      (ValBinds noExt
-                        (unitBag
-                          (noLoc
-                            (FunBind noExt shortViewName vimdMatches WpHole [])))
-                        [])))
-                  (noLoc (HsVar noExt shortViewName)))
-            body =
-              mkInterfaceViewExpr
-              `mkAppType` templateType
-              `mkAppType` interfaceType
-              `mkApp` mkLambda args exp (allLetBindings True args sharedBinds)
-            ctx = matchContext fullViewName
-            match = matchWithBinds ctx [] loc body (noLoc (EmptyLocalBinds noExt))
-            matchGroup = MG noExt (noLoc [noLoc match]) Generated
-            val = FunBind noExt fullViewName matchGroup WpHole []
-
-          pure
-            [ noLoc (SigD noExt signature)
-            , noLoc (ValD noExt val)
-            ]
+          fullViewName =
+            noLoc $ mkRdrUnqual $ mkVarOcc $
+              "_view_" ++ templateInterfaceName
+          shortViewName = noLoc $ mkRdrUnqual $ mkVarOcc "view"
+          signature = TypeSig noExt [fullViewName] $
+            mkHsWildCardBndrs $ mkHsImplicitBndrs $
+              interfaceViewType `mkAppTy` templateType `mkAppTy` interfaceType
+          args = [asPatRecWild "this" conName]
+          exp =
+            L loc
+              (HsLet noExt
+                (noLoc
+                  (HsValBinds noExt
+                    (ValBinds noExt
+                      (unitBag
+                        (noLoc
+                          (FunBind noExt shortViewName vimdMatches WpHole [])))
+                      [])))
+                (noLoc (HsVar noExt shortViewName)))
+          body =
+            mkInterfaceViewExpr
+            `mkAppType` templateType
+            `mkAppType` interfaceType
+            `mkApp` mkLambda args exp (allLetBindings True args sharedBinds)
+          ctx = matchContext fullViewName
+          match = matchWithBinds ctx [] loc body (noLoc (EmptyLocalBinds noExt))
+          matchGroup = MG noExt (noLoc [noLoc match]) Generated
+          val = FunBind noExt fullViewName matchGroup WpHole []
+      in
+      [ noLoc (SigD noExt signature)
+      , noLoc (ValD noExt val)
+      ]
 
     mkInterfaceImplementsMethod :: Located ValidImplementsMethodDecl -> [LHsDecl GhcPs]
     mkInterfaceImplementsMethod (L loc ValidImplementsMethodDecl { vimdId = name, vimdMatches }) =
