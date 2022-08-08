@@ -3779,12 +3779,6 @@ mkInterfaceDecl tycon (L requiresLoc requires) decls = do
               -- conflicts with the usual "HasToInterface iface iface" instance.
           ]
 
-        ifaceMethods :: [LHsDecl GhcPs]
-        ifaceMethods = concat
-          [ mkInterfaceMethodDecl ifaceTy classTy methodName methodType mbDocString
-          | (methodName, methodType, mbDocString) <- viFunctionSignatures
-          ]
-
         ifaceInstances :: [LHsDecl GhcPs]
         ifaceInstances =
           mkInterfaceInstanceDecl ifaceTy
@@ -3809,6 +3803,14 @@ mkInterfaceDecl tycon (L requiresLoc requires) decls = do
             [ mkChoiceDataDecls $ interfaceChoiceToCombinedChoiceData choiceSig choiceBody
             | (choiceSig, choiceBody) <- viChoices
             ]
+
+    ifaceMethods <- concat <$> sequence
+      [ if rdrNameToString methodName /= "view"
+         then pure $ mkInterfaceMethodDecl ifaceTy classTy methodName methodType mbDocString
+         else parseErrorSDoc (getLoc methodName) (text "Interface methods with name `view` are disallowed.")
+      | (methodName, methodType, mbDocString) <- viFunctionSignatures
+      ]
+
     pure $ toOL
       $ existential
       : hasInterfaceTypeRepInstance
