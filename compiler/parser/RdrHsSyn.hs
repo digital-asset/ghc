@@ -3495,6 +3495,7 @@ mkInterfaceImplements templateName conName sharedBinds (L loc implements) = do
       { viiInterface = implementsInterface
       , viiTemplate = _unused
       , viiDefs = implementsDefs
+      , viiView
       } = implements
     templateInterfaceName =
       intercalate "_" $ mangle <$>
@@ -3526,8 +3527,7 @@ mkInterfaceImplements templateName conName sharedBinds (L loc implements) = do
 
     implementsView :: [LHsDecl GhcPs]
     implementsView =
-      let ValidInterfaceInstance _ _ _ view = implements
-          L loc (ValidInterfaceInstanceMethodDecl _ viimdMatches) = view
+      let L loc (ValidInterfaceInstanceMethodDecl _ viimdMatches) = viiView
 
           fullViewName =
             noLoc $ mkRdrUnqual $ mkVarOcc $
