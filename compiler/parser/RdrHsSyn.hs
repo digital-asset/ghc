@@ -2889,8 +2889,8 @@ allLetBindings includeBindings args vtLetBindings =
 
 -- | Construct instances for split-up Template typeclass, i.e., instances for all the single-method typeclasses
 -- that constitute the Template constraint synonym.
-mkTemplateInstanceDecl :: LHsLocalBinds GhcPs -> Located String -> Located RdrName -> ValidTemplate -> [LHsDecl GhcPs]
-mkTemplateInstanceDecl sharedBinds templateName conName ValidTemplate{..} =
+mkTemplateInstances :: LHsLocalBinds GhcPs -> Located String -> Located RdrName -> ValidTemplate -> [LHsDecl GhcPs]
+mkTemplateInstances sharedBinds templateName conName ValidTemplate{..} =
   [ signatoryInstance
   , observerInstance
   , ensureInstance
@@ -2968,8 +2968,8 @@ mkHasInterfaceViewDecl iface (Just viewType) = pure $
         `mkAppTy` viewType)
       (unitBag (mkPrimMethod "_view" "EViewInterface"))
 
-mkInterfaceInstanceDecl :: LHsType GhcPs -> [LHsDecl GhcPs]
-mkInterfaceInstanceDecl interfaceType =
+mkInterfaceInstances :: LHsType GhcPs -> [LHsDecl GhcPs]
+mkInterfaceInstances interfaceType =
   [ mkInstance "HasToAnyTemplate" $ mkPrimMethod "_toAnyTemplate" "EToAnyTemplate"
   , mkInstance "HasFromAnyTemplate" $ mkPrimMethod "_fromAnyTemplate" "EFromAnyTemplate"
   , mkInstance "HasTemplateTypeRep" $ mkPrimMethod "_templateTypeRep" "ETemplateTypeRep"
@@ -3450,7 +3450,7 @@ mkTemplateDecls templateName fields decls = do
       templateDataDecl = mkTemplateDataDecl (combineLocs vtTemplateName fields) vtTemplateName ci
       (letDecls,sharedBinds) = shareTemplateLetBindings conName vtLetBindings
       choicesWithArchive = mkArchiveChoice : vtChoices
-      templateInstances = mkTemplateInstanceDecl sharedBinds templateName conName vt
+      templateInstances = mkTemplateInstances sharedBinds templateName conName vt
       choiceInstanceDecls = concatMap (mkChoiceInstanceDecl templateName) choicesWithArchive
       choiceByKeyInstanceDecls = concatMap (mkChoiceByKeyInstanceDecl templateName vt) choicesWithArchive
       choiceDecls = concatMap (mkChoiceDecls (getLoc templateName) conName sharedBinds) choicesWithArchive
@@ -3779,8 +3779,7 @@ mkInterfaceDecl tycon (L requiresLoc requires) decls = do
           ]
 
         ifaceInstances :: [LHsDecl GhcPs]
-        ifaceInstances =
-          mkInterfaceInstanceDecl ifaceTy
+        ifaceInstances = mkInterfaceInstances ifaceTy
 
         choiceInstances :: [LHsDecl GhcPs]
         choiceInstances = concat $
