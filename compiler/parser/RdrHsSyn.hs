@@ -146,7 +146,6 @@ import Control.Monad
 import Text.ParserCombinators.ReadP as ReadP
 import Data.Char
 import Data.Function (on)
-import Data.List (groupBy, sortOn)
 import qualified Data.Monoid as Monoid
 import Data.Data       ( dataTypeOf, fromConstr, dataTypeConstrs )
 import Bag
