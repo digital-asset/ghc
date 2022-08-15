@@ -2276,6 +2276,7 @@ data ValidInterface = ValidInterface
   , viFunctionSignatures :: [(Located RdrName, LHsType GhcPs, Maybe LHsDocString)]
   , viChoices :: [(InterfaceChoiceSignature, InterfaceChoiceBody)]
   , viViewType :: Maybe (LHsType GhcPs) -- Check for presence of viewtype occurs during LF conversion
+  , viInterfaceInstances :: [Located ValidInterfaceInstance]
   }
 
 validateInterface ::
@@ -2283,18 +2284,20 @@ validateInterface ::
   -> [Located RdrName]
   -> [Located InterfaceBodyDecl]
   -> P ValidInterface
-validateInterface name requires decls = do
+validateInterface viInterfaceName requires decls = do
   viViewType <- case ibdViewDecls of
     [] -> pure Nothing -- TODO: Fail on missing viewtype when PR #14486 merged in & tests fixed
     (ty:tys) -> do
       mapM_ (\ty -> report (getLoc ty) "Multiple 'viewtype' declarations") tys
       pure (Just ty)
+  viInterfaceInstances <- validateInterfaceInstances (TorI_Interface viInterfaceName) ibdInterfaceInstances
   pure ValidInterface
-    { viInterfaceName = name
+    { viInterfaceName
     , viRequiredInterfaces = requires
     , viFunctionSignatures = ibdFunctionSignatures
     , viChoices = ibdChoices
     , viViewType
+    , viInterfaceInstances
     }
   where
     InterfaceBodyDecls {..} = extractInterfaceBodyDecls decls
@@ -3203,6 +3206,7 @@ validateInterfaceInstance ::
   ->   Located ParsedInterfaceInstance
   -> P (Located ValidInterfaceInstance)
 validateInterfaceInstance parent (L loc piib) = do
+  checkParent
   impls <- mapM validateMethodImpl (groupValDecls (unLoc piiDefs))
   checkMultipleDecls impls
   mapM_ checkNumArgs impls
@@ -3241,6 +3245,27 @@ validateInterfaceInstance parent (L loc piib) = do
     pprParent = case parent of
       TorI_Template t -> text "template" <+> quotes (ppr t)
       TorI_Interface i -> text "interface" <+> quotes (ppr i)
+
+    -- NOTE(MA): this only really checks the 'RdrName's are identical,
+    -- so it doesn't look through qualified types or type synonyms.
+    -- To look through those, we would need to do this check as part of
+    -- GHC typechecking.
+    checkParent = case parent of
+      TorI_Template parentTemplate ->
+        checkParent' "template" (unLoc piiTemplate == unLoc parentTemplate)
+      TorI_Interface parentInterface ->
+        checkParent' "interface" (unLoc piiInterface == unLoc parentInterface)
+      where
+        checkParent' tOrI check = do
+          unless check $
+            iiFatalError loc $ vcat
+              [ text "The" <+> text tOrI
+                <+> text "of this interface instance does not match the enclosing"
+                <+> text tOrI <+> text "declaration."
+              , text "Perhaps consider moving this interface instance into"
+              , text "* template" <+> quotes (ppr piiTemplate)
+              , text "* or interface" <+> quotes (ppr piiInterface)
+              ]
 
     isViewImpl :: Located ValidInterfaceInstanceMethodDecl -> Bool
     isViewImpl impl = rdrNameToString (viimdId (unLoc impl)) == "view"
