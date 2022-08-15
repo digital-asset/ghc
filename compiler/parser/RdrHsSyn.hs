@@ -3193,51 +3193,71 @@ validateInterfaceInstance ::
   ->   Located ParsedInterfaceInstance
   -> P (Located ValidInterfaceInstance)
 validateInterfaceInstance parent (L loc piib) = do
-  let ParsedInterfaceInstance iface iiTemplate decls = piib
-  impls <- mapM validateMethodImpl (groupValDecls (unLoc decls))
-  checkMultipleDecls iface iiTemplate impls
-  mapM_ (checkNumArgs iiTemplate iface) impls
+  impls <- mapM validateMethodImpl (groupValDecls (unLoc piiDefs))
+  checkMultipleDecls impls
+  mapM_ checkNumArgs impls
 
-  let isViewImpl impl = rdrNameToString (viimdId impl) == "view"
-  let (viewImpls, nonViewImpls) = partition (isViewImpl . unLoc) impls
-  viewImpl <- case viewImpls of
-    [] -> addFatalError loc (text "interface instance does not have a view method")
-    [viewImpl] -> pure viewImpl
-    _ -> addFatalError loc (text "interface instance has more than one view method")
+  let (viewImpls, nonViewImpls) = partition isViewImpl impls
+
+  viewImpl <- checkViewImpl viewImpls
 
   pure $ L loc ValidInterfaceInstance
-    { viiInterface = iface
-    , viiTemplate = iiTemplate
+    { viiInterface = piiInterface
+    , viiTemplate = piiTemplate
     , viiDefs = nonViewImpls
     , viiView = viewImpl
     }
   where
-    checkMultipleDecls :: Located RdrName -> Located RdrName -> [Located ValidInterfaceInstanceMethodDecl] -> P ()
-    checkMultipleDecls iface iiTemplate impls = mapM_ emitError multipleDecls
+    ParsedInterfaceInstance
+      { piiInterface
+      , piiTemplate
+      , piiDefs
+      } = piib
+
+    iiFatalError :: SrcSpan -> SDoc -> P a
+    iiFatalError loc err =
+      addFatalError loc $ vcat
+        [ err
+        , text "in"
+          <+> quotes
+            ( text "interface instance"
+              <+> ppr piiInterface
+              <+> text "for"
+              <+> ppr piiTemplate
+            )
+        , text "in template"
+          <+> quotes (ppr parent)
+        ]
+
+    isViewImpl :: Located ValidInterfaceInstanceMethodDecl -> Bool
+    isViewImpl impl = rdrNameToString (viimdId (unLoc impl)) == "view"
+
+    checkViewImpl :: [Located ValidInterfaceInstanceMethodDecl] -> P (Located ValidInterfaceInstanceMethodDecl)
+    checkViewImpl = \case
+      [] -> iiFatalError loc (text "interface instance does not have a view method")
+      [viewImpl] -> pure viewImpl
+      _ -> iiFatalError loc (text "interface instance has more than one view method")
+
+    checkMultipleDecls :: [Located ValidInterfaceInstanceMethodDecl] -> P ()
+    checkMultipleDecls impls = mapM_ emitError multipleDecls
       where
         emitError ds@(L loc (ValidInterfaceInstanceMethodDecl methodName _):_) =
-          addFatalError loc $ vcat
+          iiFatalError loc $ vcat
             [ text "Multiple declarations of method"
               <+> quotes (ppr methodName)
-              <+> text "in"
-              <+> quotes
-                ( text "interface instance"
-                  <+> ppr iface
-                  <+> text "for"
-                  <+> ppr iiTemplate
-                )
-              <+> text "in template"
-              <+> quotes (ppr parent)
             , text "Declared at:"
-              <+> vcat (map (ppr . getLoc) ds)
+            , vcat
+                [ text "*" <+> loc
+                | loc <- ppr . getLoc <$> ds
+                ]
             ]
         emitError [] = pure ()
 
         multipleDecls = filter ((>1) . length) $ groupBy ((==) `on` name) $ sortOn name $ impls
         name = unLoc . viimdId . unLoc
 
-    checkNumArgs :: Located RdrName -> Located RdrName -> Located ValidInterfaceInstanceMethodDecl -> P ()
-    checkNumArgs iface iiTemplate (L loc (ValidInterfaceInstanceMethodDecl methodName matches)) =
+    checkNumArgs :: Located ValidInterfaceInstanceMethodDecl -> P ()
+    checkNumArgs (L loc (ValidInterfaceInstanceMethodDecl methodName matches)) =
       case numArgs of
         [] -> pure ()
         (L loc1 n1 : matches) -> do
@@ -3245,21 +3265,12 @@ validateInterfaceInstance parent (L loc piib) = do
           case badMatches of
             [] -> pure ()
             (L locBad _ : _) ->
-              addFatalError loc $ vcat
+              iiFatalError loc $ vcat
                 [ text "Equations for method"
                   <+> quotes (ppr methodName)
-                  <+> text "in"
-                  <+> quotes
-                    ( text "interface instance"
-                      <+> ppr iface
-                      <+> text "for"
-                      <+> ppr iiTemplate
-                    )
-                  <+> text "in template"
-                  <+> quotes (ppr parent)
-                  <+> text "have different numbers of arguments"
-                , nest 2 (ppr loc1)
-                , nest 2 (ppr locBad)
+                  <+> text "have different numbers of arguments:"
+                , text "*" <+> ppr loc1
+                , text "*" <+> ppr locBad
                 ]
       where
         numArgs =
@@ -3271,7 +3282,7 @@ validateInterfaceInstance parent (L loc piib) = do
     validateMethodImpl :: LHsDecl GhcPs -> P (Located ValidInterfaceInstanceMethodDecl)
     validateMethodImpl (L loc decl) =
       let
-        forbidden what = addFatalError loc $ vcat
+        forbidden what = iiFatalError loc $ vcat
           [ text what <+> text "not allowed in interface instance"
           , nest 2 (ppr decl)
           ]
