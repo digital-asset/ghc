@@ -3125,7 +3125,7 @@ validateTemplate vtTemplateName tbd@TemplateBodyDecls{..}
   | null tbdMaintainers && (not . null) tbdKeys = report "Missing 'maintainer' declaration for given 'key'"
   | otherwise
   = do
-      vtInterfaceInstances <- validateInterfaceInstances vtTemplateName tbdInterfaceInstances
+      vtInterfaceInstances <- validateInterfaceInstances (TorI_Template vtTemplateName) tbdInterfaceInstances
       return ValidTemplate
         { vtTemplateName
         , vtChoices = combineChoices tbd
@@ -3182,14 +3182,20 @@ choiceGroupsToCombinedChoices = concatMap distributeController
     distributeController (L _ (controller, L _ choices)) = map (makeCombinedChoice controller) choices
     makeCombinedChoice controller choice = CombinedChoiceData controller Nothing (unLoc choice) False TemplateChoice
 
+data TemplateOrInterface a b
+  = TorI_Template a
+  | TorI_Interface b
+
+type TemplateOrInterface' a = TemplateOrInterface a a
+
 validateInterfaceInstances ::
-       Located RdrName
+       TemplateOrInterface' (Located RdrName)
   ->   [Located ParsedInterfaceInstance]
   -> P [Located ValidInterfaceInstance]
 validateInterfaceInstances parent = mapM (validateInterfaceInstance parent)
 
 validateInterfaceInstance ::
-       Located RdrName
+       TemplateOrInterface' (Located RdrName)
   ->   Located ParsedInterfaceInstance
   -> P (Located ValidInterfaceInstance)
 validateInterfaceInstance parent (L loc piib) = do
@@ -3225,9 +3231,12 @@ validateInterfaceInstance parent (L loc piib) = do
               <+> text "for"
               <+> ppr piiTemplate
             )
-        , text "in template"
-          <+> quotes (ppr parent)
+        , text "in" <+> pprParent
         ]
+
+    pprParent = case parent of
+      TorI_Template t -> text "template" <+> quotes (ppr t)
+      TorI_Interface i -> text "interface" <+> quotes (ppr i)
 
     isViewImpl :: Located ValidInterfaceInstanceMethodDecl -> Bool
     isViewImpl impl = rdrNameToString (viimdId (unLoc impl)) == "view"
