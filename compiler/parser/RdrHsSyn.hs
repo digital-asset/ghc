@@ -2390,16 +2390,16 @@ instance Monoid TemplateBodyDecls where
 
 templateBodyDeclToDecls :: Located TemplateBodyDecl -> TemplateBodyDecls
 templateBodyDeclToDecls (L _ decl) = case decl of
-  EnsureDecl e                 -> TemplateBodyDecls [e] [] [] [] [] [] [] [] [] []
-  SignatoryDecl s              -> TemplateBodyDecls [] [s] [] [] [] [] [] [] [] []
-  ObserverDecl o               -> TemplateBodyDecls [] [] [o] [] [] [] [] [] [] []
-  AgreementDecl a              -> TemplateBodyDecls [] [] [] [a] [] [] [] [] [] []
-  ChoiceGroupDecl g            -> TemplateBodyDecls [] [] [] [] [g] [] [] [] [] []
-  LetBindingsDecl (L _ (_, b)) -> TemplateBodyDecls [] [] [] [] [] [b] [] [] [] []
-  FlexChoiceDecl f             -> TemplateBodyDecls [] [] [] [] [] [] [f] [] [] []
-  KeyDecl k                    -> TemplateBodyDecls [] [] [] [] [] [] [] [k] [] []
-  MaintainerDecl m             -> TemplateBodyDecls [] [] [] [] [] [] [] [] [m] []
-  TemplateInterfaceInstanceDecl d -> TemplateBodyDecls [] [] [] [] [] [] [] [] [] [d]
+  EnsureDecl e -> mempty { tbdEnsures = [e] }
+  SignatoryDecl s -> mempty { tbdSignatories = [s] }
+  ObserverDecl o -> mempty { tbdObservers = [o] }
+  AgreementDecl a -> mempty { tbdAgreements = [a] }
+  ChoiceGroupDecl g -> mempty { tbdControlledChoiceGroups = [g] }
+  LetBindingsDecl (L _ (_, b)) -> mempty { tbdLetBindings = [b] }
+  FlexChoiceDecl f -> mempty { tbdFlexChoices = [f] }
+  KeyDecl k -> mempty { tbdKeys = [k] }
+  MaintainerDecl m -> mempty { tbdMaintainers = [m] }
+  TemplateInterfaceInstanceDecl d -> mempty { tbdInterfaceInstances = [d] }
 
 -- | Classify a list of template body declarations.
 extractTemplateBodyDecls :: [Located TemplateBodyDecl] -> TemplateBodyDecls
