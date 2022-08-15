@@ -3551,6 +3551,7 @@ mkInterfaceInstanceDecls parentName sharedBinds (L loc interfaceInstance) = do
       , viiView
       } = interfaceInstance
 
+    parentType = rdrNameToType parentName
     templateType = rdrNameToType viiTemplate
     interfaceType = rdrNameToType viiInterface
 
@@ -3574,39 +3575,50 @@ mkInterfaceInstanceDecls parentName sharedBinds (L loc interfaceInstance) = do
     mkInterfaceInstanceDesugarName ::
          SrcSpan
           -- ^ the location associated with this desugaring binding.
-      -> String
-          -- ^ a prefix for the name, without the leading underscore.
-      -> Maybe String
-          -- ^ an optional suffix for the name, used e.g. to specify method names
+      -> [String]
+          -- ^ a prefix for the name.
+      -> [String]
+          -- ^ a suffix for the name, used e.g. to specify method names
       -> Located RdrName
     mkInterfaceInstanceDesugarName loc prefix suffix =
       cL loc
       $ mkRdrUnqual
       $ mkVarOcc
       $ concatMap (('_':) . mangle)
+      $ concat
       $ [ prefix
-        , rdrNameToString parentName
-        , rdrNameToQualString viiInterface
-        , rdrNameToQualString viiTemplate
-        ] ++ maybeToList suffix
+        , [ rdrNameToString parentName
+          , rdrNameToQualString viiInterface
+          , rdrNameToQualString viiTemplate
+          ]
+        , suffix
+        ]
 
     implementsInstances = mkImplementsInstances templateType interfaceType
     interfaceInstanceMethodDecls = concatMap mkInterfaceInstanceMethodDecls viiDefs
 
     interfaceInstanceMarkerDecls =
       let
-          name = mkInterfaceInstanceDesugarName loc "interface_instance" Nothing
+          name = mkInterfaceInstanceDesugarName loc ["interface","instance"] []
           sig =
             TypeSig noExt [name] $
               mkHsWildCardBndrs $ mkHsImplicitBndrs $
-                implementsType `mkAppTy` templateType `mkAppTy` interfaceType
+                interfaceInstanceType
+                `mkAppTy` parentType
+                `mkAppTy` interfaceType
+                `mkAppTy` templateType
+          body =
+            mkInterfaceInstanceExpr
+            `mkAppType` parentType
+            `mkAppType` interfaceType
+            `mkAppType` templateType
           rhs =
             matchGroup noSrcSpan $
               matchWithBinds
                 (matchContext name)
                 []
                 noSrcSpan
-                implementsCon
+                body
                 (noLoc emptyLocalBinds)
           val =
             FunBind noExt name rhs WpHole []
@@ -3619,11 +3631,14 @@ mkInterfaceInstanceDecls parentName sharedBinds (L loc interfaceInstance) = do
     interfaceInstanceViewDecls =
       let L loc (ValidInterfaceInstanceMethodDecl _ viimdMatches) = viiView
 
-          fullViewName = mkInterfaceInstanceDesugarName loc "view" Nothing
+          fullViewName = mkInterfaceInstanceDesugarName loc ["view"] []
           shortViewName = noLoc $ mkRdrUnqual $ mkVarOcc "view"
           signature = TypeSig noExt [fullViewName] $
             mkHsWildCardBndrs $ mkHsImplicitBndrs $
-              interfaceViewType `mkAppTy` templateType `mkAppTy` interfaceType
+              interfaceViewType
+              `mkAppTy` parentType
+              `mkAppTy` interfaceType
+              `mkAppTy` templateType
           exp =
             L loc
               (HsLet noExt
@@ -3637,8 +3652,9 @@ mkInterfaceInstanceDecls parentName sharedBinds (L loc interfaceInstance) = do
                 (noLoc (HsVar noExt shortViewName)))
           body =
             mkInterfaceViewExpr
-            `mkAppType` templateType
+            `mkAppType` parentType
             `mkAppType` interfaceType
+            `mkAppType` templateType
             `mkApp` mkLambda [thisPat] exp localBinds
           ctx = matchContext fullViewName
           match = matchWithBinds ctx [] loc body (noLoc (EmptyLocalBinds noExt))
@@ -3652,12 +3668,16 @@ mkInterfaceInstanceDecls parentName sharedBinds (L loc interfaceInstance) = do
     mkInterfaceInstanceMethodDecls :: Located ValidInterfaceInstanceMethodDecl -> [LHsDecl GhcPs]
     mkInterfaceInstanceMethodDecls (L loc ValidInterfaceInstanceMethodDecl { viimdId = name, viimdMatches }) =
       let
-        fullMethodName = mkInterfaceInstanceDesugarName loc "method" (Just (rdrNameToString name))
+        fullMethodName = mkInterfaceInstanceDesugarName loc ["method"] [rdrNameToString name]
         methodNameSymbol = mkSymbol (occNameString $ rdrNameOcc $ unLoc name)
         sig =
           TypeSig noExt [fullMethodName] $
             mkHsWildCardBndrs $ mkHsImplicitBndrs $
-              methodType `mkAppTy` templateType `mkAppTy` interfaceType `mkAppTy` methodNameSymbol
+              methodType
+              `mkAppTy` parentType
+              `mkAppTy` interfaceType
+              `mkAppTy` templateType
+              `mkAppTy` methodNameSymbol
         exp =
           L loc
             (HsLet noExt
@@ -3671,8 +3691,9 @@ mkInterfaceInstanceDecls parentName sharedBinds (L loc interfaceInstance) = do
               (noLoc (HsVar noExt name)))
         body =
           mkMethodExpr
-          `mkAppType` templateType
+          `mkAppType` parentType
           `mkAppType` interfaceType
+          `mkAppType` templateType
           `mkAppType` methodNameSymbol
           `mkApp` mkLambda [thisPat] exp localBinds
         ctx = matchContext fullMethodName
@@ -3752,11 +3773,11 @@ hasFromInterfaceClass = mkQualType "HasFromInterface"
 implementsClass :: LHsType GhcPs
 implementsClass = mkQualType "Implements"
 
-implementsType :: LHsType GhcPs
-implementsType = mkQualType "ImplementsT"
+interfaceInstanceType :: LHsType GhcPs
+interfaceInstanceType = mkQualType "InterfaceInstance"
 
-implementsCon :: LHsExpr GhcPs
-implementsCon = mkQualVar $ mkDataOcc "ImplementsT"
+mkInterfaceInstanceExpr :: LHsExpr GhcPs
+mkInterfaceInstanceExpr = mkQualVar $ mkVarOcc "mkInterfaceInstance"
 
 mkImplementsConstraint :: LHsType GhcPs -> LHsType GhcPs -> LHsType GhcPs
 mkImplementsConstraint t i = implementsClass `mkAppTy` t `mkAppTy` i

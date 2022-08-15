@@ -157,11 +157,6 @@ class HasFromInterface t i where
 class HasInterfaceView i v | i -> v where
   _view : i -> v
 
-newtype InterfaceView t i = InterfaceView ()
-
-mkInterfaceView : (Implements t i, HasInterfaceView i v) => (t -> v) -> InterfaceView t i
-mkInterfaceView _ = InterfaceView ()
-
 type Implements t i =
   ( HasInterfaceTypeRep i
   , HasToInterface t i
@@ -181,15 +176,7 @@ fromInterfaceContractId cid = do
     None -> None
     Some (_ : t) -> Some (coerceContractId cid)
 
-data ImplementsT t i = ImplementsT
 data RequiresT a b = RequiresT
-
-class HasMethod i (m : Symbol) r | i m -> r
-
-newtype Method t i (m : Symbol) = Method ()
-
-mkMethod : (Implements t i, HasMethod i m r) => (t -> r) -> Method t i m
-mkMethod _ = Method ()
 
 class HasExerciseGuarded t c r | t c -> r where
   exerciseGuarded : (t -> Bool) -> ContractId t -> c -> Update r
@@ -200,3 +187,32 @@ _exerciseDefault = exerciseGuarded (const True)
 _exerciseInterfaceGuard : forall i t. HasFromInterface t i => (t -> Bool) -> (i -> Bool)
 _exerciseInterfaceGuard pred iface =
   optional False pred (fromInterface iface)
+
+--------------------------------------------------------------------------------
+-- # Interface instance desugaring
+
+-- ## Implements markers
+
+newtype InterfaceInstance p i t = InterfaceInstance ()
+
+mkInterfaceInstance : forall p i t. InterfaceInstance p i t
+mkInterfaceInstance = InterfaceInstance ()
+
+-- ## Method bodies
+
+class HasMethod i (m : Symbol) r | i m -> r
+
+newtype Method p i t (m : Symbol) = Method ()
+
+mkMethod : forall p i t m r. (Implements t i, HasMethod i m r) => (t -> r) -> Method p i t m
+mkMethod _ = Method ()
+
+-- ## View bodies
+
+-- class HasInterfaceView is also used for the type of the `view` function,
+-- so it's not here.
+
+newtype InterfaceView p i t = InterfaceView ()
+
+mkInterfaceView : forall p i t v. (Implements t i, HasInterfaceView i v) => (t -> v) -> InterfaceView p i t
+mkInterfaceView _ = InterfaceView ()
