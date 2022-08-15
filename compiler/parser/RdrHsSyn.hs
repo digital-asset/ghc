@@ -3924,6 +3924,11 @@ mkInterfaceDecl tycon (L requiresLoc requires) decls = do
       | (methodName, methodType, mbDocString) <- viFunctionSignatures
       ]
 
+    interfaceInterfaceInstances <- concat <$>
+      traverse
+        (mkInterfaceInstanceDecls viInterfaceName (noLoc emptyLocalBinds))
+        viInterfaceInstances
+
     pure $ toOL
       $ existential
       : hasInterfaceTypeRepInstance
@@ -3937,6 +3942,7 @@ mkInterfaceDecl tycon (L requiresLoc requires) decls = do
       ++ choiceTys
       ++ choiceDecls
       ++ viewTypeDecls
+      ++ interfaceInterfaceInstances
   where
     classVar = noLoc $ Unqual (mkTyVarOcc "t")
     classTy = noLoc $ HsTyVar noExt NotPromoted classVar
