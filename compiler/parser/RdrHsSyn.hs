@@ -3526,36 +3526,59 @@ mkTemplateDecls templateName fields decls = do
       choiceByKeyInstanceDecls = concatMap (mkChoiceByKeyInstanceDecl templateName vt) choicesWithArchive
       choiceDecls = concatMap (mkChoiceDecls (getLoc templateName) conName sharedBinds) choicesWithArchive
       keyInstanceDecl = mkKeyInstanceDecl sharedBinds templateName conName vt
-  templateInterfaceImplements <- concat <$> traverse (mkInterfaceImplements vtTemplateName conName sharedBinds) vtInterfaceInstances
+  templateInterfaceInstances <- concat <$> traverse (mkInterfaceInstanceDecls vtTemplateName sharedBinds) vtInterfaceInstances
   return $ toOL $ templateDataDecl : choiceDataDecls ++ letDecls
                ++ templateInstances ++ (choiceInstanceDecls ++ choiceDecls ++ choiceByKeyInstanceDecls ++ keyInstanceDecl)
-               ++ templateInterfaceImplements
+               ++ templateInterfaceInstances
 
-mkInterfaceImplements ::
+mkInterfaceInstanceDecls ::
      Located RdrName
-  -> Located RdrName
   -> LHsLocalBinds GhcPs
   -> Located ValidInterfaceInstance
   -> P [LHsDecl GhcPs]
-mkInterfaceImplements templateName conName sharedBinds (L loc implements) = do
-  pure $ implementsMarker ++ implementsInstances ++ implementsInterfaceMethods ++ implementsView
+mkInterfaceInstanceDecls _parentName sharedBinds (L loc interfaceInstance) = do
+  pure $ concat
+    [ interfaceInstanceMarkerDecls
+    , interfaceInstanceMethodDecls
+    , interfaceInstanceViewDecls
+    , implementsInstances
+    ]
   where
-    implementsInstances = mkImplementsInstances templateType interfaceType
-    implementsInterfaceMethods = concatMap mkInterfaceImplementsMethod implementsDefs
-    templateType = mkTemplateType (fmap (occNameString . rdrNameOcc) templateName)
-    interfaceType = rdrNameToType implementsInterface
     ValidInterfaceInstance
-      { viiInterface = implementsInterface
-      , viiTemplate = _unused
-      , viiDefs = implementsDefs
+      { viiInterface
+      , viiTemplate
+      , viiDefs
       , viiView
-      } = implements
+      } = interfaceInstance
+
+    templateType = rdrNameToType viiTemplate
+    interfaceType = rdrNameToType viiInterface
+
+    -- NOTE(MA): The definition of 'thisPat' makes the following assumptions:
+    --  * The template type constructor matches the template _data_ constructor
+    --       * This is enforced by the syntax
+    --       * (`setRdrNameSpace` srcDataName) below does the conversion from
+    --         type constructor to data constructor.
+    --  * The template data constructor is a record
+    --       * Also enforced by the syntax
+    --  * ... with at least one field
+    --       * Other constructs make this assumption too, crucially the
+    --         `signatory` declaration.
+    --  * The template type and data constructors are in scope.
+    --       * The regular error message should be good enough otherwise.
+    thisPat = asPatRecWild "this" (fmap (`setRdrNameSpace` srcDataName) viiTemplate)
+    localBinds = allLetBindings True [thisPat] sharedBinds
+
     templateInterfaceName =
       intercalate "_" $ mangle <$>
-        [ rdrNameToString templateName
-        , rdrNameToQualString implementsInterface
+        [ rdrNameToString viiTemplate
+        , rdrNameToQualString viiInterface
         ]
-    implementsMarker =
+
+    implementsInstances = mkImplementsInstances templateType interfaceType
+    interfaceInstanceMethodDecls = concatMap mkInterfaceInstanceMethodDecls viiDefs
+
+    interfaceInstanceMarkerDecls =
       let
           name =
             mkRdrUnqual $ mkVarOcc $ "_implements_" ++ templateInterfaceName
@@ -3578,8 +3601,8 @@ mkInterfaceImplements templateName conName sharedBinds (L loc implements) = do
         , cL loc (ValD noExt val)
         ]
 
-    implementsView :: [LHsDecl GhcPs]
-    implementsView =
+    interfaceInstanceViewDecls :: [LHsDecl GhcPs]
+    interfaceInstanceViewDecls =
       let L loc (ValidInterfaceInstanceMethodDecl _ viimdMatches) = viiView
 
           fullViewName =
@@ -3589,7 +3612,6 @@ mkInterfaceImplements templateName conName sharedBinds (L loc implements) = do
           signature = TypeSig noExt [fullViewName] $
             mkHsWildCardBndrs $ mkHsImplicitBndrs $
               interfaceViewType `mkAppTy` templateType `mkAppTy` interfaceType
-          args = [asPatRecWild "this" conName]
           exp =
             L loc
               (HsLet noExt
@@ -3605,7 +3627,7 @@ mkInterfaceImplements templateName conName sharedBinds (L loc implements) = do
             mkInterfaceViewExpr
             `mkAppType` templateType
             `mkAppType` interfaceType
-            `mkApp` mkLambda args exp (allLetBindings True args sharedBinds)
+            `mkApp` mkLambda [thisPat] exp localBinds
           ctx = matchContext fullViewName
           match = matchWithBinds ctx [] loc body (noLoc (EmptyLocalBinds noExt))
           matchGroup = MG noExt (noLoc [noLoc match]) Generated
@@ -3615,8 +3637,8 @@ mkInterfaceImplements templateName conName sharedBinds (L loc implements) = do
       , noLoc (ValD noExt val)
       ]
 
-    mkInterfaceImplementsMethod :: Located ValidInterfaceInstanceMethodDecl -> [LHsDecl GhcPs]
-    mkInterfaceImplementsMethod (L loc ValidInterfaceInstanceMethodDecl { viimdId = name, viimdMatches }) =
+    mkInterfaceInstanceMethodDecls :: Located ValidInterfaceInstanceMethodDecl -> [LHsDecl GhcPs]
+    mkInterfaceInstanceMethodDecls (L loc ValidInterfaceInstanceMethodDecl { viimdId = name, viimdMatches }) =
       let
         fullMethodName =
           noLoc $ mkRdrUnqual $ mkVarOcc $
@@ -3626,33 +3648,23 @@ mkInterfaceImplements templateName conName sharedBinds (L loc implements) = do
           TypeSig noExt [fullMethodName] $
             mkHsWildCardBndrs $ mkHsImplicitBndrs $
               methodType `mkAppTy` templateType `mkAppTy` interfaceType `mkAppTy` methodNameSymbol
-        this = asPatRecWild "this" conName
-        args = [this]
-        localBinds = allLetBindings True args sharedBinds
         exp =
-          L (getLoc name)
+          L loc
             (HsLet noExt
               (noLoc
                 (HsValBinds noExt
                   (ValBinds noExt
                     (unitBag
                       (noLoc
-                        (FunBind noExt name viimdMatches WpHole [])
-                      )
-                    )
-                    []
-                  )
-                )
-              )
-              (noLoc (HsVar noExt name))
-            )
-        impl = mkLambda args exp localBinds
+                        (FunBind noExt name viimdMatches WpHole [])))
+                    [])))
+              (noLoc (HsVar noExt name)))
         body =
           mkMethodExpr
           `mkAppType` templateType
           `mkAppType` interfaceType
           `mkAppType` methodNameSymbol
-          `mkApp` mkParExpr impl
+          `mkApp` mkLambda [thisPat] exp localBinds
         ctx = matchContext fullMethodName
         match = matchWithBinds ctx [] loc body (noLoc (EmptyLocalBinds noExt))
         matchGroup = MG noExt (noLoc [noLoc match]) Generated
