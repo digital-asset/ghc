@@ -3536,7 +3536,7 @@ mkInterfaceInstanceDecls ::
   -> LHsLocalBinds GhcPs
   -> Located ValidInterfaceInstance
   -> P [LHsDecl GhcPs]
-mkInterfaceInstanceDecls _parentName sharedBinds (L loc interfaceInstance) = do
+mkInterfaceInstanceDecls parentName sharedBinds (L loc interfaceInstance) = do
   pure $ concat
     [ interfaceInstanceMarkerDecls
     , interfaceInstanceMethodDecls
@@ -3569,33 +3569,47 @@ mkInterfaceInstanceDecls _parentName sharedBinds (L loc interfaceInstance) = do
     thisPat = asPatRecWild "this" (fmap (`setRdrNameSpace` srcDataName) viiTemplate)
     localBinds = allLetBindings True [thisPat] sharedBinds
 
-    templateInterfaceName =
-      intercalate "_" $ mangle <$>
-        [ rdrNameToString viiTemplate
+    -- NOTE(MA): This is used to generate the names for the interface instance
+    -- desugaring bindings, e.g. `_interface_instance_...`, `_view_...`, `_method_...`.
+    mkInterfaceInstanceDesugarName ::
+         SrcSpan
+          -- ^ the location associated with this desugaring binding.
+      -> String
+          -- ^ a prefix for the name, without the leading underscore.
+      -> Maybe String
+          -- ^ an optional suffix for the name, used e.g. to specify method names
+      -> Located RdrName
+    mkInterfaceInstanceDesugarName loc prefix suffix =
+      cL loc
+      $ mkRdrUnqual
+      $ mkVarOcc
+      $ concatMap (('_':) . mangle)
+      $ [ prefix
+        , rdrNameToString parentName
         , rdrNameToQualString viiInterface
-        ]
+        , rdrNameToQualString viiTemplate
+        ] ++ maybeToList suffix
 
     implementsInstances = mkImplementsInstances templateType interfaceType
     interfaceInstanceMethodDecls = concatMap mkInterfaceInstanceMethodDecls viiDefs
 
     interfaceInstanceMarkerDecls =
       let
-          name =
-            mkRdrUnqual $ mkVarOcc $ "_implements_" ++ templateInterfaceName
+          name = mkInterfaceInstanceDesugarName loc "interface_instance" Nothing
           sig =
-            TypeSig noExt [cL loc name] $
+            TypeSig noExt [name] $
               mkHsWildCardBndrs $ mkHsImplicitBndrs $
                 implementsType `mkAppTy` templateType `mkAppTy` interfaceType
           rhs =
             matchGroup noSrcSpan $
               matchWithBinds
-                (matchContext (cL loc name))
+                (matchContext name)
                 []
                 noSrcSpan
                 implementsCon
                 (noLoc emptyLocalBinds)
           val =
-            FunBind noExt (cL loc name) rhs WpHole []
+            FunBind noExt name rhs WpHole []
       in
         [ cL loc (SigD noExt sig)
         , cL loc (ValD noExt val)
@@ -3605,9 +3619,7 @@ mkInterfaceInstanceDecls _parentName sharedBinds (L loc interfaceInstance) = do
     interfaceInstanceViewDecls =
       let L loc (ValidInterfaceInstanceMethodDecl _ viimdMatches) = viiView
 
-          fullViewName =
-            noLoc $ mkRdrUnqual $ mkVarOcc $
-              "_view_" ++ templateInterfaceName
+          fullViewName = mkInterfaceInstanceDesugarName loc "view" Nothing
           shortViewName = noLoc $ mkRdrUnqual $ mkVarOcc "view"
           signature = TypeSig noExt [fullViewName] $
             mkHsWildCardBndrs $ mkHsImplicitBndrs $
@@ -3640,9 +3652,7 @@ mkInterfaceInstanceDecls _parentName sharedBinds (L loc interfaceInstance) = do
     mkInterfaceInstanceMethodDecls :: Located ValidInterfaceInstanceMethodDecl -> [LHsDecl GhcPs]
     mkInterfaceInstanceMethodDecls (L loc ValidInterfaceInstanceMethodDecl { viimdId = name, viimdMatches }) =
       let
-        fullMethodName =
-          noLoc $ mkRdrUnqual $ mkVarOcc $
-            "_method_" ++ templateInterfaceName ++ "_" ++ mangle (rdrNameToString name)
+        fullMethodName = mkInterfaceInstanceDesugarName loc "method" (Just (rdrNameToString name))
         methodNameSymbol = mkSymbol (occNameString $ rdrNameOcc $ unLoc name)
         sig =
           TypeSig noExt [fullMethodName] $
