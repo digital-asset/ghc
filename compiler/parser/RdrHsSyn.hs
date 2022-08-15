@@ -57,9 +57,9 @@ module   RdrHsSyn (
         InterfaceBodyDecl(..),
         InterfaceChoiceBody(..),
         InterfaceChoiceSignature(..),
-        ParsedImplementsDeclBlock(..),
-        ValidImplementsDeclBlock(..),
-        ValidImplementsMethodDecl(..),
+        ParsedInterfaceInstance(..),
+        ValidInterfaceInstance(..),
+        ValidInterfaceInstanceMethodDecl(..),
 
         -- Stuff to do with Foreign declarations
         mkImport,
@@ -2312,9 +2312,10 @@ data InterfaceChoiceBody = InterfaceChoiceBody
       , ifChoiceExpr :: LHsExpr GhcPs
       }
 
-data ParsedImplementsDeclBlock = ParsedImplementsDeclBlock
-  { pidbInterface :: Located RdrName
-  , pidbDefs :: [LHsDecl GhcPs]
+data ParsedInterfaceInstance = ParsedInterfaceInstance
+  { piiInterface :: Located RdrName
+  , piiTemplate :: Located RdrName
+  , piiDefs :: Located [LHsDecl GhcPs]
   }
 
 -- | Any declaration that can appear within a template
@@ -2328,7 +2329,7 @@ data TemplateBodyDecl
   | FlexChoiceDecl (Located FlexChoiceData)
   | KeyDecl (Located (LHsExpr GhcPs, LHsType GhcPs))
   | MaintainerDecl (LHsExpr GhcPs)
-  | ImplementsDecl (Located ParsedImplementsDeclBlock)
+  | TemplateInterfaceInstanceDecl (Located ParsedInterfaceInstance)
 
 -- | Result of combining declarations in the template body
 data TemplateBodyDecls = TemplateBodyDecls {
@@ -2341,18 +2342,19 @@ data TemplateBodyDecls = TemplateBodyDecls {
     , tbdFlexChoices :: [Located FlexChoiceData]
     , tbdKeys :: [Located (LHsExpr GhcPs, LHsType GhcPs)]
     , tbdMaintainers :: [LHsExpr GhcPs]
-    , tbdImplements :: [Located ParsedImplementsDeclBlock]
+    , tbdInterfaceInstances :: [Located ParsedInterfaceInstance]
     }
 
-data ValidImplementsDeclBlock = ValidImplementsDeclBlock
-  { vidbInterface :: Located RdrName
-  , vidbDefs :: [Located ValidImplementsMethodDecl]
-  , vidbView :: Located ValidImplementsMethodDecl
+data ValidInterfaceInstance = ValidInterfaceInstance
+  { viiInterface :: Located RdrName
+  , viiTemplate :: Located RdrName
+  , viiDefs :: [Located ValidInterfaceInstanceMethodDecl]
+  , viiView :: Located ValidInterfaceInstanceMethodDecl
   }
 
-data ValidImplementsMethodDecl = ValidImplementsMethodDecl
-  { vimdId :: Located RdrName
-  , vimdMatches :: MatchGroup GhcPs (LHsExpr GhcPs)
+data ValidInterfaceInstanceMethodDecl = ValidInterfaceInstanceMethodDecl
+  { viimdId :: Located RdrName
+  , viimdMatches :: MatchGroup GhcPs (LHsExpr GhcPs)
   }
 
 -- | Result of validating the template header and body declarations,
@@ -2366,7 +2368,7 @@ data ValidTemplate = ValidTemplate {
     , vtLetBindings :: LHsLocalBinds GhcPs
     , vtChoices :: [CombinedChoiceData]
     , vtKeyData :: Maybe (Located KeyData)
-    , vtImplements :: [Located ValidImplementsDeclBlock]
+    , vtInterfaceInstances :: [Located ValidInterfaceInstance]
     }
 
 instance Semigroup TemplateBodyDecls where
@@ -2380,7 +2382,7 @@ instance Semigroup TemplateBodyDecls where
     , tbdFlexChoices = tbdFlexChoices x Monoid.<> tbdFlexChoices y
     , tbdKeys = tbdKeys x Monoid.<> tbdKeys y
     , tbdMaintainers = tbdMaintainers x Monoid.<> tbdMaintainers y
-    , tbdImplements = tbdImplements x Monoid.<> tbdImplements y
+    , tbdInterfaceInstances = tbdInterfaceInstances x Monoid.<> tbdInterfaceInstances y
     }
 
 instance Monoid TemplateBodyDecls where
@@ -2397,7 +2399,7 @@ templateBodyDeclToDecls (L _ decl) = case decl of
   FlexChoiceDecl f             -> TemplateBodyDecls [] [] [] [] [] [] [f] [] [] []
   KeyDecl k                    -> TemplateBodyDecls [] [] [] [] [] [] [] [k] [] []
   MaintainerDecl m             -> TemplateBodyDecls [] [] [] [] [] [] [] [] [m] []
-  ImplementsDecl d             -> TemplateBodyDecls [] [] [] [] [] [] [] [] [] [d]
+  TemplateInterfaceInstanceDecl d -> TemplateBodyDecls [] [] [] [] [] [] [] [] [] [d]
 
 -- | Classify a list of template body declarations.
 extractTemplateBodyDecls :: [Located TemplateBodyDecl] -> TemplateBodyDecls
@@ -3123,7 +3125,7 @@ validateTemplate vtTemplateName tbd@TemplateBodyDecls{..}
   | null tbdMaintainers && (not . null) tbdKeys = report "Missing 'maintainer' declaration for given 'key'"
   | otherwise
   = do
-      vtImplements <- validateImplementsBlocks tbdImplements
+      vtInterfaceInstances <- validateInterfaceInstances tbdInterfaceInstances
       return ValidTemplate
         { vtTemplateName
         , vtChoices = combineChoices tbd
@@ -3133,7 +3135,7 @@ validateTemplate vtTemplateName tbd@TemplateBodyDecls{..}
         , vtAgreement = listToMaybe tbdAgreements
         , vtLetBindings = fromMaybe (noLoc emptyLocalBinds) (listToMaybe tbdLetBindings)
         , vtKeyData
-        , vtImplements
+        , vtInterfaceInstances
         }
   | otherwise = report "Invalid type where template name was expected"
   where
@@ -3165,47 +3167,58 @@ validateTemplate vtTemplateName tbd@TemplateBodyDecls{..}
            Nothing -> app
            Just (L loc _) -> L loc (unLoc app)
 
-    validateImplementsBlocks ::
-         [Located ParsedImplementsDeclBlock]
-      -> P [Located ValidImplementsDeclBlock]
-    validateImplementsBlocks = mapM validateImplementsBlock
+    validateInterfaceInstances ::
+         [Located ParsedInterfaceInstance]
+      -> P [Located ValidInterfaceInstance]
+    validateInterfaceInstances = mapM validateInterfaceInstance
 
-    validateImplementsBlock :: Located ParsedImplementsDeclBlock -> P (Located ValidImplementsDeclBlock)
-    validateImplementsBlock (L loc (ParsedImplementsDeclBlock iface decls)) = do
-      impls <- mapM validateMethodImpl (groupValDecls decls)
-      checkMultipleDecls iface impls
-      mapM_ (checkNumArgs iface) impls
+    validateInterfaceInstance :: Located ParsedInterfaceInstance -> P (Located ValidInterfaceInstance)
+    validateInterfaceInstance (L loc piib) = do
+      let ParsedInterfaceInstance iface iiTemplate decls = piib
+      impls <- mapM validateMethodImpl (groupValDecls (unLoc decls))
+      checkMultipleDecls iface iiTemplate impls
+      mapM_ (checkNumArgs iiTemplate iface) impls
 
-      let isViewImpl impl = rdrNameToString (vimdId impl) == "view"
+      let isViewImpl impl = rdrNameToString (viimdId impl) == "view"
       let (viewImpls, nonViewImpls) = partition (isViewImpl . unLoc) impls
       viewImpl <- case viewImpls of
-        [] -> addFatalError loc (text "implements block does not have a view method")
+        [] -> addFatalError loc (text "interface instance does not have a view method")
         [viewImpl] -> pure viewImpl
-        _ -> addFatalError loc (text "implements block has more than one view method")
+        _ -> addFatalError loc (text "interface instance has more than one view method")
 
-      pure (L loc (ValidImplementsDeclBlock iface nonViewImpls viewImpl))
+      pure $ L loc ValidInterfaceInstance
+        { viiInterface = iface
+        , viiTemplate = iiTemplate
+        , viiDefs = nonViewImpls
+        , viiView = viewImpl
+        }
 
-    checkMultipleDecls :: Located RdrName -> [Located ValidImplementsMethodDecl] -> P ()
-    checkMultipleDecls iface impls = mapM_ emitError multipleDecls
+    checkMultipleDecls :: Located RdrName -> Located RdrName -> [Located ValidInterfaceInstanceMethodDecl] -> P ()
+    checkMultipleDecls iface iiTemplate impls = mapM_ emitError multipleDecls
       where
-        emitError ds@(L loc (ValidImplementsMethodDecl methodName _):_) =
+        emitError ds@(L loc (ValidInterfaceInstanceMethodDecl methodName _):_) =
           addFatalError loc $ vcat
             [ text "Multiple declarations of method"
               <+> quotes (ppr methodName)
+              <+> text "in"
+              <+> quotes
+                ( text "interface instance"
+                  <+> ppr iface
+                  <+> text "for"
+                  <+> ppr iiTemplate
+                )
               <+> text "in template"
               <+> quotes (ppr vtTemplateName)
-              <+> text "implementation of interface"
-              <+> quotes (ppr iface)
             , text "Declared at:"
               <+> vcat (map (ppr . getLoc) ds)
             ]
         emitError [] = pure ()
 
         multipleDecls = filter ((>1) . length) $ groupBy ((==) `on` name) $ sortOn name $ impls
-        name = unLoc . vimdId . unLoc
+        name = unLoc . viimdId . unLoc
 
-    checkNumArgs :: Located RdrName -> Located ValidImplementsMethodDecl -> P ()
-    checkNumArgs iface (L loc (ValidImplementsMethodDecl methodName matches)) =
+    checkNumArgs :: Located RdrName -> Located RdrName -> Located ValidInterfaceInstanceMethodDecl -> P ()
+    checkNumArgs iface iiTemplate (L loc (ValidInterfaceInstanceMethodDecl methodName matches)) =
       case numArgs of
         [] -> pure ()
         (L loc1 n1 : matches) -> do
@@ -3216,10 +3229,15 @@ validateTemplate vtTemplateName tbd@TemplateBodyDecls{..}
               addFatalError loc $ vcat
                 [ text "Equations for method"
                   <+> quotes (ppr methodName)
+                  <+> text "in"
+                  <+> quotes
+                    ( text "interface instance"
+                      <+> ppr iface
+                      <+> text "for"
+                      <+> ppr iiTemplate
+                    )
                   <+> text "in template"
                   <+> quotes (ppr vtTemplateName)
-                  <+> text "implementation of interface"
-                  <+> quotes (ppr iface)
                   <+> text "have different numbers of arguments"
                 , nest 2 (ppr loc1)
                 , nest 2 (ppr locBad)
@@ -3231,22 +3249,22 @@ validateTemplate vtTemplateName tbd@TemplateBodyDecls{..}
           , L l Match {m_pats} <- unLoc mg_alts
           ]
 
-    validateMethodImpl :: LHsDecl GhcPs -> P (Located ValidImplementsMethodDecl)
+    validateMethodImpl :: LHsDecl GhcPs -> P (Located ValidInterfaceInstanceMethodDecl)
     validateMethodImpl (L loc decl) =
       let
         forbidden what = addFatalError loc $ vcat
-          [ text what <+> text "not allowed in 'implements' block"
+          [ text what <+> text "not allowed in interface instance"
           , nest 2 (ppr decl)
           ]
         unexpected what = pprPanic "validateMethodImpl" $ vcat
-          [ text what <+> text "not expected in 'implements' block"
+          [ text what <+> text "not expected in interface instance"
           , nest 2 (ppr decl)
           ]
 
       in case decl of
         ValD _ bind -> case bind of
-          FunBind _ vimdId vimdMatches _ _ ->
-            pure (L loc ValidImplementsMethodDecl { vimdId, vimdMatches })
+          FunBind _ viimdId viimdMatches _ _ ->
+            pure (L loc ValidInterfaceInstanceMethodDecl { viimdId, viimdMatches })
           PatBind{} -> forbidden "Pattern bindings (except simple variables)"
           PatSynBind{} -> forbidden "Pattern synonyms"
           VarBind{} -> unexpected "Variable bindings"
@@ -3455,7 +3473,7 @@ mkTemplateDecls templateName fields decls = do
       choiceByKeyInstanceDecls = concatMap (mkChoiceByKeyInstanceDecl templateName vt) choicesWithArchive
       choiceDecls = concatMap (mkChoiceDecls (getLoc templateName) conName sharedBinds) choicesWithArchive
       keyInstanceDecl = mkKeyInstanceDecl sharedBinds templateName conName vt
-  templateInterfaceImplements <- concat <$> traverse (mkInterfaceImplements vtTemplateName conName sharedBinds) vtImplements
+  templateInterfaceImplements <- concat <$> traverse (mkInterfaceImplements vtTemplateName conName sharedBinds) vtInterfaceInstances
   return $ toOL $ templateDataDecl : choiceDataDecls ++ letDecls
                ++ templateInstances ++ (choiceInstanceDecls ++ choiceDecls ++ choiceByKeyInstanceDecls ++ keyInstanceDecl)
                ++ templateInterfaceImplements
@@ -3464,7 +3482,7 @@ mkInterfaceImplements ::
      Located RdrName
   -> Located RdrName
   -> LHsLocalBinds GhcPs
-  -> Located ValidImplementsDeclBlock
+  -> Located ValidInterfaceInstance
   -> P [LHsDecl GhcPs]
 mkInterfaceImplements templateName conName sharedBinds (L loc implements) = do
   pure $ implementsMarker ++ implementsInstances ++ implementsInterfaceMethods ++ implementsView
@@ -3473,9 +3491,10 @@ mkInterfaceImplements templateName conName sharedBinds (L loc implements) = do
     implementsInterfaceMethods = concatMap mkInterfaceImplementsMethod implementsDefs
     templateType = mkTemplateType (fmap (occNameString . rdrNameOcc) templateName)
     interfaceType = rdrNameToType implementsInterface
-    ValidImplementsDeclBlock
-      { vidbInterface = implementsInterface
-      , vidbDefs = implementsDefs
+    ValidInterfaceInstance
+      { viiInterface = implementsInterface
+      , viiTemplate = _unused
+      , viiDefs = implementsDefs
       } = implements
     templateInterfaceName =
       intercalate "_" $ mangle <$>
@@ -3507,8 +3526,8 @@ mkInterfaceImplements templateName conName sharedBinds (L loc implements) = do
 
     implementsView :: [LHsDecl GhcPs]
     implementsView =
-      let ValidImplementsDeclBlock _ _ view = implements
-          L loc (ValidImplementsMethodDecl _ vimdMatches) = view
+      let ValidInterfaceInstance _ _ _ view = implements
+          L loc (ValidInterfaceInstanceMethodDecl _ viimdMatches) = view
 
           fullViewName =
             noLoc $ mkRdrUnqual $ mkVarOcc $
@@ -3526,7 +3545,7 @@ mkInterfaceImplements templateName conName sharedBinds (L loc implements) = do
                     (ValBinds noExt
                       (unitBag
                         (noLoc
-                          (FunBind noExt shortViewName vimdMatches WpHole [])))
+                          (FunBind noExt shortViewName viimdMatches WpHole [])))
                       [])))
                 (noLoc (HsVar noExt shortViewName)))
           body =
@@ -3543,8 +3562,8 @@ mkInterfaceImplements templateName conName sharedBinds (L loc implements) = do
       , noLoc (ValD noExt val)
       ]
 
-    mkInterfaceImplementsMethod :: Located ValidImplementsMethodDecl -> [LHsDecl GhcPs]
-    mkInterfaceImplementsMethod (L loc ValidImplementsMethodDecl { vimdId = name, vimdMatches }) =
+    mkInterfaceImplementsMethod :: Located ValidInterfaceInstanceMethodDecl -> [LHsDecl GhcPs]
+    mkInterfaceImplementsMethod (L loc ValidInterfaceInstanceMethodDecl { viimdId = name, viimdMatches }) =
       let
         fullMethodName =
           noLoc $ mkRdrUnqual $ mkVarOcc $
@@ -3565,7 +3584,7 @@ mkInterfaceImplements templateName conName sharedBinds (L loc implements) = do
                   (ValBinds noExt
                     (unitBag
                       (noLoc
-                        (FunBind noExt name vimdMatches WpHole [])
+                        (FunBind noExt name viimdMatches WpHole [])
                       )
                     )
                     []
