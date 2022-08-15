@@ -1379,7 +1379,10 @@ interface_body_decl
         { sL (comb3 $2 $6 $>) $ InterfaceChoiceDecl (InterfaceChoiceSignature Nothing $2 $4 $6 $5) (unLoc $7) }
   | consuming_ 'choice' tycon OF_TYPE btype_ maybe_docprev arecord_with_opt interface_choice_body
         { sL (comb3 $3 $7 $>) $ InterfaceChoiceDecl (InterfaceChoiceSignature (Just (unLoc $1)) $3 $5 $7 $6) (unLoc $8) }
-  | var OF_TYPE sigtype maybe_docprev { sL1 $1 $ InterfaceFunctionSignatureDecl $1 $3 $4 }
+  | var OF_TYPE sigtype maybe_docprev
+        { sL1 $1 $ InterfaceFunctionSignatureDecl $1 $3 $4 }
+  | interface_instance
+        { sL1 $1 $ InterfaceInterfaceInstanceDecl $1 }
 
 interface_view_type_decl :: { Located InterfaceBodyDecl }
 interface_view_type_decl

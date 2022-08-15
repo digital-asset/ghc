@@ -2238,12 +2238,14 @@ data InterfaceBodyDecl
   = InterfaceFunctionSignatureDecl (Located RdrName) (LHsType GhcPs) (Maybe LHsDocString)
   | InterfaceChoiceDecl InterfaceChoiceSignature InterfaceChoiceBody
   | InterfaceViewDecl (LHsType GhcPs)
+  | InterfaceInterfaceInstanceDecl (Located ParsedInterfaceInstance)
 
 data InterfaceBodyDecls = InterfaceBodyDecls
   { ibdFunctionSignatures :: [(Located RdrName, LHsType GhcPs, Maybe LHsDocString)]
   , ibdChoices :: [(InterfaceChoiceSignature, InterfaceChoiceBody)]
   , ibdEnsures :: [LHsExpr GhcPs]
   , ibdViewDecls :: [LHsType GhcPs]
+  , ibdInterfaceInstances :: [Located ParsedInterfaceInstance]
   }
 
 instance Semigroup InterfaceBodyDecls where
@@ -2252,16 +2254,18 @@ instance Semigroup InterfaceBodyDecls where
     , ibdChoices = ibdChoices a Monoid.<> ibdChoices b
     , ibdEnsures = ibdEnsures a Monoid.<> ibdEnsures b
     , ibdViewDecls = ibdViewDecls a Monoid.<> ibdViewDecls b
+    , ibdInterfaceInstances = ibdInterfaceInstances a Monoid.<> ibdInterfaceInstances b
     }
 
 instance Monoid InterfaceBodyDecls where
-  mempty = InterfaceBodyDecls [] [] [] []
+  mempty = InterfaceBodyDecls [] [] [] [] []
 
 interfaceBodyDeclToDecls :: InterfaceBodyDecl -> InterfaceBodyDecls
 interfaceBodyDeclToDecls = \case
   InterfaceFunctionSignatureDecl name ty mbDocString -> mempty { ibdFunctionSignatures = [(name, ty, mbDocString)] }
   InterfaceChoiceDecl signature body                 -> mempty { ibdChoices = [(signature, body)] }
   InterfaceViewDecl viewType                         -> mempty { ibdViewDecls = [viewType] }
+  InterfaceInterfaceInstanceDecl interfaceInstance   -> mempty { ibdInterfaceInstances = [interfaceInstance] }
 
 extractInterfaceBodyDecls :: [Located InterfaceBodyDecl] -> InterfaceBodyDecls
 extractInterfaceBodyDecls = foldMap (interfaceBodyDeclToDecls . unLoc)
