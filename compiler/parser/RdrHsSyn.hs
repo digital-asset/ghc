@@ -3125,7 +3125,7 @@ validateTemplate vtTemplateName tbd@TemplateBodyDecls{..}
   | null tbdMaintainers && (not . null) tbdKeys = report "Missing 'maintainer' declaration for given 'key'"
   | otherwise
   = do
-      vtInterfaceInstances <- validateInterfaceInstances tbdInterfaceInstances
+      vtInterfaceInstances <- validateInterfaceInstances vtTemplateName tbdInterfaceInstances
       return ValidTemplate
         { vtTemplateName
         , vtChoices = combineChoices tbd
@@ -3167,32 +3167,51 @@ validateTemplate vtTemplateName tbd@TemplateBodyDecls{..}
            Nothing -> app
            Just (L loc _) -> L loc (unLoc app)
 
-    validateInterfaceInstances ::
-         [Located ParsedInterfaceInstance]
-      -> P [Located ValidInterfaceInstance]
-    validateInterfaceInstances = mapM validateInterfaceInstance
+combineChoices :: TemplateBodyDecls -> [CombinedChoiceData]
+combineChoices TemplateBodyDecls{..} =
+  choiceGroupsToCombinedChoices tbdControlledChoiceGroups
+    ++ map (flexChoiceToCombinedChoice TemplateChoice . unLoc) tbdFlexChoices
 
-    validateInterfaceInstance :: Located ParsedInterfaceInstance -> P (Located ValidInterfaceInstance)
-    validateInterfaceInstance (L loc piib) = do
-      let ParsedInterfaceInstance iface iiTemplate decls = piib
-      impls <- mapM validateMethodImpl (groupValDecls (unLoc decls))
-      checkMultipleDecls iface iiTemplate impls
-      mapM_ (checkNumArgs iiTemplate iface) impls
+-- | Convert controlled choice groups to a list of individual choices with controllers.
+-- Leave type variable information empty, to be added afterwards.
+choiceGroupsToCombinedChoices
+  :: [Located (LHsExpr GhcPs, Located [Located ChoiceData])]
+  -> [CombinedChoiceData]
+choiceGroupsToCombinedChoices = concatMap distributeController
+  where
+    distributeController (L _ (controller, L _ choices)) = map (makeCombinedChoice controller) choices
+    makeCombinedChoice controller choice = CombinedChoiceData controller Nothing (unLoc choice) False TemplateChoice
 
-      let isViewImpl impl = rdrNameToString (viimdId impl) == "view"
-      let (viewImpls, nonViewImpls) = partition (isViewImpl . unLoc) impls
-      viewImpl <- case viewImpls of
-        [] -> addFatalError loc (text "interface instance does not have a view method")
-        [viewImpl] -> pure viewImpl
-        _ -> addFatalError loc (text "interface instance has more than one view method")
+validateInterfaceInstances ::
+       Located RdrName
+  ->   [Located ParsedInterfaceInstance]
+  -> P [Located ValidInterfaceInstance]
+validateInterfaceInstances parent = mapM (validateInterfaceInstance parent)
 
-      pure $ L loc ValidInterfaceInstance
-        { viiInterface = iface
-        , viiTemplate = iiTemplate
-        , viiDefs = nonViewImpls
-        , viiView = viewImpl
-        }
+validateInterfaceInstance ::
+       Located RdrName
+  ->   Located ParsedInterfaceInstance
+  -> P (Located ValidInterfaceInstance)
+validateInterfaceInstance parent (L loc piib) = do
+  let ParsedInterfaceInstance iface iiTemplate decls = piib
+  impls <- mapM validateMethodImpl (groupValDecls (unLoc decls))
+  checkMultipleDecls iface iiTemplate impls
+  mapM_ (checkNumArgs iiTemplate iface) impls
 
+  let isViewImpl impl = rdrNameToString (viimdId impl) == "view"
+  let (viewImpls, nonViewImpls) = partition (isViewImpl . unLoc) impls
+  viewImpl <- case viewImpls of
+    [] -> addFatalError loc (text "interface instance does not have a view method")
+    [viewImpl] -> pure viewImpl
+    _ -> addFatalError loc (text "interface instance has more than one view method")
+
+  pure $ L loc ValidInterfaceInstance
+    { viiInterface = iface
+    , viiTemplate = iiTemplate
+    , viiDefs = nonViewImpls
+    , viiView = viewImpl
+    }
+  where
     checkMultipleDecls :: Located RdrName -> Located RdrName -> [Located ValidInterfaceInstanceMethodDecl] -> P ()
     checkMultipleDecls iface iiTemplate impls = mapM_ emitError multipleDecls
       where
@@ -3208,7 +3227,7 @@ validateTemplate vtTemplateName tbd@TemplateBodyDecls{..}
                   <+> ppr iiTemplate
                 )
               <+> text "in template"
-              <+> quotes (ppr vtTemplateName)
+              <+> quotes (ppr parent)
             , text "Declared at:"
               <+> vcat (map (ppr . getLoc) ds)
             ]
@@ -3237,7 +3256,7 @@ validateTemplate vtTemplateName tbd@TemplateBodyDecls{..}
                       <+> ppr iiTemplate
                     )
                   <+> text "in template"
-                  <+> quotes (ppr vtTemplateName)
+                  <+> quotes (ppr parent)
                   <+> text "have different numbers of arguments"
                 , nest 2 (ppr loc1)
                 , nest 2 (ppr locBad)
@@ -3292,21 +3311,6 @@ validateTemplate vtTemplateName tbd@TemplateBodyDecls{..}
         DocD{} -> forbidden "Documentation comment declaration"
         RoleAnnotD{} -> forbidden "Role annotation declaration"
         XHsDecl{} -> unexpected "HsDecl extension point"
-
-combineChoices :: TemplateBodyDecls -> [CombinedChoiceData]
-combineChoices TemplateBodyDecls{..} =
-  choiceGroupsToCombinedChoices tbdControlledChoiceGroups
-    ++ map (flexChoiceToCombinedChoice TemplateChoice . unLoc) tbdFlexChoices
-
--- | Convert controlled choice groups to a list of individual choices with controllers.
--- Leave type variable information empty, to be added afterwards.
-choiceGroupsToCombinedChoices
-  :: [Located (LHsExpr GhcPs, Located [Located ChoiceData])]
-  -> [CombinedChoiceData]
-choiceGroupsToCombinedChoices = concatMap distributeController
-  where
-    distributeController (L _ (controller, L _ choices)) = map (makeCombinedChoice controller) choices
-    makeCombinedChoice controller choice = CombinedChoiceData controller Nothing (unLoc choice) False TemplateChoice
 
 -- | Simple type conversion, leaving type variable information empty for now.
 flexChoiceToCombinedChoice :: ChoiceSource -> FlexChoiceData -> CombinedChoiceData
