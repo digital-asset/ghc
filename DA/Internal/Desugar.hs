@@ -193,6 +193,11 @@ _exerciseInterfaceGuard pred iface =
 
 -- ## Interface instance markers
 
+-- | The type arguments @p@, @i@ and @t@ refer, respectively, to the
+-- parent, interface and template of this interface instance. The parent
+-- is the type whose declaration contains the interface instance, and must match
+-- either the interface or the template. This is checked in RdrHsSyn and again
+-- during LF Conversion.
 newtype InterfaceInstance p i t = InterfaceInstance ()
 
 mkInterfaceInstance : forall p i t. InterfaceInstance p i t
@@ -202,6 +207,8 @@ mkInterfaceInstance = InterfaceInstance ()
 
 class HasMethod i (m : Symbol) r | i m -> r
 
+-- | The type arguments @p@, @i@ and @t@ are the same as in 'InterfaceInstance',
+-- while @m@ is the name of the method represented as a 'Symbol'.
 newtype Method p i t (m : Symbol) = Method ()
 
 mkMethod : forall p i t m r. (Implements t i, HasMethod i m r) => (t -> r) -> Method p i t m
@@ -212,6 +219,7 @@ mkMethod _ = Method ()
 -- class HasInterfaceView is also used for the type of the `view` function,
 -- so it's not here.
 
+-- | The type arguments @p@, @i@ and @t@ are the same as in 'InterfaceInstance'.
 newtype InterfaceView p i t = InterfaceView ()
 
 mkInterfaceView : forall p i t v. (Implements t i, HasInterfaceView i v) => (t -> v) -> InterfaceView p i t
