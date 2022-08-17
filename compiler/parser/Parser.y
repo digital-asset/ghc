@@ -524,7 +524,7 @@ are the most common patterns, rewritten as regular expressions for clarity:
  'try'          { L _ ITtry }
  'catch'        { L _ ITcatch }
  'interface'    { L _ ITinterface }
- 'implements'   { L _ ITimplements }
+ 'for'          { L _ ITfor }
  'requires'     { L _ ITrequires }
  'viewtype'     { L _ ITviewtype }
 
@@ -1215,17 +1215,15 @@ template_body_decl :: { Located TemplateBodyDecl }
   | flex_choice_decl                             { sL1 $1 $ FlexChoiceDecl $1 }
   | key_decl                                     { sL1 $1 $ KeyDecl $1 }
   | maintainer_decl                              { sL1 $1 $ MaintainerDecl $1 }
-  | implements_group_decl                        { sL1 $1 $ ImplementsDecl $1 }
+  | interface_instance                           { sL1 $1 $ TemplateInterfaceInstanceDecl $1 }
 
 let_bindings_decl :: { Located ([AddAnn], LHsLocalBinds GhcPs) }
   : 'let' binds                 { sLL $1 $> (mj AnnWhere $1 : (fst $ unLoc $2)
                                              , snd $ unLoc $2) }
 
-implements_group_decl :: { Located ParsedImplementsDeclBlock }
-  : 'implements' qtycon where_impl { sLL $1 $2 $ ParsedImplementsDeclBlock $2 $3 }
-
-where_impl :: { [LHsDecl GhcPs] }
-  : where_inst { fromOL (snd (unLoc $1)) }
+interface_instance :: { Located ParsedInterfaceInstance }
+  : 'interface' 'instance' qtycon 'for' qtycon where_inst
+      { sL (comb3 $1 $5 $6) $ ParsedInterfaceInstance $3 $5 $6 }
 
 choice_group_decl :: { Located (LHsExpr GhcPs , Located [Located ChoiceData]) }
   : 'controller' party_list 'can' choice_decl_list
@@ -1378,7 +1376,10 @@ interface_body_decl
         { sL (comb3 $2 $6 $>) $ InterfaceChoiceDecl (InterfaceChoiceSignature Nothing $2 $4 $6 $5) (unLoc $7) }
   | consuming_ 'choice' tycon OF_TYPE btype_ maybe_docprev arecord_with_opt interface_choice_body
         { sL (comb3 $3 $7 $>) $ InterfaceChoiceDecl (InterfaceChoiceSignature (Just (unLoc $1)) $3 $5 $7 $6) (unLoc $8) }
-  | var OF_TYPE sigtype maybe_docprev { sL1 $1 $ InterfaceFunctionSignatureDecl $1 $3 $4 }
+  | var OF_TYPE sigtype maybe_docprev
+        { sL1 $1 $ InterfaceFunctionSignatureDecl $1 $3 $4 }
+  | interface_instance
+        { sL1 $1 $ InterfaceInterfaceInstanceDecl $1 }
 
 interface_view_type_decl :: { Located InterfaceBodyDecl }
 interface_view_type_decl
@@ -3852,6 +3853,7 @@ varid :: { Located RdrName }
         | 'key'            { sL1 $1 $! mkUnqual varName (fsLit "key") }
         | 'maintainer'     { sL1 $1 $! mkUnqual varName (fsLit "maintainer") }
         | 'message'        { sL1 $1 $! mkUnqual varName (fsLit "message") }
+        | 'for'            { sL1 $1 $! mkUnqual varName (fsLit "for") }
         -- If this changes relative to tyvarid, update 'checkRuleTyVarBndrNames' in RdrHsSyn.hs
         -- See Note [Parsing explicit foralls in Rules]
 
