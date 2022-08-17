@@ -1222,11 +1222,8 @@ let_bindings_decl :: { Located ([AddAnn], LHsLocalBinds GhcPs) }
                                              , snd $ unLoc $2) }
 
 interface_instance :: { Located ParsedInterfaceInstance }
-  : 'interface' 'instance' qtycon 'for' qtycon where_impl
+  : 'interface' 'instance' qtycon 'for' qtycon where_inst
       { sL (comb3 $1 $5 $6) $ ParsedInterfaceInstance $3 $5 $6 }
-
-where_impl :: { Located [LHsDecl GhcPs] }
-  : where_inst { fmap (fromOL . snd) $1 }
 
 choice_group_decl :: { Located (LHsExpr GhcPs , Located [Located ChoiceData]) }
   : 'controller' party_list 'can' choice_decl_list

@@ -414,10 +414,7 @@ mkRoleAnnotDecl loc tycon roles
 
 --  | Groups together bindings for a single function
 cvTopDecls :: OrdList (LHsDecl GhcPs) -> [LHsDecl GhcPs]
-cvTopDecls decls = groupValDecls (fromOL decls)
-
-groupValDecls :: [LHsDecl GhcPs] -> [LHsDecl GhcPs]
-groupValDecls = go
+cvTopDecls decls = go (fromOL decls)
   where
     go :: [LHsDecl GhcPs] -> [LHsDecl GhcPs]
     go []                     = []
@@ -2322,7 +2319,7 @@ data InterfaceChoiceBody = InterfaceChoiceBody
 data ParsedInterfaceInstance = ParsedInterfaceInstance
   { piiInterface :: Located RdrName
   , piiTemplate :: Located RdrName
-  , piiDefs :: Located [LHsDecl GhcPs]
+  , piiDefs :: Located ([AddAnn], OrdList (LHsDecl GhcPs))
   }
 
 -- | Any declaration that can appear within a template
@@ -3207,7 +3204,7 @@ validateInterfaceInstance ::
   -> P (Located ValidInterfaceInstance)
 validateInterfaceInstance parent (L loc piib) = do
   checkParent
-  impls <- mapM validateMethodImpl (groupValDecls (unLoc piiDefs))
+  impls <- mapM validateMethodImpl (cvTopDecls $ snd $ unLoc piiDefs)
   checkMultipleDecls impls
   mapM_ checkNumArgs impls
 
