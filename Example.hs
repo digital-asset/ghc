@@ -37,6 +37,14 @@ template TheTemplate
       controller s
       do return ()
 
-    implements TheInterface where
+    interface instance TheInterface for TheTemplate where
       myInternalValue = 1000
       view = myInternalValue this * 1000
+
+interface AnotherInterface where
+  someBool : Bool
+  viewtype Ordering
+
+  interface instance AnotherInterface for TheTemplate where
+    someBool = False
+    view = if someBool this then GT else LT
