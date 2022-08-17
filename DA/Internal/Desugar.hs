@@ -191,7 +191,7 @@ _exerciseInterfaceGuard pred iface =
 --------------------------------------------------------------------------------
 -- # Interface instance desugaring
 
--- ## Implements markers
+-- ## Interface instance markers
 
 newtype InterfaceInstance p i t = InterfaceInstance ()
 
