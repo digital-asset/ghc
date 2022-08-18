@@ -3044,7 +3044,7 @@ mkInterfaceFixedChoiceInstanceDecl tycon InterfaceChoiceSignature {..} =
         Nothing)
   , mkInstance "HasExercise"
       exerciseContext
-      (mkTemplateClassMethod "exercise" [pred, cid, arg]
+      (mkTemplateClassMethod "exercise" [cid, arg]
         (mkPrimitive "primitive" "UExerciseInterface"
           `mkApp` (mkParExpr $ mkQualVar (mkVarOcc "toInterfaceContractId")
                     `mkAppType` ifaceType
