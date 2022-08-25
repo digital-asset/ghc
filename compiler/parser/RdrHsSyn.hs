@@ -3032,7 +3032,7 @@ mkInterfaceFixedChoiceInstanceDecl tycon InterfaceChoiceSignature {..} =
   , mkInstance "HasExerciseGuarded"
       exerciseContext
       (mkTemplateClassMethod "exerciseGuarded" [pred, cid, arg]
-        (mkPrimitive "primitive" "UExerciseInterface"
+        (mkPrimitive "primitive" "UExerciseInterfaceGuarded"
           `mkApp` (mkParExpr $ mkQualVar (mkVarOcc "toInterfaceContractId")
                     `mkAppType` ifaceType
                     `mkApp` mkUnqualVar (mkVarOcc "cid"))
@@ -3044,8 +3044,12 @@ mkInterfaceFixedChoiceInstanceDecl tycon InterfaceChoiceSignature {..} =
         Nothing)
   , mkInstance "HasExercise"
       exerciseContext
-      (mkTemplateClassMethod "exercise" []
-        (mkQualVar (mkVarOcc "_exerciseDefault"))
+      (mkTemplateClassMethod "exercise" [cid, arg]
+        (mkPrimitive "primitive" "UExerciseInterface"
+          `mkApp` (mkParExpr $ mkQualVar (mkVarOcc "toInterfaceContractId")
+                    `mkAppType` ifaceType
+                    `mkApp` mkUnqualVar (mkVarOcc "cid"))
+          `mkApp` (mkUnqualVar (mkVarOcc "arg")))
         Nothing)
   ]
   where
