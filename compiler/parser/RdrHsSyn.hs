@@ -2748,12 +2748,7 @@ mkPrimMethod methodName primArg =
 
 mkPrimInterfaceMethod :: Located RdrName -> String -> LHsBind GhcPs
 mkPrimInterfaceMethod methodName primArg =
-  let i = mkVarOcc "i"
-      args = [mkVarPat i]
-      rhs =
-        mkPrimitive "primitiveInterface" primArg
-        `mkApp` mkUnqualVar i
-  in mkBind methodName args rhs Nothing
+  mkBind methodName [] (mkPrimitive "primitiveInterface" primArg) Nothing
 
 data DataDeclName = TemplateName (Located RdrName) | ChoiceName (Located RdrName)
 
