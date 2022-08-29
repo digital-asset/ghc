@@ -2746,19 +2746,13 @@ mkPrimMethod :: String -> String -> LHsBind GhcPs
 mkPrimMethod methodName primArg =
   mkTemplateClassMethod methodName [] (mkPrimitive "primitive" primArg) Nothing
 
-mkPrimInterfaceMethod :: LHsType GhcPs -> Located RdrName -> String -> LHsBind GhcPs
-mkPrimInterfaceMethod ifaceTy methodName primArg =
-  let t = mkVarOcc "t"
-      args = [mkVarPat t]
+mkPrimInterfaceMethod :: Located RdrName -> String -> LHsBind GhcPs
+mkPrimInterfaceMethod methodName primArg =
+  let i = mkVarOcc "i"
+      args = [mkVarPat i]
       rhs =
         mkPrimitive "primitiveInterface" primArg
-        `mkApp`
-          mkParExpr (
-            mkQualVar (mkVarOcc "_toInterface")
-            `mkAppType` noLoc (HsWildCardTy noExt)
-            `mkAppType` ifaceTy
-            `mkApp` mkUnqualVar t
-            )
+        `mkApp` mkUnqualVar i
   in mkBind methodName args rhs Nothing
 
 data DataDeclName = TemplateName (Located RdrName) | ChoiceName (Located RdrName)
@@ -2931,8 +2925,8 @@ mkTemplateInstances sharedBinds templateName conName ValidTemplate{..} =
     this = asPatRecWild "this" conName
     cid = mkVarPat $ mkVarOcc "cid"
 
-mkInterfaceMethodDecl :: LHsType GhcPs -> LHsType GhcPs -> Located RdrName -> LHsType GhcPs -> Maybe LHsDocString -> [LHsDecl GhcPs]
-mkInterfaceMethodDecl ifaceTy classTy methodName methodType mbDocString =
+mkInterfaceMethodDecl :: LHsType GhcPs -> Located RdrName -> LHsType GhcPs -> Maybe LHsDocString -> [LHsDecl GhcPs]
+mkInterfaceMethodDecl ifaceTy methodName methodType mbDocString =
   hasMethodInstance :
   maybeToList mbDocDecl ++
   [ topLevelFuncSig
@@ -2954,13 +2948,11 @@ mkInterfaceMethodDecl ifaceTy classTy methodName methodType mbDocString =
 
     topLevelFuncSig = L (getLoc methodName) $ SigD noExt $ TypeSig noExt [methodName] (mkLHsSigWcType $ noLoc ty)
       where
-        ty = HsQualTy noExt tyCtx tyRhs
-        tyCtx = noLoc [mkImplementsConstraint classTy ifaceTy]
-        tyRhs = noLoc $ HsFunTy noExt classTy methodType
+        ty = HsFunTy noExt ifaceTy methodType
 
     topLevelFuncDef = L (getLoc methodName) $ ValD noExt (unLoc rhs)
       where
-        rhs = mkPrimInterfaceMethod ifaceTy methodName name
+        rhs = mkPrimInterfaceMethod methodName name
         name = occNameString $ occName rdrName
         L _ rdrName = methodName
 
@@ -3757,17 +3749,11 @@ hasToInterfaceClass = mkQualType "HasToInterface"
 hasFromInterfaceClass :: LHsType GhcPs
 hasFromInterfaceClass = mkQualType "HasFromInterface"
 
-implementsClass :: LHsType GhcPs
-implementsClass = mkQualType "Implements"
-
 interfaceInstanceType :: LHsType GhcPs
 interfaceInstanceType = mkQualType "InterfaceInstance"
 
 mkInterfaceInstanceExpr :: LHsExpr GhcPs
 mkInterfaceInstanceExpr = mkQualVar $ mkVarOcc "mkInterfaceInstance"
-
-mkImplementsConstraint :: LHsType GhcPs -> LHsType GhcPs -> LHsType GhcPs
-mkImplementsConstraint t i = implementsClass `mkAppTy` t `mkAppTy` i
 
 requiresType :: LHsType GhcPs
 requiresType = mkQualType "RequiresT"
@@ -3906,7 +3892,7 @@ mkInterfaceDecl tycon (L requiresLoc requires) decls = do
 
     ifaceMethods <- concat <$> sequence
       [ if rdrNameToString methodName /= "view"
-         then pure $ mkInterfaceMethodDecl ifaceTy classTy methodName methodType mbDocString
+         then pure $ mkInterfaceMethodDecl ifaceTy methodName methodType mbDocString
          else parseErrorSDoc (getLoc methodName) (text "Interface methods with name `view` are disallowed.")
       | (methodName, methodType, mbDocString) <- viFunctionSignatures
       ]
@@ -3931,8 +3917,6 @@ mkInterfaceDecl tycon (L requiresLoc requires) decls = do
       ++ viewTypeDecls
       ++ interfaceInterfaceInstances
   where
-    classVar = noLoc $ Unqual (mkTyVarOcc "t")
-    classTy = noLoc $ HsTyVar noExt NotPromoted classVar
     hasFetch t = mkQualClass "HasFetch" `mkAppTy` t
 
 shareTemplateLetBindings :: Located RdrName -> LHsLocalBinds GhcPs -> ([LHsDecl GhcPs], LHsLocalBinds GhcPs)
