@@ -3024,13 +3024,10 @@ mkChoiceByKeyInstanceDecl templateName ValidTemplate{..} CombinedChoiceData { cc
 mkInterfaceFixedChoiceInstanceDecl :: Located RdrName -> InterfaceChoiceSignature -> [LHsDecl GhcPs]
 mkInterfaceFixedChoiceInstanceDecl tycon InterfaceChoiceSignature {..} =
   [ mkInstance "HasToAnyChoice"
-      simpleContext
-       (mkTemplateClassMethod "_toAnyChoice" [proxy] (mkPrimitive "primitive" "EToAnyInterfaceChoice" `mkApp` nil ifaceType) Nothing)
+      (mkTemplateClassMethod "_toAnyChoice" [proxy] (mkPrimitive "primitive" "EToAnyInterfaceChoice" `mkApp` nil ifaceType) Nothing)
   , mkInstance "HasFromAnyChoice"
-      simpleContext
       (mkTemplateClassMethod "_fromAnyChoice" [proxy] (mkPrimitive "primitive" "EFromAnyInterfaceChoice" `mkApp` nil ifaceType) Nothing)
   , mkInstance "HasExerciseGuarded"
-      exerciseContext
       (mkTemplateClassMethod "exerciseGuarded" [pred, cid, arg]
         (mkPrimitive "primitive" "UExerciseInterfaceGuarded"
           `mkApp` (mkParExpr $ mkQualVar (mkVarOcc "toInterfaceContractId")
@@ -3043,7 +3040,6 @@ mkInterfaceFixedChoiceInstanceDecl tycon InterfaceChoiceSignature {..} =
                     `mkApp` mkUnqualVar (mkVarOcc "pred")))
         Nothing)
   , mkInstance "HasExercise"
-      exerciseContext
       (mkTemplateClassMethod "exercise" [cid, arg]
         (mkPrimitive "primitive" "UExerciseInterface"
           `mkApp` (mkParExpr $ mkQualVar (mkVarOcc "toInterfaceContractId")
@@ -3058,22 +3054,12 @@ mkInterfaceFixedChoiceInstanceDecl tycon InterfaceChoiceSignature {..} =
     arg = mkVarPat $ mkVarOcc "arg"
     proxy = WildPat noExt
     nil typ = mkExprWithType (noLoc $ ExplicitList noExt Nothing []) (mkListType typ)
-    paramVar = noLoc $ Unqual (mkTyVarOcc "t")
-    paramType = noLoc $ HsTyVar noExt NotPromoted paramVar
-    implementsConstraint = mkParenTy (mkImplementsConstraint paramType ifaceType)
-    simpleContext = noLoc [ implementsConstraint ]
-    exerciseContext = noLoc
-      [ mkParenTy (mkQualType "HasIsInterfaceType" `mkAppTy` paramType)
-      , mkParenTy (mkQualType "HasTemplateTypeRep" `mkAppTy` paramType)
-      , implementsConstraint
-      ]
-    addContext ctx = noLoc . HsQualTy noExt ctx
     ifaceType = rdrNameToType tycon
     choiceType = mkChoiceType ifChoiceName
     returnType = mkParenTy ifChoiceResultType
-    mkClass name = foldl' mkAppTy (mkQualClass name) [paramType, choiceType, returnType]
-    mkInstance name ctx method =
-      instDecl $ classInstDecl (addContext ctx (mkClass name)) $ unitBag method
+    mkClass name = foldl' mkAppTy (mkQualClass name) [ifaceType, choiceType, returnType]
+    mkInstance name method =
+      instDecl $ classInstDecl (mkClass name) $ unitBag method
 
 -- | Construct instances for the split-up `TemplateKey` typeclass, i.e., instances fr all single-method typeclasses
 -- that constitute the `TemplateKey` constraint synonym.
