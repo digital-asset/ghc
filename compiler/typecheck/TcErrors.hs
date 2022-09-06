@@ -2419,6 +2419,12 @@ customDamlErrors ct candidate_insts binds_msg
   $ vcat [ text "Tried to exercise a choice" <+> ppr choiceName <+> text "which doesn't exist on" <+> ppr (tyConName target)
          , text "If the choice" <+> ppr choiceName <+> text "belongs to an interface, try casting" <+> ppr (tyConName target) <+> text "using toInterface or toInterfaceContractId"
          ]
+  | TyConApp con [TyConApp target [], LitTy (StrTyLit methodName), result] <- ctev_pred (ctEvidence ct)
+  , "HasMethod" <- occNameString $ occName $ tyConName con
+  = Just
+  $ vcat [ text "Tried to call method" <+> ppr methodName <+> text "which doesn't exist on" <+> ppr (tyConName target)
+         , text "If the method" <+> ppr methodName <+> text "belongs to an interface, try casting" <+> ppr (tyConName target) <+> text "using toInterface or toInterfaceContractId"
+         ]
   | otherwise = Nothing
 
 mk_dict_err :: ReportErrCtxt -> (Ct, ClsInstLookupResult)
