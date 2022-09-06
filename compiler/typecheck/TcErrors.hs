@@ -2405,6 +2405,22 @@ mkDictErr ctxt cts
     -- but we really only want to report the latter
     elim_superclasses cts = mkMinimalBySCs ctPred cts
 
+customDamlErrors :: Ct -> [ClsInst] -> SDoc -> Maybe SDoc
+customDamlErrors ct candidate_insts binds_msg
+  | TyConApp con args <- ctev_pred (ctEvidence ct)
+  , "HasInterfaceView" <- occNameString $ occName $ tyConName con
+  = Just
+  $ vcat [ text "Tried to `view` a non-interface" <+> ppr (tyConName con)
+         , text "If this is a template, try casting it using toInterface or toInterfaceContractId"
+         ]
+  | TyConApp con args <- ctev_pred (ctEvidence ct)
+  , "HasExercise" <- occNameString $ occName $ tyConName con
+  = Just
+  $ vcat [ text "Tried to `exercise` a choice that doesn't exist on " <+> ppr (tyConName con)
+         , text "If the choice belongs to an interface, try casting your template using toInterface or toInterfaceContractId"
+         ]
+  | otherwise = Nothing
+
 mk_dict_err :: ReportErrCtxt -> (Ct, ClsInstLookupResult)
             -> TcM (ReportErrCtxt, SDoc)
 -- Report an overlap error if this class constraint results
@@ -2452,16 +2468,8 @@ mk_dict_err ctxt@(CEC {cec_encl = implics}) (ct, (matches, unifiers, unsafe_over
 
     cannot_resolve_msg :: Ct -> [ClsInst] -> SDoc -> SDoc
     cannot_resolve_msg ct candidate_insts binds_msg
-      | TyConApp con args <- ctev_pred (ctEvidence ct)
-      , "HasInterfaceView" <- occNameString $ occName $ tyConName con
-      = vcat [ text "Tried to `view` a non-interface" <+> ppr (tyConName con)
-             , text "If this is a template, try casting it using toInterface or toInterfaceContractId"
-             ]
-      | TyConApp con args <- ctev_pred (ctEvidence ct)
-      , "HasExercise" <- occNameString $ occName $ tyConName con
-      = vcat [ text "Tried to `exercise` a choice that doesn't exist on " <+> ppr (tyConName con)
-             , text "If the choice belongs to an interface, try casting your template using toInterface or toInterfaceContractId"
-             ]
+      | Just message <- customDamlErrors ct candidate_insts binds_msg
+      = message
       | otherwise
       = vcat [ no_inst_msg
              , nest 2 extra_note
