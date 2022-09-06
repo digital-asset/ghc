@@ -2413,7 +2413,7 @@ customDamlErrors ct candidate_insts binds_msg
   $ vcat [ text "Tried to get a `view` of type" <+> ppr viewType <+> text "from a non-interface" <+> ppr (tyConName target)
          , text "If" <+> ppr (tyConName target) <+> text "is a template, try casting it using toInterface or toInterfaceContractId"
          ]
-  | TyConApp con [TyConApp target [], LitTy (StrTyLit choiceName), result] <- ctev_pred (ctEvidence ct)
+  | TyConApp con [TyConApp target [], TyConApp choiceName [], result] <- ctev_pred (ctEvidence ct)
   , "HasExercise" <- occNameString $ occName $ tyConName con
   = Just
   $ vcat [ text "Tried to `exercise` a choice" <+> ppr choiceName <+> text "which doesn't exist on" <+> ppr (tyConName target)
