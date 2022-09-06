@@ -1,6 +1,7 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE NamedFieldPuns #-}
 
 module TcErrors(
        reportUnsolved, reportAllUnsolved, warnAllUnsolved,
@@ -2451,6 +2452,17 @@ mk_dict_err ctxt@(CEC {cec_encl = implics}) (ct, (matches, unifiers, unsafe_over
 
     cannot_resolve_msg :: Ct -> [ClsInst] -> SDoc -> SDoc
     cannot_resolve_msg ct candidate_insts binds_msg
+      | TyConApp con args <- ctev_pred (ctEvidence ct)
+      , "HasInterfaceView" <- occNameString $ occName $ tyConName con
+      = vcat [ text "Tried to `view` a non-interface" <+> ppr (tyConName con)
+             , text "If this is a template, try casting it using toInterface or toInterfaceContractId"
+             ]
+      | TyConApp con args <- ctev_pred (ctEvidence ct)
+      , "HasExercise" <- occNameString $ occName $ tyConName con
+      = vcat [ text "Tried to `exercise` a choice that doesn't exist on " <+> ppr (tyConName con)
+             , text "If the choice belongs to an interface, try casting your template using toInterface or toInterfaceContractId"
+             ]
+      | otherwise
       = vcat [ no_inst_msg
              , nest 2 extra_note
              , vcat (pp_givens useful_givens)
@@ -2465,7 +2477,13 @@ mk_dict_err ctxt@(CEC {cec_encl = implics}) (ct, (matches, unifiers, unsafe_over
                            ++ drv_fixes)
              , ppWhen (not (null candidate_insts))
                (hang (text "There are instances for similar types:")
-                   2 (vcat (map ppr candidate_insts))) ]
+                   2 (vcat (map ppr candidate_insts)))
+             , ppr ct
+             , ppr $ ctev_pred (ctEvidence ct)
+             , case ctev_pred (ctEvidence ct) of
+                 TyConApp con args -> text "TyCon with name: " <+> ppr (tyConName con)
+                 _ -> hcat []
+             ]
                    -- See Note [Report candidate instances]
       where
         orig = ctOrigin ct
