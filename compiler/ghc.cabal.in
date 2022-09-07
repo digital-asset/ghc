@@ -513,6 +513,7 @@ Library
         TcSimplify
         TcHoleErrors
         TcErrors
+        TcDaml
         TcTyClsDecls
         TcTyDecls
         TcTypeable
