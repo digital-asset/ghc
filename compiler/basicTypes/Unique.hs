@@ -45,6 +45,7 @@ module Unique (
 
         -- now all the built-in Uniques (and functions to make them)
         -- [the Oh-So-Wonderful Haskell module system wins again...]
+        mkDamlClassOrMiscIdUnique,
         mkAlphaTyVarUnique,
         mkPrimOpIdUnique, mkPrimOpWrapperUnique,
         mkPreludeMiscIdUnique, mkPreludeDataConUnique,
@@ -361,7 +362,11 @@ Allocation of unique supply characters:
         r       Hsc name cache
         s       simplifier
         z       anonymous sums
+        x       daml extensions
 -}
+
+mkDamlClassOrMiscIdUnique :: Int -> Unique
+mkDamlClassOrMiscIdUnique = mkUnique 'x'
 
 mkAlphaTyVarUnique     :: Int -> Unique
 mkPreludeClassUnique   :: Int -> Unique
