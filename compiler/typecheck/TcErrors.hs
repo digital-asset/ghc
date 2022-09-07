@@ -1,7 +1,6 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE NamedFieldPuns #-}
 
 module TcErrors(
        reportUnsolved, reportAllUnsolved, warnAllUnsolved,
@@ -2471,11 +2470,6 @@ mk_dict_err ctxt@(CEC {cec_encl = implics}) (ct, (matches, unifiers, unsafe_over
              , ppWhen (not (null candidate_insts))
                (hang (text "There are instances for similar types:")
                    2 (vcat (map ppr candidate_insts)))
-             , ppr ct
-             , ppr $ ctev_pred (ctEvidence ct)
-             , case ctev_pred (ctEvidence ct) of
-                 TyConApp con args -> text "TyCon with name: " <+> ppr (tyConName con)
-                 _ -> hcat []
              ]
                    -- See Note [Report candidate instances]
       where
