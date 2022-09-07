@@ -31,8 +31,6 @@ customDamlErrors ct candidate_insts binds_msg
   | TyConApp con [TyConApp target [], LitTy (StrTyLit methodName), result] <- ctev_pred (ctEvidence ct)
   , tyConName con == hasMethodClassName
   = Just
-  $ vcat [ text "Tried to call method" <+> ppr methodName <+> text "which doesn't exist on" <+> ppr (tyConName target)
-         , text "If the method" <+> ppr methodName <+> text "belongs to an interface, try casting" <+> ppr (tyConName target) <+> text "using toInterface or toInterfaceContractId"
-         ]
+  $ text "Tried to implement method" <+> ppr methodName <> text ", but interface" <+> ppr (tyConName target) <+> text "does not have a method with that name."
   | otherwise = Nothing
 
