@@ -1,5 +1,3 @@
-{-# LANGUAGE CPP #-}
-
 module TcDaml(
         customDamlErrors
   ) where
