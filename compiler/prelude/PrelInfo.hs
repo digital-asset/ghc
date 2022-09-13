@@ -134,7 +134,6 @@ knownKeyNames
              , map (idName . primOpWrapperId) allThePrimOps
              , basicKnownKeyNames
              , templateHaskellNames
-             , damlKnownKeyNames
              ]
     -- All of the names associated with a wired-in TyCon.
     -- This includes the TyCon itself, its DataCons and promoted TyCons.

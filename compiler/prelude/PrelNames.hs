@@ -2512,29 +2512,3 @@ pretendNameIsInScope n
   = any (n `hasKey`)
     [ liftedTypeKindTyConKey, tYPETyConKey
     , runtimeRepTyConKey, liftedRepDataConKey ]
-
-{-
-************************************************************************
-*                                                                      *
-    Daml extensions
-*                                                                      *
-************************************************************************
--}
-
-dA_Internal_Desugar :: Module
-dA_Internal_Desugar = mkBaseModule (fsLit "DA.Internal.Desugar")
-
-hasInterfaceViewClassName, hasExerciseClassName, hasMethodClassName :: Name
-hasInterfaceViewClassName
-  = clsQual dA_Internal_Desugar (fsLit "HasInterfaceView") $ mkDamlClassOrMiscIdUnique 0
-hasExerciseClassName
-  = clsQual dA_Internal_Desugar (fsLit "HasExercise")      $ mkDamlClassOrMiscIdUnique 1
-hasMethodClassName
-  = clsQual dA_Internal_Desugar (fsLit "HasMethod")        $ mkDamlClassOrMiscIdUnique 2
-
-damlKnownKeyNames :: [Name]  -- See Note [Known-key names]
-damlKnownKeyNames =
-   [ hasInterfaceViewClassName
-   , hasExerciseClassName
-   , hasMethodClassName
-   ]
