@@ -184,9 +184,11 @@ class HasExerciseGuarded t c r | t c -> r where
 _exerciseDefault : HasExerciseGuarded t c r => ContractId t -> c -> Update r
 _exerciseDefault = exerciseGuarded (const True)
 
-_exerciseInterfaceGuard : forall i t. HasFromInterface t i => (t -> Bool) -> (i -> Bool)
-_exerciseInterfaceGuard pred iface =
-  optional False pred (fromInterface iface)
+_exerciseInterfaceGuard : forall i t.
+  (HasFromInterface t i, HasInterfaceTypeRep i, HasTemplateTypeRep t) =>
+  ContractId t -> (t -> Bool) -> i -> Bool
+_exerciseInterfaceGuard cid tpred ivalue =
+  tpred (unsafeFromInterface (coerceContractId cid) ivalue)
 
 --------------------------------------------------------------------------------
 -- # Interface instance desugaring

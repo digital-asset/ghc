@@ -19,6 +19,7 @@ import TcMType
 import TcUnify( occCheckForErrors, OccCheckResult(..) )
 import TcEnv( tcInitTidyEnv )
 import TcType
+import TcDaml
 import RnUnbound ( unknownNameSuggestions )
 import Type
 import TyCoRep
@@ -2451,6 +2452,9 @@ mk_dict_err ctxt@(CEC {cec_encl = implics}) (ct, (matches, unifiers, unsafe_over
 
     cannot_resolve_msg :: Ct -> [ClsInst] -> SDoc -> SDoc
     cannot_resolve_msg ct candidate_insts binds_msg
+      | Just message <- customDamlErrors ct candidate_insts binds_msg
+      = message
+      | otherwise
       = vcat [ no_inst_msg
              , nest 2 extra_note
              , vcat (pp_givens useful_givens)
@@ -2465,7 +2469,8 @@ mk_dict_err ctxt@(CEC {cec_encl = implics}) (ct, (matches, unifiers, unsafe_over
                            ++ drv_fixes)
              , ppWhen (not (null candidate_insts))
                (hang (text "There are instances for similar types:")
-                   2 (vcat (map ppr candidate_insts))) ]
+                   2 (vcat (map ppr candidate_insts)))
+             ]
                    -- See Note [Report candidate instances]
       where
         orig = ctOrigin ct
