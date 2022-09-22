@@ -2473,7 +2473,11 @@ argPatOfChoice choiceConName _ = asPatRecWild "arg" choiceConName
 
 mkTupleExp :: [LHsExpr GhcPs] -> LHsExpr GhcPs
 mkTupleExp [e] = e
-mkTupleExp es = noLoc $ ExplicitTuple noExt (map (noLoc . Present noExt) es) Boxed
+mkTupleExp es =
+  let allowLargeTuples = mkQualVar $ mkVarOcc "codeGenAllowLargeTuples"
+      tupleExp = noLoc $ ExplicitTuple noExt (map (noLoc . Present noExt) es) Boxed
+  in
+  if length es > 5 then mkApp allowLargeTuples tupleExp else tupleExp
 
 mkRdrExp :: RdrName -> LHsExpr GhcPs
 mkRdrExp = noLoc . HsVar noExt . noLoc
