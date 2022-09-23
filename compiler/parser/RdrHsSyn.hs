@@ -3538,7 +3538,6 @@ mkInterfaceInstanceDecls parentName sharedBinds (L loc interfaceInstance) = do
   pure $ concat
     [ interfaceInstanceMarkerDecls
     , interfaceInstanceMethodDecls
-    --, archiveMethodDecls
     , interfaceInstanceViewDecls
     , implementsInstances
     ]
@@ -3594,14 +3593,6 @@ mkInterfaceInstanceDecls parentName sharedBinds (L loc interfaceInstance) = do
         ]
 
     implementsInstances = mkImplementsInstances templateType interfaceType
-
-    --archiveMethodDecls =
-    --  let archiveInterfaceId = noLoc $ mkRdrUnqual $ mkVarOcc "archiveInterface"
-    --      binds =
-    --        matchWithBinds (matchContext archiveInterfaceId) [] noSrcSpan (mkQualVar $ mkVarOcc "archive") (noLoc emptyLocalBinds)
-    --      methodDecl = ValidInterfaceInstanceMethodDecl archiveInterfaceId (matchGroup noSrcSpan binds)
-    --  in
-    --  mkInterfaceInstanceMethodDecls (noLoc methodDecl)
 
     interfaceInstanceMethodDecls = concatMap mkInterfaceInstanceMethodDecls viiDefs
 
