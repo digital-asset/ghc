@@ -3344,6 +3344,26 @@ flexChoiceToCombinedChoice :: ChoiceSource -> FlexChoiceData -> CombinedChoiceDa
 flexChoiceToCombinedChoice source FlexChoiceData{..} =
   CombinedChoiceData fcdControllers fcdObservers fcdChoiceData True source
 
+mkInterfaceArchiveChoicePair :: (InterfaceChoiceSignature, InterfaceChoiceBody)
+mkInterfaceArchiveChoicePair =
+  ( InterfaceChoiceSignature
+      { ifChoiceConsumption = Just Consuming
+      , ifChoiceName = noLoc $ qualifyDesugar $ mkTcOcc "Archive"
+      , ifChoiceResultType = unitType
+      , ifChoiceFields = noLoc $ HsRecTy noExt []
+      , ifChoiceDoc = Nothing
+      }
+  , InterfaceChoiceBody
+      { ifChoiceObserver = Nothing
+      , ifChoiceControllers = mkApp
+                          (mkQualVar $ mkVarOcc "signatory")
+                          (mkUnqualVar $ mkVarOcc "this")
+      , ifChoiceExpr = pureUnit
+      }
+  )
+  where
+    pureUnit = mkApp (mkUnqualVar $ mkVarOcc "pure") (noLoc $ ExplicitTuple noExt [] Boxed)
+
 mkArchiveChoice :: CombinedChoiceData
 mkArchiveChoice =
   CombinedChoiceData
@@ -3518,6 +3538,7 @@ mkInterfaceInstanceDecls parentName sharedBinds (L loc interfaceInstance) = do
   pure $ concat
     [ interfaceInstanceMarkerDecls
     , interfaceInstanceMethodDecls
+    --, archiveMethodDecls
     , interfaceInstanceViewDecls
     , implementsInstances
     ]
@@ -3573,6 +3594,15 @@ mkInterfaceInstanceDecls parentName sharedBinds (L loc interfaceInstance) = do
         ]
 
     implementsInstances = mkImplementsInstances templateType interfaceType
+
+    --archiveMethodDecls =
+    --  let archiveInterfaceId = noLoc $ mkRdrUnqual $ mkVarOcc "archiveInterface"
+    --      binds =
+    --        matchWithBinds (matchContext archiveInterfaceId) [] noSrcSpan (mkQualVar $ mkVarOcc "archive") (noLoc emptyLocalBinds)
+    --      methodDecl = ValidInterfaceInstanceMethodDecl archiveInterfaceId (matchGroup noSrcSpan binds)
+    --  in
+    --  mkInterfaceInstanceMethodDecls (noLoc methodDecl)
+
     interfaceInstanceMethodDecls = concatMap mkInterfaceInstanceMethodDecls viiDefs
 
     interfaceInstanceMarkerDecls =
@@ -3871,14 +3901,14 @@ mkInterfaceDecl tycon (L requiresLoc requires) decls = do
         choiceInstances :: [LHsDecl GhcPs]
         choiceInstances = concat $
             [ mkInterfaceFixedChoiceInstanceDecl viInterfaceName choiceSig
-            | (choiceSig, _) <- viChoices
+            | (choiceSig, _) <- mkInterfaceArchiveChoicePair : viChoices
             ]
 
         choiceDecls :: [LHsDecl GhcPs]
         choiceDecls = concat $
             [ mkChoiceDecls (getLoc viInterfaceName) viInterfaceName (noLoc (EmptyLocalBinds noExt))
                 (interfaceChoiceToCombinedChoiceData choiceSig choiceBody)
-            | (choiceSig, choiceBody) <- viChoices
+            | (choiceSig, choiceBody) <- mkInterfaceArchiveChoicePair : viChoices
             ]
 
         viewTypeDecls :: [LHsDecl GhcPs]
