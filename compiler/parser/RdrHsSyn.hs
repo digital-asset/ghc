@@ -2975,6 +2975,9 @@ mkInterfaceInstances interfaceType =
   , mkInstance "HasCreate" $ mkPrimMethod "create" "UCreateInterface"
   , mkInstance "HasIsInterfaceType" $ mkMethod "_isInterfaceType" [proxy] mkTrue
   , mkInstance "Eq" $ mkPrimMethod "==" "BEEqual"
+  , mkInstance "HasArchive" $ mkMethod "archive" [mkVarPat $ mkVarOcc "cid"] $
+      mkApp (mkApp (mkQualVar $ mkVarOcc "exercise") (mkUnqualVar $ mkVarOcc "cid"))
+            (mkQualVar $ mkDataOcc "Archive")
   ]
   where
     mkInstance name method =
