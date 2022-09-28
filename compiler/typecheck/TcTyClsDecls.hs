@@ -78,6 +78,9 @@ import Data.List
 import Data.List.NonEmpty ( NonEmpty(..) )
 import qualified Data.Set as Set
 
+-- For DAML changes:
+import RdrHsSyn
+import RdrName
 
 {-
 ************************************************************************
@@ -182,11 +185,51 @@ tcTyClGroup (TyClGroup { group_tyclds = tyclds
            -- they may be mentioned in interface files
        ; gbl_env <- addTyConsToGblEnv tyclss
 
+           -- (DAML)
+           -- Step 3.5: Extract templates, interfaces, and choices
+       ; let gbl_env' = addDamlTypesToGblEnv tyclds gbl_env
+
            -- Step 4: check instance declarations
-       ; setGblEnv gbl_env $
+       ; setGblEnv gbl_env' $
          tcInstDecls1 instds }
 
 tcTyClGroup (XTyClGroup _) = panic "tcTyClGroup"
+
+data DamlVariant = Template Name | Interface Name | Choice Name
+
+addDamlTypesToGblEnv :: [LTyClDecl GhcRn] -> TcGblEnv -> TcGblEnv
+addDamlTypesToGblEnv tyClDecls env =
+  let (templates, interfaces, choices) = extractDamlTypes tyClDecls
+  in
+  env { tcg_daml_templates  = templates
+      , tcg_daml_interfaces = interfaces
+      , tcg_daml_choices    = choices
+      }
+
+extractDamlTypes :: [LTyClDecl GhcRn] -> ([Name], [Name], [Name])
+extractDamlTypes = splitVariants . mapMaybe extractDamlType
+  where
+    splitVariants :: [DamlVariant] -> ([Name], [Name], [Name])
+    splitVariants = foldMap $ \x -> case x of
+                                     Template a -> ([a], mempty, mempty)
+                                     Interface a -> (mempty, [a], mempty)
+                                     Choice a -> (mempty, mempty, [a])
+
+extractDamlType :: LTyClDecl GhcRn -> Maybe DamlVariant
+extractDamlType (L _ DataDecl { tcdLName = L _ name, tcdDataDefn = HsDataDefn { dd_ctxt = L _ contextTypes } })
+  | any (isConstraint ghcTypesDamlInterface) contextTypes
+  = Just (Interface name)
+  | any (isConstraint ghcTypesDamlTemplate) contextTypes
+  = Just (Template name)
+  where
+    isConstraint :: RdrName -> LHsType GhcRn -> Bool
+    isConstraint (Qual targetModuleName targetOccName) (L _ (HsTyVar _ _ (L _ loneConstraint)))
+      | Just actualModule <- nameModule_maybe loneConstraint
+      , moduleName actualModule == targetModuleName
+      , nameOccName loneConstraint == targetOccName
+      = True
+    isConstraint _ _ = False
+extractDamlType _ = Nothing
 
 tcTyClDecls :: [LTyClDecl GhcRn] -> RoleAnnotEnv -> TcM [TyCon]
 tcTyClDecls tyclds role_annots

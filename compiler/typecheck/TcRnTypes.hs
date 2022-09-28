@@ -207,6 +207,7 @@ import Data.Typeable ( TypeRep )
 import Data.Maybe    ( mapMaybe )
 import GHCi.Message
 import GHCi.RemoteTypes
+import RdrHsSyn
 
 import qualified Language.Haskell.TH as TH
 
@@ -665,6 +666,10 @@ data TcGblEnv
         tcg_rules     :: [LRuleDecl GhcTc],  -- ...Rules
         tcg_fords     :: [LForeignDecl GhcTc], -- ...Foreign import & exports
         tcg_patsyns   :: [PatSyn],            -- ...Pattern synonyms
+
+        tcg_daml_templates :: [Name],  -- ...Daml templates
+        tcg_daml_interfaces :: [Name], -- ...Daml interfaces
+        tcg_daml_choices :: [Name],    -- ...Daml choices
 
         tcg_doc_hdr   :: Maybe LHsDocString, -- ^ Maybe Haddock header docs
         tcg_hpc       :: !AnyHpcUsage,       -- ^ @True@ if any part of the

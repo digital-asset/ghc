@@ -46,6 +46,8 @@ module   RdrHsSyn (
         mkTemplateDecls,
         applyToParties,
         applyConcat,
+        ValidTemplate(..),
+        ghcTypesDamlTemplate,
 
         -- DAML Exception Syntax
         ExceptionBodyDecl(..),
@@ -58,8 +60,10 @@ module   RdrHsSyn (
         InterfaceChoiceBody(..),
         InterfaceChoiceSignature(..),
         ParsedInterfaceInstance(..),
+        ValidInterface(..),
         ValidInterfaceInstance(..),
         ValidInterfaceInstanceMethodDecl(..),
+        ghcTypesDamlInterface,
 
         -- Stuff to do with Foreign declarations
         mkImport,
@@ -2738,13 +2742,19 @@ ghcTypesOpaque :: LHsType GhcPs
 ghcTypesOpaque =
     noLoc $ HsTyVar noExt NotPromoted (noLoc $ mkRdrQual (mkModuleName "GHC.Types") $ mkTcOcc "Opaque")
 
-ghcTypesDamlTemplate :: LHsType GhcPs
-ghcTypesDamlTemplate =
-    noLoc $ HsTyVar noExt NotPromoted (noLoc $ mkRdrQual (mkModuleName "GHC.Types") $ mkTcOcc "DamlTemplate")
+ghcTypesDamlTemplateType :: LHsType GhcPs
+ghcTypesDamlTemplateType =
+    noLoc $ HsTyVar noExt NotPromoted (noLoc ghcTypesDamlTemplate)
 
-ghcTypesDamlInterface :: LHsType GhcPs
-ghcTypesDamlInterface =
-    noLoc $ HsTyVar noExt NotPromoted (noLoc $ mkRdrQual (mkModuleName "GHC.Types") $ mkTcOcc "DamlInterface")
+ghcTypesDamlTemplate :: RdrName
+ghcTypesDamlTemplate = mkRdrQual (mkModuleName "GHC.Types") $ mkTcOcc "DamlTemplate"
+
+ghcTypesDamlInterfaceType :: LHsType GhcPs
+ghcTypesDamlInterfaceType =
+    noLoc $ HsTyVar noExt NotPromoted (noLoc ghcTypesDamlInterface)
+
+ghcTypesDamlInterface :: RdrName
+ghcTypesDamlInterface = mkRdrQual (mkModuleName "GHC.Types") $ mkTcOcc "DamlInterface"
 
 mkPrimMethod :: String -> String -> LHsBind GhcPs
 mkPrimMethod methodName primArg =
@@ -2787,7 +2797,7 @@ mkDamlDataDecl loc dataDeclName (conName, conDetails, conDoc) =
         { dd_ext     = noExt
         , dd_ND      = DataType
         , dd_cType   = Nothing
-        , dd_ctxt    = noLoc [ghcTypesDamlTemplate | TemplateName _name <- [dataDeclName]]
+        , dd_ctxt    = noLoc [ghcTypesDamlTemplateType | TemplateName _name <- [dataDeclName]]
         , dd_cons    = [conDecl]
         , dd_kindSig = Nothing
         , dd_derivs  = L nloc [derivingClause]
@@ -3792,7 +3802,7 @@ mkInterfaceDecl tycon (L requiresLoc requires) decls = do
             , tcdDataDefn = HsDataDefn
                 { dd_ext = noExt
                 , dd_ND = DataType
-                , dd_ctxt = noLoc [ghcTypesDamlInterface]
+                , dd_ctxt = noLoc [ghcTypesDamlInterfaceType]
                 , dd_cType = Nothing
                 , dd_kindSig = Nothing
                 , dd_cons =
