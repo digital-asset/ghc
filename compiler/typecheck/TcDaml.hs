@@ -64,22 +64,23 @@ instance Outputable TyConDamlVariant where
 
 tyConDamlVariant_maybe :: TyCon -> Maybe TyConDamlVariant
 tyConDamlVariant_maybe tycon
-  | isAlgTyCon tycon
-  , any (isConstraint ghcTypesDamlInterface) (tyConStupidTheta tycon)
-  = Just $ TyConInterface (tyConName tycon) (algTyConRhs tycon)
-  | isAlgTyCon tycon
-  , any (isConstraint ghcTypesDamlTemplate) (tyConStupidTheta tycon)
-  = Just $ TyConTemplate (tyConName tycon) (algTyConRhs tycon)
+  | Just (name, algTyConRhs) <- hasLoneConstraint ghcTypesDamlTemplate tycon
+  = Just $ TyConTemplate name algTyConRhs
+  | Just (name, algTyConRhs) <- hasLoneConstraint ghcTypesDamlInterface tycon
+  = Just $ TyConInterface name algTyConRhs
   | otherwise
   = Nothing
-  where
-    isConstraint :: RdrName -> Type -> Bool
-    isConstraint rdrName type_
-      | Just (loneConstraint, []) <- splitTyConApp_maybe type_
-      , let loneConstraintName = tyConName loneConstraint
-      , similarName rdrName loneConstraintName
-      = True
-    isConstraint _ _ = False
+
+hasLoneConstraint :: RdrName -> TyCon -> Maybe (Name, AlgTyConRhs)
+hasLoneConstraint targetName tycon
+  | isAlgTyCon tycon
+  , or
+      [ similarName targetName (tyConName loneConstraint)
+      | Just (loneConstraint, []) <- splitTyConApp_maybe `map` tyConStupidTheta tycon
+      ]
+  = Just (tyConName tycon, algTyConRhs tycon)
+  | otherwise
+  = Nothing
 
 addDamlTypesToGblEnv :: [LTyClDecl GhcRn] -> TcGblEnv -> TcGblEnv
 addDamlTypesToGblEnv tyClDecls env@(TcGblEnv { tcg_daml_templates = templates
