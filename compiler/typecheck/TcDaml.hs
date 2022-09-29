@@ -22,11 +22,11 @@ import Type
 import Data.Maybe
 import Data.List
 
-check :: [String] -> String -> TyCon -> Bool
-check modules name con
-  | Just mod <- moduleNameString . moduleName <$> nameModule_maybe (tyConName con)
+check :: NamedThing a => [String] -> String -> a -> Bool
+check modules name namedThing
+  | Just mod <- moduleNameString . moduleName <$> nameModule_maybe (getName namedThing)
   , mod `elem` modules
-  , name == occNameString (occName (tyConName con))
+  , name == occNameString (getOccName namedThing)
   = True
   | otherwise
   = False
