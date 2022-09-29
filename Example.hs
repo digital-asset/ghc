@@ -39,7 +39,7 @@ template TheTemplate
 
     interface instance TheInterface for TheTemplate where
       myInternalValue = 1000
-      view = myInternalValue this * 1000
+      view = myInternalValue (toInterface @TheInterface this) * 1000
 
 interface AnotherInterface where
   someBool : Bool
@@ -47,4 +47,4 @@ interface AnotherInterface where
 
   interface instance AnotherInterface for TheTemplate where
     someBool = False
-    view = if someBool this then GT else LT
+    view = if someBool (toInterface @AnotherInterface this) then GT else LT
