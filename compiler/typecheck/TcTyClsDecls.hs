@@ -137,7 +137,7 @@ tcTyAndClassDecls tyclds_s
     traceTc "TcGblEnv tcg_daml_templates" (ppr $ tcg_daml_templates env)
     traceTc "TcGblEnv tcg_daml_interfaces" (ppr $ tcg_daml_interfaces env)
     traceTc "TcGblEnv tcg_daml_choices" (ppr $ tcg_daml_choices env)
-    traceTc "TcGblEnv extracted interfaces" (ppr $ map fst $ mapMaybe tyConInterface_maybe $ tcg_tcs env)
+    traceTc "TcGblEnv extracted interfaces" (ppr $ mapMaybe tyConDamlVariant_maybe $ tcg_tcs env)
     traceTc "---- end tcTyAndClassDecls ---- }" empty
     pure ret
   where
@@ -205,11 +205,21 @@ tcTyClGroup (XTyClGroup _) = panic "tcTyClGroup"
 
 data DamlVariant = Template Name | Interface Name | Choice Name
 
-tyConInterface_maybe :: TyCon -> Maybe (Name, AlgTyConRhs)
-tyConInterface_maybe tycon
+data TyConDamlVariant = TyConTemplate Name AlgTyConRhs | TyConInterface Name AlgTyConRhs | TyConChoice Name String
+
+instance Outputable TyConDamlVariant where
+  ppr (TyConTemplate name _) = text "TyConTemplate" <+> ppr name
+  ppr (TyConInterface name _) = text "TyConInterface" <+> ppr name
+  ppr (TyConChoice target name) = text "TyConChoice" <+> ppr target <> text name
+
+tyConDamlVariant_maybe :: TyCon -> Maybe TyConDamlVariant
+tyConDamlVariant_maybe tycon
   | isAlgTyCon tycon
   , any (isConstraint ghcTypesDamlInterface) (tyConStupidTheta tycon)
-  = Just (tyConName tycon, algTyConRhs tycon)
+  = Just $ TyConInterface (tyConName tycon) (algTyConRhs tycon)
+  | isAlgTyCon tycon
+  , any (isConstraint ghcTypesDamlTemplate) (tyConStupidTheta tycon)
+  = Just $ TyConTemplate (tyConName tycon) (algTyConRhs tycon)
   | otherwise
   = Nothing
   where
