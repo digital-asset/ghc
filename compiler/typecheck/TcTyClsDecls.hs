@@ -79,8 +79,7 @@ import Data.List.NonEmpty ( NonEmpty(..) )
 import qualified Data.Set as Set
 
 -- For DAML changes:
-import RdrHsSyn
-import RdrName
+import TcDaml
 
 {-
 ************************************************************************
@@ -202,75 +201,6 @@ tcTyClGroup (TyClGroup { group_tyclds = tyclds
          tcInstDecls1 instds }
 
 tcTyClGroup (XTyClGroup _) = panic "tcTyClGroup"
-
-data DamlVariant = Template Name | Interface Name | Choice Name
-
-data TyConDamlVariant = TyConTemplate Name AlgTyConRhs | TyConInterface Name AlgTyConRhs | TyConChoice Name String
-
-instance Outputable TyConDamlVariant where
-  ppr (TyConTemplate name _) = text "TyConTemplate" <+> ppr name
-  ppr (TyConInterface name _) = text "TyConInterface" <+> ppr name
-  ppr (TyConChoice target name) = text "TyConChoice" <+> ppr target <> text name
-
-tyConDamlVariant_maybe :: TyCon -> Maybe TyConDamlVariant
-tyConDamlVariant_maybe tycon
-  | isAlgTyCon tycon
-  , any (isConstraint ghcTypesDamlInterface) (tyConStupidTheta tycon)
-  = Just $ TyConInterface (tyConName tycon) (algTyConRhs tycon)
-  | isAlgTyCon tycon
-  , any (isConstraint ghcTypesDamlTemplate) (tyConStupidTheta tycon)
-  = Just $ TyConTemplate (tyConName tycon) (algTyConRhs tycon)
-  | otherwise
-  = Nothing
-  where
-    isConstraint :: RdrName -> Type -> Bool
-    isConstraint rdrName type_
-      | Just (loneConstraint, []) <- splitTyConApp_maybe type_
-      , let loneConstraintName = tyConName loneConstraint
-      , similarName rdrName loneConstraintName
-      = True
-    isConstraint _ _ = False
-
-addDamlTypesToGblEnv :: [LTyClDecl GhcRn] -> TcGblEnv -> TcGblEnv
-addDamlTypesToGblEnv tyClDecls env@(TcGblEnv { tcg_daml_templates = templates
-                                             , tcg_daml_interfaces = interfaces
-                                             , tcg_daml_choices = choices }) =
-  let (newTemplates, newInterfaces, newChoices) = extractDamlTypes tyClDecls
-  in
-  env { tcg_daml_templates  = templates ++ newTemplates
-      , tcg_daml_interfaces = interfaces ++ newInterfaces
-      , tcg_daml_choices    = choices ++ newChoices
-      }
-
-extractDamlTypes :: [LTyClDecl GhcRn] -> ([Name], [Name], [Name])
-extractDamlTypes = splitVariants . mapMaybe extractDamlType
-  where
-    splitVariants :: [DamlVariant] -> ([Name], [Name], [Name])
-    splitVariants = foldMap $ \x -> case x of
-                                     Template a -> ([a], mempty, mempty)
-                                     Interface a -> (mempty, [a], mempty)
-                                     Choice a -> (mempty, mempty, [a])
-
-extractDamlType :: LTyClDecl GhcRn -> Maybe DamlVariant
-extractDamlType (L _ DataDecl { tcdLName = L _ name, tcdDataDefn = HsDataDefn { dd_ctxt = L _ contextTypes } })
-  | any (isConstraint ghcTypesDamlInterface) contextTypes
-  = Just (Interface name)
-  | any (isConstraint ghcTypesDamlTemplate) contextTypes
-  = Just (Template name)
-  where
-    isConstraint :: RdrName -> LHsType GhcRn -> Bool
-    isConstraint rdrName (L _ (HsTyVar _ _ (L _ loneConstraint))) =
-      similarName rdrName loneConstraint
-    isConstraint _ _ = False
-extractDamlType _ = Nothing
-
-similarName :: RdrName -> Name -> Bool
-similarName (Qual targetModuleName targetOccName) name
-  | Just actualModule <- nameModule_maybe name
-  , moduleName actualModule == targetModuleName
-  , nameOccName name == targetOccName
-  = True
-similarName _ _ = False
 
 tcTyClDecls :: [LTyClDecl GhcRn] -> RoleAnnotEnv -> TcM [TyCon]
 tcTyClDecls tyclds role_annots
