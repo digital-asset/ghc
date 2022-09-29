@@ -198,12 +198,14 @@ tcTyClGroup (XTyClGroup _) = panic "tcTyClGroup"
 data DamlVariant = Template Name | Interface Name | Choice Name
 
 addDamlTypesToGblEnv :: [LTyClDecl GhcRn] -> TcGblEnv -> TcGblEnv
-addDamlTypesToGblEnv tyClDecls env =
-  let (templates, interfaces, choices) = extractDamlTypes tyClDecls
+addDamlTypesToGblEnv tyClDecls env@(TcGblEnv { tcg_daml_templates = templates
+                                             , tcg_daml_interfaces = interfaces
+                                             , tcg_daml_choices = choices }) =
+  let (newTemplates, newInterfaces, newChoices) = extractDamlTypes tyClDecls
   in
-  env { tcg_daml_templates  = templates
-      , tcg_daml_interfaces = interfaces
-      , tcg_daml_choices    = choices
+  env { tcg_daml_templates  = templates ++ newTemplates
+      , tcg_daml_interfaces = interfaces ++ newInterfaces
+      , tcg_daml_choices    = choices ++ newChoices
       }
 
 extractDamlTypes :: [LTyClDecl GhcRn] -> ([Name], [Name], [Name])
