@@ -55,6 +55,13 @@ customDamlErrors ct
 
 data DamlVariant = Template Name | Interface Name | Choice Name
 
+data DamlInfo = DamlInfo
+  { templates :: [Name]
+  , interfaces :: [Name]
+  , choices :: [(Name, String)]
+  , methods :: [(String, Name)]
+  }
+
 data TyConDamlVariant = TyConTemplate Name AlgTyConRhs | TyConInterface Name AlgTyConRhs | TyConChoice Name String
 
 instance Outputable TyConDamlVariant where
@@ -62,25 +69,32 @@ instance Outputable TyConDamlVariant where
   ppr (TyConInterface name _) = text "TyConInterface" <+> ppr name
   ppr (TyConChoice target name) = text "TyConChoice" <+> ppr target <> text name
 
-tyConDamlVariant_maybe :: TyCon -> Maybe TyConDamlVariant
-tyConDamlVariant_maybe tycon
-  | Just (name, algTyConRhs) <- hasLoneConstraint ghcTypesDamlTemplate tycon
-  = Just $ TyConTemplate name algTyConRhs
-  | Just (name, algTyConRhs) <- hasLoneConstraint ghcTypesDamlInterface tycon
-  = Just $ TyConInterface name algTyConRhs
-  | otherwise
-  = Nothing
+extractDamlInfo :: TcGblEnv -> DamlInfo
+extractDamlInfo env =
+  DamlInfo
+    { templates = mapMaybe matchTemplate $ tcg_tcs env
+    , interfaces = mapMaybe matchInterface $ tcg_tcs env
+    , choices = []
+    , methods = []
+    }
+  where
+    matchTemplate, matchInterface :: TyCon -> Maybe Name
+    matchTemplate = tyconWithConstraint ghcTypesDamlTemplate
+    matchInterface = tyconWithConstraint ghcTypesDamlInterface
 
-hasLoneConstraint :: RdrName -> TyCon -> Maybe (Name, AlgTyConRhs)
-hasLoneConstraint targetName tycon
-  | isAlgTyCon tycon
-  , or
-      [ similarName targetName (tyConName loneConstraint)
-      | Just (loneConstraint, []) <- splitTyConApp_maybe `map` tyConStupidTheta tycon
-      ]
-  = Just (tyConName tycon, algTyConRhs tycon)
-  | otherwise
-  = Nothing
+    tyconWithConstraint :: RdrName -> TyCon -> Maybe Name
+    tyconWithConstraint targetName tycon
+      | isAlgTyCon tycon
+      , let isMatchingLoneConstraint type_
+              | Just (loneConstraint, []) <- splitTyConApp_maybe type_
+              , similarName targetName (tyConName loneConstraint)
+              = True
+              | otherwise
+              = False
+      , any isMatchingLoneConstraint (tyConStupidTheta tycon)
+      = Just $ tyConName tycon
+      | otherwise
+      = Nothing
 
 addDamlTypesToGblEnv :: [LTyClDecl GhcRn] -> TcGblEnv -> TcGblEnv
 addDamlTypesToGblEnv tyClDecls env@(TcGblEnv { tcg_daml_templates = templates
