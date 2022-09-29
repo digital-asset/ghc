@@ -224,12 +224,10 @@ tyConDamlVariant_maybe tycon
   = Nothing
   where
     isConstraint :: RdrName -> Type -> Bool
-    isConstraint (Qual targetModuleName targetOccName) type_
+    isConstraint rdrName type_
       | Just (loneConstraint, []) <- splitTyConApp_maybe type_
       , let loneConstraintName = tyConName loneConstraint
-      , Just actualModule <- nameModule_maybe loneConstraintName
-      , moduleName actualModule == targetModuleName
-      , nameOccName loneConstraintName == targetOccName
+      , similarName rdrName loneConstraintName
       = True
     isConstraint _ _ = False
 
@@ -261,13 +259,18 @@ extractDamlType (L _ DataDecl { tcdLName = L _ name, tcdDataDefn = HsDataDefn { 
   = Just (Template name)
   where
     isConstraint :: RdrName -> LHsType GhcRn -> Bool
-    isConstraint (Qual targetModuleName targetOccName) (L _ (HsTyVar _ _ (L _ loneConstraint)))
-      | Just actualModule <- nameModule_maybe loneConstraint
-      , moduleName actualModule == targetModuleName
-      , nameOccName loneConstraint == targetOccName
-      = True
+    isConstraint rdrName (L _ (HsTyVar _ _ (L _ loneConstraint))) =
+      similarName rdrName loneConstraint
     isConstraint _ _ = False
 extractDamlType _ = Nothing
+
+similarName :: RdrName -> Name -> Bool
+similarName (Qual targetModuleName targetOccName) name
+  | Just actualModule <- nameModule_maybe name
+  , moduleName actualModule == targetModuleName
+  , nameOccName name == targetOccName
+  = True
+similarName _ _ = False
 
 tcTyClDecls :: [LTyClDecl GhcRn] -> RoleAnnotEnv -> TcM [TyCon]
 tcTyClDecls tyclds role_annots
