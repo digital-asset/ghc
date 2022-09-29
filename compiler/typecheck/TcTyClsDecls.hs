@@ -137,6 +137,7 @@ tcTyAndClassDecls tyclds_s
     traceTc "TcGblEnv tcg_daml_templates" (ppr $ tcg_daml_templates env)
     traceTc "TcGblEnv tcg_daml_interfaces" (ppr $ tcg_daml_interfaces env)
     traceTc "TcGblEnv tcg_daml_choices" (ppr $ tcg_daml_choices env)
+    traceTc "TcGblEnv extracted interfaces" (ppr $ map fst $ mapMaybe tyConInterface_maybe $ tcg_tcs env)
     traceTc "---- end tcTyAndClassDecls ---- }" empty
     pure ret
   where
@@ -203,6 +204,24 @@ tcTyClGroup (TyClGroup { group_tyclds = tyclds
 tcTyClGroup (XTyClGroup _) = panic "tcTyClGroup"
 
 data DamlVariant = Template Name | Interface Name | Choice Name
+
+tyConInterface_maybe :: TyCon -> Maybe (Name, AlgTyConRhs)
+tyConInterface_maybe tycon
+  | isAlgTyCon tycon
+  , any (isConstraint ghcTypesDamlInterface) (tyConStupidTheta tycon)
+  = Just (tyConName tycon, algTyConRhs tycon)
+  | otherwise
+  = Nothing
+  where
+    isConstraint :: RdrName -> Type -> Bool
+    isConstraint (Qual targetModuleName targetOccName) type_
+      | Just (loneConstraint, []) <- splitTyConApp_maybe type_
+      , let loneConstraintName = tyConName loneConstraint
+      , Just actualModule <- nameModule_maybe loneConstraintName
+      , moduleName actualModule == targetModuleName
+      , nameOccName loneConstraintName == targetOccName
+      = True
+    isConstraint _ _ = False
 
 addDamlTypesToGblEnv :: [LTyClDecl GhcRn] -> TcGblEnv -> TcGblEnv
 addDamlTypesToGblEnv tyClDecls env@(TcGblEnv { tcg_daml_templates = templates
