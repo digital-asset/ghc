@@ -65,6 +65,7 @@ data DamlInfo = DamlInfo
   , interfaces :: [Name]
   , choices :: [(Type, Type)]
   , methods :: [(FastString, Type)]
+  , implements :: [(Type, Type)]
   }
 
 instance Outputable DamlInfo where
@@ -74,6 +75,7 @@ instance Outputable DamlInfo where
          , text "interfaces:" <+> ppr (interfaces info)
          , text "choices:" <+> ppr (choices info)
          , text "methods:" <+> ppr (methods info)
+         , text "implements:" <+> ppr (implements info)
          ]
 
 extractDamlInfo :: TcGblEnv -> DamlInfo
@@ -83,6 +85,7 @@ extractDamlInfo env =
     , interfaces = mapMaybe matchInterface $ tcg_tcs env
     , choices = mapMaybe matchChoice $ tcg_insts env
     , methods = mapMaybe matchMethod $ tcg_insts env
+    , implements = mapMaybe matchImplements $ tcg_insts env
     }
   where
     matchTemplate, matchInterface :: TyCon -> Maybe Name
@@ -103,6 +106,14 @@ extractDamlInfo env =
           clsInstMatch (qualifyDesugar (mkClsOcc "HasMethod")) clsInst
       , Just (StrTyLit methodName) <- isLitTy methodNameType
       = Just (methodName, contractType)
+      | otherwise
+      = Nothing
+
+    matchImplements :: ClsInst -> Maybe (Type, Type)
+    matchImplements clsInst
+      | Just [template, interface] <-
+          clsInstMatch (qualifyDesugar (mkClsOcc "ToInterface")) clsInst
+      = Just (template, interface)
       | otherwise
       = Nothing
 
