@@ -18,6 +18,7 @@ import HsTypes
 import HsDecls
 import HsExtension
 import Type
+import FastString
 
 import Data.Maybe
 import Data.List
@@ -59,7 +60,7 @@ data DamlInfo = DamlInfo
   { templates :: [Name]
   , interfaces :: [Name]
   , choices :: [(Type, Type)]
-  , methods :: [(String, Name)]
+  , methods :: [(FastString, Type)]
   }
 
 data TyConDamlVariant = TyConTemplate Name AlgTyConRhs | TyConInterface Name AlgTyConRhs | TyConChoice Name String
@@ -75,7 +76,7 @@ extractDamlInfo env =
     { templates = mapMaybe matchTemplate $ tcg_tcs env
     , interfaces = mapMaybe matchInterface $ tcg_tcs env
     , choices = mapMaybe matchChoice $ tcg_insts env
-    , methods = []
+    , methods = mapMaybe matchMethod $ tcg_insts env
     }
   where
     matchTemplate, matchInterface :: TyCon -> Maybe Name
@@ -87,6 +88,15 @@ extractDamlInfo env =
       | Just [contractType, choiceType, returnType] <-
           clsInstMatch (qualifyDesugar (mkClsOcc "HasExercise")) clsInst
       = Just (contractType, choiceType)
+      | otherwise
+      = Nothing
+
+    matchMethod :: ClsInst -> Maybe (FastString, Type)
+    matchMethod clsInst
+      | Just [contractType, methodNameType, returnType] <-
+          clsInstMatch (qualifyDesugar (mkClsOcc "HasMethod")) clsInst
+      , Just (StrTyLit methodName) <- isLitTy methodNameType
+      = Just (methodName, contractType)
       | otherwise
       = Nothing
 
