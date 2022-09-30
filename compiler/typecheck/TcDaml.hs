@@ -63,12 +63,14 @@ data DamlInfo = DamlInfo
   , methods :: [(FastString, Type)]
   }
 
-data TyConDamlVariant = TyConTemplate Name AlgTyConRhs | TyConInterface Name AlgTyConRhs | TyConChoice Name String
-
-instance Outputable TyConDamlVariant where
-  ppr (TyConTemplate name _) = text "TyConTemplate" <+> ppr name
-  ppr (TyConInterface name _) = text "TyConInterface" <+> ppr name
-  ppr (TyConChoice target name) = text "TyConChoice" <+> ppr target <> text name
+instance Outputable DamlInfo where
+  ppr info =
+    hang (text "DamlInfo {") 2 $
+    vcat [ text "templates:" <+> ppr (templates info)
+         , text "interfaces:" <+> ppr (interfaces info)
+         , text "choices:" <+> ppr (choices info)
+         , text "methods:" <+> ppr (methods info)
+         ]
 
 extractDamlInfo :: TcGblEnv -> DamlInfo
 extractDamlInfo env =

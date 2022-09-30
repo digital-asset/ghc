@@ -136,6 +136,7 @@ tcTyAndClassDecls tyclds_s
     traceTc "TcGblEnv tcg_daml_templates" (ppr $ tcg_daml_templates env)
     traceTc "TcGblEnv tcg_daml_interfaces" (ppr $ tcg_daml_interfaces env)
     traceTc "TcGblEnv tcg_daml_choices" (ppr $ tcg_daml_choices env)
+    traceTc "TcGblEnv info" (ppr $ extractDamlInfo env)
     traceTc "---- end tcTyAndClassDecls ---- }" empty
     pure ret
   where
