@@ -58,7 +58,7 @@ data DamlVariant = Template Name | Interface Name | Choice Name
 data DamlInfo = DamlInfo
   { templates :: [Name]
   , interfaces :: [Name]
-  , choices :: [(Name, String)]
+  , choices :: [(Type, Type)]
   , methods :: [(String, Name)]
   }
 
@@ -74,13 +74,21 @@ extractDamlInfo env =
   DamlInfo
     { templates = mapMaybe matchTemplate $ tcg_tcs env
     , interfaces = mapMaybe matchInterface $ tcg_tcs env
-    , choices = []
+    , choices = mapMaybe matchChoice $ tcg_insts env
     , methods = []
     }
   where
     matchTemplate, matchInterface :: TyCon -> Maybe Name
     matchTemplate = tyconWithConstraint ghcTypesDamlTemplate
     matchInterface = tyconWithConstraint ghcTypesDamlInterface
+
+    matchChoice :: ClsInst -> Maybe (Type, Type)
+    matchChoice clsInst
+      | Just [contractType, choiceType, returnType] <-
+          clsInstMatch (qualifyDesugar (mkClsOcc "HasExercise")) clsInst
+      = Just (contractType, choiceType)
+      | otherwise
+      = Nothing
 
     tyconWithConstraint :: RdrName -> TyCon -> Maybe Name
     tyconWithConstraint targetName tycon
@@ -93,6 +101,13 @@ extractDamlInfo env =
               = False
       , any isMatchingLoneConstraint (tyConStupidTheta tycon)
       = Just $ tyConName tycon
+      | otherwise
+      = Nothing
+
+    clsInstMatch :: RdrName -> ClsInst -> Maybe [Type]
+    clsInstMatch rdrName clsInst
+      | similarName rdrName (is_cls_nm clsInst)
+      = Just $ is_tys clsInst
       | otherwise
       = Nothing
 
