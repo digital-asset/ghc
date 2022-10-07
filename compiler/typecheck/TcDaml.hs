@@ -36,7 +36,13 @@ check modules name namedThing
   = False
 
 customDamlErrors :: Ct -> TcM (Maybe SDoc)
-customDamlErrors ct = customDamlErrorsPure <$> getGblEnv <*> pure ct
+customDamlErrors ct = do
+  env <- getEnv
+  traceTc "TcGblEnv info" (ppr $ extractDamlInfo $ env_gbl env)
+  eps <- readMutVar $ hsc_EPS $ env_top env
+  let modIfaces = moduleEnvElts $ eps_PIT eps
+  mapM (traceTc "TcGblEnv ModInfo" . ppr . extractDamlInfoFromIFace) modIfaces
+  customDamlErrorsPure <$> getGblEnv <*> pure ct
 
 customDamlErrorsPure :: TcGblEnv -> Ct -> Maybe SDoc
 customDamlErrorsPure env ct
