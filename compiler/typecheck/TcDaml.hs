@@ -20,6 +20,8 @@ import HsExtension
 import Type
 import FastString
 import TcRnMonad
+import IfaceSyn
+import HscTypes
 
 import Data.Maybe
 import Data.List
@@ -77,6 +79,39 @@ instance Outputable DamlInfo where
          , text "methods:" <+> ppr (methods info)
          , text "implements:" <+> ppr (implements info)
          ]
+
+extractDamlInfoFromIFace :: ModIface -> DamlInfo
+extractDamlInfoFromIFace iface =
+  DamlInfo
+    { templates = mapMaybe matchTemplate ifaceDecls
+    , interfaces = mapMaybe matchInterface ifaceDecls
+    , choices = []
+    , methods = []
+    , implements = []
+    }
+  where
+    ifaceDecls :: [IfaceDecl]
+    ifaceDecls = map snd $ mi_decls iface
+
+    matchTemplate, matchInterface :: IfaceDecl -> Maybe Name
+    matchTemplate = dataTypeWithConstraint ghcTypesDamlTemplate
+    matchInterface = dataTypeWithConstraint ghcTypesDamlInterface
+
+    dataTypeWithConstraint :: RdrName -> IfaceDecl -> Maybe Name
+    dataTypeWithConstraint loneConstraintName decl
+      | IfaceData { ifName = name, ifCtxt = ctxt } <- decl
+      , any (isMatchingLoneConstraint loneConstraintName) ctxt
+      = Just name
+      | otherwise
+      = Nothing
+
+    isMatchingLoneConstraint :: RdrName -> IfaceType -> Bool
+    isMatchingLoneConstraint targetName type_
+      | IfaceTyConApp (IfaceTyCon tyConName _info) IA_Nil <- type_
+      , similarName targetName tyConName
+      = True
+      | otherwise
+      = False
 
 extractDamlInfo :: TcGblEnv -> DamlInfo
 extractDamlInfo env =
