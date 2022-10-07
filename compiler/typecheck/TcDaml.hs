@@ -92,10 +92,9 @@ extractDamlInfoFromIFace iface =
     { templates = mapMaybe matchTemplate ifaceDecls
     , interfaces = mapMaybe matchInterface ifaceDecls
     , choices = mapMaybe matchChoice (mi_insts iface)
-    -- TODO: IfaceClsInst does not store symbols, so we cannot extract via mi_insts
-    -- We could possibly extract this info via IfaceId by looking at the type
-    -- signatures of typeclass dictionaries
-    , methods = []
+    -- IfaceClsInst does not store symbols, so we cannot extract via mi_insts.
+    -- We extract by looking for exported typeclass dictionaries instead.
+    , methods = [] -- mapMaybe matchMethod ifaceDecls
     , implements = []
     }
   where
@@ -111,6 +110,18 @@ extractDamlInfoFromIFace iface =
       | similarName (qualifyDesugar (mkClsOcc "ToInterface")) (ifInstCls inst)
       , [Just contractType, Just choiceType, Just returnType] <- ifInstTys inst
       = Just (ifaceTyConName contractType, ifaceTyConName choiceType)
+      | otherwise
+      = Nothing
+
+    matchMethod :: IfaceDecl -> Maybe (FastString, Type)
+    matchMethod decl
+      | IfaceId { ifType = type_ } <- decl
+      , IfaceTyConApp headTyCon ifaceArgs <- type_
+      , similarName (qualifyDesugar (mkClsOcc "HasMethod")) (ifaceTyConName headTyCon)
+      , IA_Arg tyArg1 _ (IA_Arg tyArg2 _ IA_Nil) <- ifaceArgs
+      , IfaceTyConApp contractType IA_Nil <- tyArg1
+      , IfaceLitTy (IfaceStrTyLit choiceName) <- tyArg2
+      = undefined -- Just (choiceName, contractType)
       | otherwise
       = Nothing
 
