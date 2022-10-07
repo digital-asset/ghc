@@ -85,7 +85,10 @@ extractDamlInfoFromIFace iface =
   DamlInfo
     { templates = mapMaybe matchTemplate ifaceDecls
     , interfaces = mapMaybe matchInterface ifaceDecls
-    , choices = []
+    , choices = mapMaybe matchChoice (mi_insts iface)
+    -- TODO: IfaceClsInst does not store symbols, so we cannot extract via mi_insts
+    -- We could possibly extract this info via IfaceId by looking at the type
+    -- signatures of typeclass dictionaries
     , methods = []
     , implements = []
     }
@@ -96,6 +99,14 @@ extractDamlInfoFromIFace iface =
     matchTemplate, matchInterface :: IfaceDecl -> Maybe Name
     matchTemplate = dataTypeWithConstraint ghcTypesDamlTemplate
     matchInterface = dataTypeWithConstraint ghcTypesDamlInterface
+
+    matchChoice :: IfaceClsInst -> Maybe (Name, Name)
+    matchChoice inst
+      | similarName (qualifyDesugar (mkClsOcc "ToInterface")) (ifInstCls inst)
+      , [Just contractType, Just choiceType, Just returnType] <- ifInstTys inst
+      = Just (ifaceTyConName contractType, ifaceTyConName choiceType)
+      | otherwise
+      = Nothing
 
     dataTypeWithConstraint :: RdrName -> IfaceDecl -> Maybe Name
     dataTypeWithConstraint loneConstraintName decl
