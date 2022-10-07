@@ -65,7 +65,7 @@ data DamlVariant = Template Name | Interface Name | Choice Name
 data DamlInfo = DamlInfo
   { templates :: [Name]
   , interfaces :: [Name]
-  , choices :: [(Type, Type)]
+  , choices :: [(Name, Name)]
   , methods :: [(FastString, Type)]
   , implements :: [(Type, Type)]
   }
@@ -127,11 +127,13 @@ extractDamlInfo env =
     matchTemplate = tyconWithConstraint ghcTypesDamlTemplate
     matchInterface = tyconWithConstraint ghcTypesDamlInterface
 
-    matchChoice :: ClsInst -> Maybe (Type, Type)
+    matchChoice :: ClsInst -> Maybe (Name, Name)
     matchChoice clsInst
       | Just [contractType, choiceType, returnType] <-
           clsInstMatch (qualifyDesugar (mkClsOcc "HasExercise")) clsInst
-      = Just (contractType, choiceType)
+      , Just (contractTyCon, []) <- splitTyConApp_maybe contractType
+      , Just (choiceTyCon, []) <- splitTyConApp_maybe choiceType
+      = Just (tyConName contractTyCon, tyConName choiceTyCon)
       | otherwise
       = Nothing
 
