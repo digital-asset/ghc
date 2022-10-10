@@ -73,8 +73,8 @@ displayError info TriedView { target = target, result = result }
   | isTemplate info target
   = vcat [ text "Tried to get an interface view of type" <+> ppr result <+> text "from template" <+> ppr target
          , text "Cast template" <+> ppr target <+> text "to an interface before getting its view."
-         , text "Known interfaces for template" <+> ppr target <+> text "include:"
-         , hcat (punctuate (text ", ") (map ppr (allImplementedInterfaces info target)))
+         , text "Known interfaces for template" <+> ppr target <+> text "include:" <+>
+           hcat (punctuate (text ", ") (map ppr (allImplementedInterfaces info target)))
          ]
   | isInterface info target
   = text "Tried to get an interface view of type" <+> ppr result <+> text "from interface" <+> ppr target <+> text "but that interface's view is not of that type"
