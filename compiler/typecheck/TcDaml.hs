@@ -77,7 +77,10 @@ displayError info TriedView { target = target, result = result }
            hcat (punctuate (text ", ") (map ppr (allImplementedInterfaces info target)))
          ]
   | isInterface info target
-  = text "Tried to get an interface view of type" <+> ppr result <+> text "from interface" <+> ppr target <+> text "but that interface's view is not of that type"
+  , Just view <- interfaceView info target
+  = text "Tried to get an interface view of type" <+> ppr result <+> text "from interface" <+> ppr target <+> text "but that interface's view is of type" <+> ppr view
+  | isInterface info target
+  = text "Tried to get an interface view of type" <+> ppr result <+> text "from interface" <+> ppr target <+> text "but that interface's view is not of type" <+> ppr result
   | otherwise
   = text "Tried to get an interface view of type" <+> ppr result <+> text "from type" <+> ppr target <+> text "which is neither an interface nor a template"
 displayError info TriedExercise { target = target, result = result, choice = choice }
