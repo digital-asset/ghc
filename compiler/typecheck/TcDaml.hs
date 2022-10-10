@@ -87,11 +87,13 @@ displayError info TriedExercise { target = target, result = result, choice = cho
   | [implementor] <- choiceImplementor info choice
   , isInterface info implementor
   , implements info target implementor
+  , target /= implementor -- since interfaces implement themselves, we ignore if the target is itself
   = vcat [ text "Tried to exercise a choice" <+> ppr choice <+> text "on" <+> ppr target
          , text "This choice" <+> ppr choice <+> text "belongs to interface" <+> ppr implementor <+> text "which" <+> ppr target <+> text "implements."
          , text "Cast template" <+> ppr target <+> text "to interface" <+> ppr implementor <+> text "before exercising the choice."
          ]
   | [implementor] <- choiceImplementor info choice
+  , target /= implementor -- since interfaces implement themselves, we ignore if the target is itself
   = vcat [ text "Tried to exercise a choice" <+> ppr choice <+> text "on" <+> ppr target <+> text "but no choice of that name exists on" <+> ppr target
          , text "This choice" <+> ppr choice <+> text "belongs to" <+> variantName info implementor <+> ppr implementor <+> text "instead."
          ]
