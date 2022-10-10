@@ -75,7 +75,7 @@ data DamlInfo = DamlInfo
   , interfaces :: [Name]
   , choices :: [(Name, Name)]
   , methods :: [(FastString, Type)]
-  , implements :: [(Type, Type)]
+  , implements :: [(Name, Name)]
   }
 
 instance Monoid DamlInfo where
@@ -158,11 +158,13 @@ extractDamlInfoFromTyThing tything =
       | otherwise
       = Nothing
 
-    matchImplements :: Id -> Maybe (Type, Type)
+    matchImplements :: Id -> Maybe (Name, Name)
     matchImplements identifier
       | TyConApp headTyCon [templateType, interfaceType] <- varType identifier
       , similarName (qualifyDesugar (mkClsOcc "ToInterface")) (tyConName headTyCon)
-      = Just (templateType, interfaceType)
+      , Just (templateTyCon, []) <- splitTyConApp_maybe templateType
+      , Just (interfaceTyCon, []) <- splitTyConApp_maybe interfaceType
+      = Just (tyConName templateTyCon, tyConName interfaceTyCon)
       | otherwise
       = Nothing
 
@@ -201,11 +203,13 @@ extractDamlInfoFromClsInst inst =
       | otherwise
       = Nothing
 
-    matchImplements :: ClsInst -> Maybe (Type, Type)
+    matchImplements :: ClsInst -> Maybe (Name, Name)
     matchImplements clsInst
-      | Just [template, interface] <-
+      | Just [templateType, interfaceType] <-
           clsInstMatch (qualifyDesugar (mkClsOcc "ToInterface")) clsInst
-      = Just (template, interface)
+      , Just (templateTyCon, []) <- splitTyConApp_maybe templateType
+      , Just (interfaceTyCon, []) <- splitTyConApp_maybe interfaceType
+      = Just (tyConName templateTyCon, tyConName interfaceTyCon)
       | otherwise
       = Nothing
 
