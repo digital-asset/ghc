@@ -41,9 +41,9 @@ check modules name namedThing
 customDamlErrors :: Ct -> TcM (Maybe SDoc)
 customDamlErrors ct = do
   env <- getEnv
-  traceTc "TcGblEnv info" (ppr $ extractDamlInfo $ env_gbl env)
+  traceTc "TcGblEnv info" (ppr $ extractDamlInfoFromGblEnv $ env_gbl env)
   eps <- readMutVar $ hsc_EPS $ env_top env
-  traceTc "TcGblEnv info" (ppr $ foldMap extractDamlInfoFromTyThing $ eltsUFM $ eps_PTE eps)
+  traceTc "TcGblEnv info" (ppr $ extractDamlInfoFromEPS eps)
   --let modIfaces = moduleEnvElts $ eps_PIT eps
   --mapM (traceTc "TcGblEnv ModInfo" . ppr . extractDamlInfoFromIFace) modIfaces
   customDamlErrorsPure <$> getGblEnv <*> pure ct
@@ -96,6 +96,16 @@ instance Outputable DamlInfo where
          , text "methods:" <+> ppr (methods info)
          , text "implements:" <+> ppr (implements info)
          ]
+
+extractDamlInfoFromGblEnv :: TcGblEnv -> DamlInfo
+extractDamlInfoFromGblEnv env =
+  foldMap extractDamlInfoFromTyThing (typeEnvElts $ tcg_type_env env) `mappend`
+    foldMap extractDamlInfoFromClsInst (instEnvElts $ tcg_inst_env env)
+
+extractDamlInfoFromEPS :: ExternalPackageState -> DamlInfo
+extractDamlInfoFromEPS eps =
+  foldMap extractDamlInfoFromTyThing (typeEnvElts $ eps_PTE eps) `mappend`
+    foldMap extractDamlInfoFromClsInst (instEnvElts $ eps_inst_env eps)
 
 extractDamlInfoFromTyThing :: TyThing -> DamlInfo
 extractDamlInfoFromTyThing tything =
