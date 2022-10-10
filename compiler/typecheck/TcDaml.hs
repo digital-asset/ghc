@@ -166,6 +166,48 @@ extractDamlInfoFromTyThing tything =
       | otherwise
       = False
 
+extractDamlInfoFromClsInst :: ClsInst -> DamlInfo
+extractDamlInfoFromClsInst inst =
+  mempty
+    { choices = mapMaybe matchChoice [inst]
+    , methods = mapMaybe matchMethod [inst]
+    , implements = mapMaybe matchImplements [inst]
+    }
+  where
+    matchChoice :: ClsInst -> Maybe (Name, Name)
+    matchChoice clsInst
+      | Just [contractType, choiceType, returnType] <-
+          clsInstMatch (qualifyDesugar (mkClsOcc "HasExercise")) clsInst
+      , Just (contractTyCon, []) <- splitTyConApp_maybe contractType
+      , Just (choiceTyCon, []) <- splitTyConApp_maybe choiceType
+      = Just (tyConName contractTyCon, tyConName choiceTyCon)
+      | otherwise
+      = Nothing
+
+    matchMethod :: ClsInst -> Maybe (FastString, Type)
+    matchMethod clsInst
+      | Just [contractType, methodNameType, returnType] <-
+          clsInstMatch (qualifyDesugar (mkClsOcc "HasMethod")) clsInst
+      , Just (StrTyLit methodName) <- isLitTy methodNameType
+      = Just (methodName, contractType)
+      | otherwise
+      = Nothing
+
+    matchImplements :: ClsInst -> Maybe (Type, Type)
+    matchImplements clsInst
+      | Just [template, interface] <-
+          clsInstMatch (qualifyDesugar (mkClsOcc "ToInterface")) clsInst
+      = Just (template, interface)
+      | otherwise
+      = Nothing
+
+    clsInstMatch :: RdrName -> ClsInst -> Maybe [Type]
+    clsInstMatch rdrName clsInst
+      | similarName rdrName (is_cls_nm clsInst)
+      = Just $ is_tys clsInst
+      | otherwise
+      = Nothing
+
 extractDamlInfoFromIFace :: ModIface -> DamlInfo
 extractDamlInfoFromIFace iface =
   DamlInfo
