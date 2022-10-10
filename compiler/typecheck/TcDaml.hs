@@ -52,7 +52,7 @@ customDamlErrors ct = do
 data DamlError
   = TriedView { target :: Name, result :: Type }
   | TriedExercise { target :: Name, choice :: Name, result :: Type }
-  | TriedCall { target :: Name, method :: FastString, result :: Type }
+  | TriedImplementMethod { target :: Name, method :: FastString, result :: Type }
 
 customDamlError :: Ct -> Maybe DamlError
 customDamlError ct
@@ -64,17 +64,19 @@ customDamlError ct
   = Just $ TriedExercise { target = tyConName target, choice = tyConName choice, result = result }
   | TyConApp con [TyConApp target [], LitTy (StrTyLit methodName), result] <- ctev_pred (ctEvidence ct)
   , check ["DA.Internal.Desugar"] "HasMethod" con
-  = Just $ TriedCall { target = tyConName target, method = methodName, result = result }
+  = Just $ TriedImplementMethod { target = tyConName target, method = methodName, result = result }
   | otherwise
   = Nothing
+
+hcatWithCommas :: [SDoc] -> SDoc
+hcatWithCommas outs = hcat (punctuate (text ", ") outs)
 
 displayError :: DamlInfo -> DamlError -> SDoc
 displayError info TriedView { target = target, result = result }
   | isTemplate info target
   = vcat [ text "Tried to get an interface view of type" <+> ppr result <+> text "from template" <+> ppr target
          , text "Cast template" <+> ppr target <+> text "to an interface before getting its view."
-         , text "Known interfaces for template" <+> ppr target <+> text "include:" <+>
-           hcat (punctuate (text ", ") (map ppr (allImplementedInterfaces info target)))
+         , text "Known interfaces for template" <+> ppr target <+> text "include:" <+> hcatWithCommas (map ppr (allImplementedInterfaces info target))
          ]
   | isInterface info target
   , Just view <- interfaceView info target
@@ -99,8 +101,20 @@ displayError info TriedExercise { target = target, result = result, choice = cho
          ]
   | otherwise
   = text "Tried to exercise a choice" <+> ppr choice <+> text "on" <+> ppr target <+> text "but no choice of that name exists on" <+> ppr target
-displayError info TriedCall { target = target, method = method, result = result }
-  = text "Tried to implement method" <+> ppr method <> text ", but interface" <+> ppr target <+> text "does not have a method with that name."
+displayError info TriedImplementMethod { target = target, method = method, result = result } =
+  let ifaces = definesMethod info method
+  in
+  case target `lookup` ifaces of
+    Just expectedResult
+      | not (eqType expectedResult result)
+      -> text "Implementation of method" <+> ppr method <+> text "on interface" <+> ppr target <+> text "should return" <+> ppr expectedResult <+> text "but instead returns " <+> ppr result
+    Nothing
+      | not (null ifaces)
+      -> hcat [ text "Tried to implement method" <+> ppr method <> text ", but interface" <+> ppr target <+> text "does not have a method with that name."
+              , text "Method" <+> ppr method <+> text "is only a method on the following interfaces:" <+> hcatWithCommas (map ppr ifaces)
+              ]
+    _ ->
+      text "Tried to implement method" <+> ppr method <> text ", but interface" <+> ppr target <+> text "does not have a method with that name."
 
 data DamlVariant = Template Name | Interface Name | Choice Name
 
@@ -108,7 +122,7 @@ data DamlInfo = DamlInfo
   { templates :: [Name]
   , interfaces :: [Name]
   , choices :: [(Name, Name)]
-  , methods :: [(FastString, Type)]
+  , methods :: [(FastString, (Name, Type))]
   , implementations :: [(Name, Name)]
   , views :: [(Name, Type)]
   }
@@ -124,6 +138,7 @@ allImplementingTemplates info name = [tpl | (tpl, iface) <- implementations info
 implements info tpl iface = (tpl, iface) `elem` implementations info
 choiceImplementor info name = [tplOrIface | (tplOrIface, choice) <- choices info, name == choice]
 interfaceView info name = lookup name (views info)
+definesMethod info method = [nameAndType | (m, nameAndType) <- methods info, m == method]
 
 instance Monoid DamlInfo where
   mempty = DamlInfo [] [] [] [] [] []
@@ -197,12 +212,13 @@ extractDamlInfoFromTyThing tything =
       | otherwise
       = Nothing
 
-    matchMethod :: Id -> Maybe (FastString, Type)
+    matchMethod :: Id -> Maybe (FastString, (Name, Type))
     matchMethod identifier
       | TyConApp headTyCon [contractType, methodNameType, returnType] <- varType identifier
       , similarName (qualifyDesugar (mkClsOcc "HasMethod")) (tyConName headTyCon)
       , LitTy (StrTyLit methodName) <- methodNameType
-      = Just (methodName, contractType)
+      , Just (contractTyCon, []) <- splitTyConApp_maybe contractType
+      = Just (methodName, (tyConName contractTyCon, returnType))
       | otherwise
       = Nothing
 
@@ -243,12 +259,13 @@ extractDamlInfoFromClsInst inst =
       | otherwise
       = Nothing
 
-    matchMethod :: ClsInst -> Maybe (FastString, Type)
+    matchMethod :: ClsInst -> Maybe (FastString, (Name, Type))
     matchMethod clsInst
       | Just [contractType, methodNameType, returnType] <-
           clsInstMatch (qualifyDesugar (mkClsOcc "HasMethod")) clsInst
       , Just (StrTyLit methodName) <- isLitTy methodNameType
-      = Just (methodName, contractType)
+      , Just (contractTyCon, []) <- splitTyConApp_maybe contractType
+      = Just (methodName, (tyConName contractTyCon, returnType))
       | otherwise
       = Nothing
 
