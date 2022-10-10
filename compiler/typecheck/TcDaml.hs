@@ -105,6 +105,7 @@ data DamlInfo = DamlInfo
   , choices :: [(Name, Name)]
   , methods :: [(FastString, Type)]
   , implementations :: [(Name, Name)]
+  , views :: [(Name, Type)]
   }
 
 isTemplate info name = name `elem` templates info
@@ -117,13 +118,14 @@ allImplementedInterfaces info name = [iface | (tpl, iface) <- implementations in
 allImplementingTemplates info name = [tpl | (tpl, iface) <- implementations info, name == iface]
 implements info tpl iface = (tpl, iface) `elem` implementations info
 choiceImplementor info name = [tplOrIface | (tplOrIface, choice) <- choices info, name == choice]
+interfaceView info name = lookup name (views info)
 
 instance Monoid DamlInfo where
-  mempty = DamlInfo [] [] [] [] []
+  mempty = DamlInfo [] [] [] [] [] []
 
 instance Semigroup DamlInfo where
-  (<>) (DamlInfo a0 a1 a2 a3 a4) (DamlInfo b0 b1 b2 b3 b4) =
-    DamlInfo (a0 P.<> b0) (a1 P.<> b1) (a2 P.<> b2) (a3 P.<> b3) (a4 P.<> b4)
+  (<>) (DamlInfo a0 a1 a2 a3 a4 a5) (DamlInfo b0 b1 b2 b3 b4 b5) =
+    DamlInfo (a0 P.<> b0) (a1 P.<> b1) (a2 P.<> b2) (a3 P.<> b3) (a4 P.<> b4) (a5 P.<> b5)
 
 instance Outputable DamlInfo where
   ppr info =
@@ -133,6 +135,7 @@ instance Outputable DamlInfo where
          , text "choices:" <+> ppr (choices info)
          , text "methods:" <+> ppr (methods info)
          , text "implementations:" <+> ppr (implementations info)
+         , text "views:" <+> ppr (views info)
          ]
 
 extractDamlInfoFromGblEnv :: TcGblEnv -> DamlInfo
@@ -222,6 +225,7 @@ extractDamlInfoFromClsInst inst =
     { choices = mapMaybe matchChoice [inst]
     , methods = mapMaybe matchMethod [inst]
     , implementations = mapMaybe matchImplements [inst]
+    , views = mapMaybe matchView [inst]
     }
   where
     matchChoice :: ClsInst -> Maybe (Name, Name)
@@ -246,10 +250,19 @@ extractDamlInfoFromClsInst inst =
     matchImplements :: ClsInst -> Maybe (Name, Name)
     matchImplements clsInst
       | Just [templateType, interfaceType] <-
-          clsInstMatch (qualifyDesugar (mkClsOcc "ToInterface")) clsInst
+          clsInstMatch (qualifyDesugar (mkClsOcc "HasToInterface")) clsInst
       , Just (templateTyCon, []) <- splitTyConApp_maybe templateType
       , Just (interfaceTyCon, []) <- splitTyConApp_maybe interfaceType
       = Just (tyConName templateTyCon, tyConName interfaceTyCon)
+      | otherwise
+      = Nothing
+
+    matchView :: ClsInst -> Maybe (Name, Type)
+    matchView clsInst
+      | Just [ifaceType, viewType] <-
+          clsInstMatch (qualifyDesugar (mkClsOcc "HasInterfaceView")) clsInst
+      , Just (ifaceTyCon, []) <- splitTyConApp_maybe ifaceType
+      = Just (tyConName ifaceTyCon, viewType)
       | otherwise
       = Nothing
 
