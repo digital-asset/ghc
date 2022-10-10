@@ -216,39 +216,6 @@ extractDamlInfoFromClsInst inst =
       | otherwise
       = Nothing
 
-addDamlTypesToGblEnv :: [LTyClDecl GhcRn] -> TcGblEnv -> TcGblEnv
-addDamlTypesToGblEnv tyClDecls env@(TcGblEnv { tcg_daml_templates = templates
-                                             , tcg_daml_interfaces = interfaces
-                                             , tcg_daml_choices = choices }) =
-  let (newTemplates, newInterfaces, newChoices) = extractDamlTypes tyClDecls
-  in
-  env { tcg_daml_templates  = templates ++ newTemplates
-      , tcg_daml_interfaces = interfaces ++ newInterfaces
-      , tcg_daml_choices    = choices ++ newChoices
-      }
-
-extractDamlTypes :: [LTyClDecl GhcRn] -> ([Name], [Name], [Name])
-extractDamlTypes = splitVariants . mapMaybe extractDamlType
-  where
-    splitVariants :: [DamlVariant] -> ([Name], [Name], [Name])
-    splitVariants = foldMap $ \x -> case x of
-                                     Template a -> ([a], mempty, mempty)
-                                     Interface a -> (mempty, [a], mempty)
-                                     Choice a -> (mempty, mempty, [a])
-
-extractDamlType :: LTyClDecl GhcRn -> Maybe DamlVariant
-extractDamlType (L _ DataDecl { tcdLName = L _ name, tcdDataDefn = HsDataDefn { dd_ctxt = L _ contextTypes } })
-  | any (isConstraint ghcTypesDamlInterface) contextTypes
-  = Just (Interface name)
-  | any (isConstraint ghcTypesDamlTemplate) contextTypes
-  = Just (Template name)
-  where
-    isConstraint :: RdrName -> LHsType GhcRn -> Bool
-    isConstraint rdrName (L _ (HsTyVar _ _ (L _ loneConstraint))) =
-      similarName rdrName loneConstraint
-    isConstraint _ _ = False
-extractDamlType _ = Nothing
-
 similarName :: RdrName -> Name -> Bool
 similarName (Qual targetModuleName targetOccName) name
   | Just actualModule <- nameModule_maybe name

@@ -78,9 +78,6 @@ import Data.List
 import Data.List.NonEmpty ( NonEmpty(..) )
 import qualified Data.Set as Set
 
--- For DAML changes:
-import TcDaml
-
 {-
 ************************************************************************
 *                                                                      *
@@ -136,7 +133,6 @@ tcTyAndClassDecls tyclds_s
     traceTc "TcGblEnv tcg_daml_templates" (ppr $ tcg_daml_templates env)
     traceTc "TcGblEnv tcg_daml_interfaces" (ppr $ tcg_daml_interfaces env)
     traceTc "TcGblEnv tcg_daml_choices" (ppr $ tcg_daml_choices env)
-    traceTc "TcGblEnv info" (ppr $ extractDamlInfo env)
     traceTc "---- end tcTyAndClassDecls ---- }" empty
     pure ret
   where
@@ -192,12 +188,8 @@ tcTyClGroup (TyClGroup { group_tyclds = tyclds
            -- they may be mentioned in interface files
        ; gbl_env <- addTyConsToGblEnv tyclss
 
-           -- (DAML)
-           -- Step 3.5: Extract templates, interfaces, and choices
-       ; let gbl_env' = addDamlTypesToGblEnv tyclds gbl_env
-
            -- Step 4: check instance declarations
-       ; setGblEnv gbl_env' $
+       ; setGblEnv gbl_env $
          tcInstDecls1 instds }
 
 tcTyClGroup (XTyClGroup _) = panic "tcTyClGroup"
