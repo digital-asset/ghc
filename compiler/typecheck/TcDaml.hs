@@ -70,13 +70,30 @@ customDamlError ct
 
 displayError :: DamlInfo -> DamlError -> SDoc
 displayError info TriedView { target = target, result = result }
-  = vcat [ text "Tried to get an interface view of type" <+> ppr result <+> text "from a non-interface" <+> ppr target
-         , text "If" <+> ppr target <+> text "is a template, try casting it using toInterface or toInterfaceContractId"
+  | isTemplate info target
+  = vcat [ text "Tried to get an interface view of type" <+> ppr result <+> text "from template" <+> ppr target
+         , text "Cast template" <+> ppr target <+> text "to an interface before getting its view."
+         , text "Known interfaces for template" <+> ppr target <+> text "include:"
+         , hcat (punctuate (text ", ") (map ppr (allImplementedInterfaces info target)))
          ]
+  | isInterface info target
+  = text "Tried to get an interface view of type" <+> ppr result <+> text "from interface" <+> ppr target <+> text "but that interface's view is not of that type"
+  | otherwise
+  = text "Tried to get an interface view of type" <+> ppr result <+> text "from type" <+> ppr target <+> text "which is neither an interface nor a template"
 displayError info TriedExercise { target = target, result = result, choice = choice }
-  = vcat [ text "Tried to exercise a choice" <+> ppr choice <+> text "which doesn't exist on" <+> ppr target
-         , text "If the choice" <+> ppr choice <+> text "belongs to an interface, try casting" <+> ppr target <+> text "using toInterface or toInterfaceContractId"
+  | [implementor] <- choiceImplementor info choice
+  , isInterface info implementor
+  , doesImplement info target implementor
+  = vcat [ text "Tried to exercise a choice" <+> ppr choice <+> text "on" <+> ppr target
+         , text "This choice" <+> ppr choice <+> text "belongs to interface" <+> ppr implementor <+> text "which" <+> ppr target <+> text "implements."
+         , text "Cast template" <+> ppr target <+> text "to interface" <+> ppr implementor <+> text "before exercising the choice."
          ]
+  | [implementor] <- choiceImplementor info choice
+  = vcat [ text "Tried to exercise a choice" <+> ppr choice <+> text "on" <+> ppr target <+> text "but no choice of that name exists on" <+> ppr target
+         , text "This choice" <+> ppr choice <+> text "belongs to" <+> variantName info implementor <+> ppr implementor <+> text "instead."
+         ]
+  | otherwise
+  = text "Tried to exercise a choice" <+> ppr choice <+> text "on" <+> ppr target <+> text "but no choice of that name exists on" <+> ppr target
 displayError info TriedCall { target = target, method = method, result = result }
   = text "Tried to implement method" <+> ppr method <> text ", but interface" <+> ppr target <+> text "does not have a method with that name."
 
@@ -89,6 +106,17 @@ data DamlInfo = DamlInfo
   , methods :: [(FastString, Type)]
   , implements :: [(Name, Name)]
   }
+
+isTemplate info name = name `elem` templates info
+isInterface info name = name `elem` interfaces info
+variantName info name
+  | isTemplate info name = text "template"
+  | isInterface info name = text "interface"
+  | otherwise = text "type"
+allImplementedInterfaces info name = [iface | (tpl, iface) <- implements info, name == tpl]
+allImplementingTemplates info name = [tpl | (tpl, iface) <- implements info, name == iface]
+doesImplement info tpl iface = (tpl, iface) `elem` implements info
+choiceImplementor info name = [tplOrIface | (tplOrIface, choice) <- choices info, name == choice]
 
 instance Monoid DamlInfo where
   mempty = DamlInfo [] [] [] [] []
