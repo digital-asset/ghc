@@ -41,13 +41,15 @@ check modules name namedThing
 customDamlErrors :: Ct -> TcM (Maybe SDoc)
 customDamlErrors ct = do
   env <- getEnv
-  traceTc "TcGblEnv info" (ppr $ extractDamlInfoFromGblEnv $ env_gbl env)
   eps <- readMutVar $ hsc_EPS $ env_top env
-  traceTc "TcGblEnv info" (ppr $ extractDamlInfoFromEPS eps)
-  customDamlErrorsPure <$> getGblEnv <*> pure ct
+  let gblEnvDamlInfo = extractDamlInfoFromGblEnv $ env_gbl env
+  let epsDamlInfo = extractDamlInfoFromEPS eps
+  traceTc "TcGblEnv info" (ppr gblEnvDamlInfo)
+  traceTc "TcGblEnv info" (ppr epsDamlInfo)
+  pure $ customDamlErrorsPure (gblEnvDamlInfo `mappend` epsDamlInfo) ct
 
-customDamlErrorsPure :: TcGblEnv -> Ct -> Maybe SDoc
-customDamlErrorsPure env ct
+customDamlErrorsPure :: DamlInfo -> Ct -> Maybe SDoc
+customDamlErrorsPure info ct = messageMay
   -- TODO: Use PrelNames machinery to match unique names instead of resorting to string matching
   | TyConApp con [TyConApp target [], viewType] <- ctev_pred (ctEvidence ct)
   , check ["DA.Internal.Desugar", "DA.Internal.Interface"] "HasInterfaceView" con
