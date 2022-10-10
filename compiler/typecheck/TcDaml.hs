@@ -83,7 +83,7 @@ displayError info TriedView { target = target, result = result }
 displayError info TriedExercise { target = target, result = result, choice = choice }
   | [implementor] <- choiceImplementor info choice
   , isInterface info implementor
-  , doesImplement info target implementor
+  , implements info target implementor
   = vcat [ text "Tried to exercise a choice" <+> ppr choice <+> text "on" <+> ppr target
          , text "This choice" <+> ppr choice <+> text "belongs to interface" <+> ppr implementor <+> text "which" <+> ppr target <+> text "implements."
          , text "Cast template" <+> ppr target <+> text "to interface" <+> ppr implementor <+> text "before exercising the choice."
@@ -104,7 +104,7 @@ data DamlInfo = DamlInfo
   , interfaces :: [Name]
   , choices :: [(Name, Name)]
   , methods :: [(FastString, Type)]
-  , implements :: [(Name, Name)]
+  , implementations :: [(Name, Name)]
   }
 
 isTemplate info name = name `elem` templates info
@@ -113,9 +113,9 @@ variantName info name
   | isTemplate info name = text "template"
   | isInterface info name = text "interface"
   | otherwise = text "type"
-allImplementedInterfaces info name = [iface | (tpl, iface) <- implements info, name == tpl]
-allImplementingTemplates info name = [tpl | (tpl, iface) <- implements info, name == iface]
-doesImplement info tpl iface = (tpl, iface) `elem` implements info
+allImplementedInterfaces info name = [iface | (tpl, iface) <- implementations info, name == tpl]
+allImplementingTemplates info name = [tpl | (tpl, iface) <- implementations info, name == iface]
+implements info tpl iface = (tpl, iface) `elem` implementations info
 choiceImplementor info name = [tplOrIface | (tplOrIface, choice) <- choices info, name == choice]
 
 instance Monoid DamlInfo where
@@ -132,7 +132,7 @@ instance Outputable DamlInfo where
          , text "interfaces:" <+> ppr (interfaces info)
          , text "choices:" <+> ppr (choices info)
          , text "methods:" <+> ppr (methods info)
-         , text "implements:" <+> ppr (implements info)
+         , text "implementations:" <+> ppr (implementations info)
          ]
 
 extractDamlInfoFromGblEnv :: TcGblEnv -> DamlInfo
@@ -151,7 +151,7 @@ extractDamlInfoFromTyThing tything =
     AnId id ->
       mempty
         { methods = mapMaybe matchMethod [id]
-        , implements = mapMaybe matchImplements [id]
+        , implementations = mapMaybe matchImplements [id]
         , choices = mapMaybe matchChoice [id]
         }
     ATyCon tycon ->
@@ -221,7 +221,7 @@ extractDamlInfoFromClsInst inst =
   mempty
     { choices = mapMaybe matchChoice [inst]
     , methods = mapMaybe matchMethod [inst]
-    , implements = mapMaybe matchImplements [inst]
+    , implementations = mapMaybe matchImplements [inst]
     }
   where
     matchChoice :: ClsInst -> Maybe (Name, Name)
