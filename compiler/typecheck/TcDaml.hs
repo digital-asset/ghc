@@ -22,9 +22,12 @@ import FastString
 import TcRnMonad
 import IfaceSyn
 import HscTypes
+import Var
+import UniqFM
 
 import Data.Maybe
 import Data.List
+import qualified Prelude as P ((<>))
 
 check :: NamedThing a => [String] -> String -> a -> Bool
 check modules name namedThing
@@ -40,8 +43,9 @@ customDamlErrors ct = do
   env <- getEnv
   traceTc "TcGblEnv info" (ppr $ extractDamlInfo $ env_gbl env)
   eps <- readMutVar $ hsc_EPS $ env_top env
-  let modIfaces = moduleEnvElts $ eps_PIT eps
-  mapM (traceTc "TcGblEnv ModInfo" . ppr . extractDamlInfoFromIFace) modIfaces
+  traceTc "TcGblEnv info" (ppr $ foldMap extractDamlInfoFromTyThing $ eltsUFM $ eps_PTE eps)
+  --let modIfaces = moduleEnvElts $ eps_PIT eps
+  --mapM (traceTc "TcGblEnv ModInfo" . ppr . extractDamlInfoFromIFace) modIfaces
   customDamlErrorsPure <$> getGblEnv <*> pure ct
 
 customDamlErrorsPure :: TcGblEnv -> Ct -> Maybe SDoc
@@ -76,6 +80,13 @@ data DamlInfo = DamlInfo
   , implements :: [(Type, Type)]
   }
 
+instance Monoid DamlInfo where
+  mempty = DamlInfo [] [] [] [] []
+
+instance Semigroup DamlInfo where
+  (<>) (DamlInfo a0 a1 a2 a3 a4) (DamlInfo b0 b1 b2 b3 b4) =
+    DamlInfo (a0 P.<> b0) (a1 P.<> b1) (a2 P.<> b2) (a3 P.<> b3) (a4 P.<> b4)
+
 instance Outputable DamlInfo where
   ppr info =
     hang (text "DamlInfo {") 2 $
@@ -85,6 +96,75 @@ instance Outputable DamlInfo where
          , text "methods:" <+> ppr (methods info)
          , text "implements:" <+> ppr (implements info)
          ]
+
+extractDamlInfoFromTyThing :: TyThing -> DamlInfo
+extractDamlInfoFromTyThing tything =
+  case tything of
+    AnId id ->
+      mempty
+        { methods = mapMaybe matchMethod [id]
+        , implements = mapMaybe matchImplements [id]
+        , choices = mapMaybe matchChoice [id]
+        }
+    ATyCon tycon ->
+      mempty
+        { templates = mapMaybe matchTemplate [tycon]
+        , interfaces = mapMaybe matchInterface [tycon]
+        }
+    _ -> mempty
+  where
+    matchTemplate, matchInterface :: TyCon -> Maybe Name
+    matchTemplate = tyconWithConstraint ghcTypesDamlTemplate
+    matchInterface = tyconWithConstraint ghcTypesDamlInterface
+
+    tyconWithConstraint :: RdrName -> TyCon -> Maybe Name
+    tyconWithConstraint targetName tycon
+      | isAlgTyCon tycon
+      , let isMatchingLoneConstraint type_
+              | Just (loneConstraint, []) <- splitTyConApp_maybe type_
+              , similarName targetName (tyConName loneConstraint)
+              = True
+              | otherwise
+              = False
+      , any isMatchingLoneConstraint (tyConStupidTheta tycon)
+      = Just $ tyConName tycon
+      | otherwise
+      = Nothing
+
+    matchChoice :: Id -> Maybe (Name, Name)
+    matchChoice identifier
+      | TyConApp headTyCon [contractType, choiceType, returnType] <- varType identifier
+      , similarName (qualifyDesugar (mkClsOcc "HasExercise")) (tyConName headTyCon)
+      , Just (contractTyCon, []) <- splitTyConApp_maybe contractType
+      , Just (choiceTyCon, []) <- splitTyConApp_maybe choiceType
+      = Just (tyConName contractTyCon, tyConName choiceTyCon)
+      | otherwise
+      = Nothing
+
+    matchMethod :: Id -> Maybe (FastString, Type)
+    matchMethod identifier
+      | TyConApp headTyCon [contractType, methodNameType, returnType] <- varType identifier
+      , similarName (qualifyDesugar (mkClsOcc "HasMethod")) (tyConName headTyCon)
+      , LitTy (StrTyLit methodName) <- methodNameType
+      = Just (methodName, contractType)
+      | otherwise
+      = Nothing
+
+    matchImplements :: Id -> Maybe (Type, Type)
+    matchImplements identifier
+      | TyConApp headTyCon [templateType, interfaceType] <- varType identifier
+      , similarName (qualifyDesugar (mkClsOcc "ToInterface")) (tyConName headTyCon)
+      = Just (templateType, interfaceType)
+      | otherwise
+      = Nothing
+
+    isMatchingLoneConstraint :: RdrName -> IfaceType -> Bool
+    isMatchingLoneConstraint targetName type_
+      | IfaceTyConApp (IfaceTyCon tyConName _info) IA_Nil <- type_
+      , similarName targetName tyConName
+      = True
+      | otherwise
+      = False
 
 extractDamlInfoFromIFace :: ModIface -> DamlInfo
 extractDamlInfoFromIFace iface =
