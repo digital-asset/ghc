@@ -204,7 +204,7 @@ extractDamlInfoFromTyThing tything =
     matchImplements :: Id -> Maybe (Name, Name)
     matchImplements identifier
       | TyConApp headTyCon [templateType, interfaceType] <- varType identifier
-      , similarName (qualifyDesugar (mkClsOcc "ToInterface")) (tyConName headTyCon)
+      , similarName (qualifyDesugar (mkClsOcc "HasToInterface")) (tyConName headTyCon)
       , Just (templateTyCon, []) <- splitTyConApp_maybe templateType
       , Just (interfaceTyCon, []) <- splitTyConApp_maybe interfaceType
       = Just (tyConName templateTyCon, tyConName interfaceTyCon)
