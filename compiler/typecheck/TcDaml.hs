@@ -44,31 +44,41 @@ customDamlErrors ct = do
   eps <- readMutVar $ hsc_EPS $ env_top env
   let gblEnvDamlInfo = extractDamlInfoFromGblEnv $ env_gbl env
   let epsDamlInfo = extractDamlInfoFromEPS eps
+  let info = gblEnvDamlInfo `mappend` epsDamlInfo
   traceTc "TcGblEnv info" (ppr gblEnvDamlInfo)
   traceTc "TcGblEnv info" (ppr epsDamlInfo)
-  pure $ customDamlErrorsPure (gblEnvDamlInfo `mappend` epsDamlInfo) ct
+  pure $ fmap (displayError info) (customDamlError ct)
 
-customDamlErrorsPure :: DamlInfo -> Ct -> Maybe SDoc
-customDamlErrorsPure info ct = messageMay
-  -- TODO: Use PrelNames machinery to match unique names instead of resorting to string matching
+data DamlError
+  = TriedView { target :: Name, result :: Type }
+  | TriedExercise { target :: Name, choice :: Name, result :: Type }
+  | TriedCall { target :: Name, method :: FastString, result :: Type }
+
+customDamlError :: Ct -> Maybe DamlError
+customDamlError ct
   | TyConApp con [TyConApp target [], viewType] <- ctev_pred (ctEvidence ct)
   , check ["DA.Internal.Desugar", "DA.Internal.Interface"] "HasInterfaceView" con
-  = Just
-  $ vcat [ text "Tried to get an interface view of type" <+> ppr viewType <+> text "from a non-interface" <+> ppr (tyConName target)
-         , text "If" <+> ppr (tyConName target) <+> text "is a template, try casting it using toInterface or toInterfaceContractId"
-         ]
-  | TyConApp con [TyConApp target [], TyConApp choiceName [], result] <- ctev_pred (ctEvidence ct)
+  = Just $ TriedView { target = tyConName target, result = viewType }
+  | TyConApp con [TyConApp target [], TyConApp choice [], result] <- ctev_pred (ctEvidence ct)
   , check ["DA.Internal.Desugar", "DA.Internal.Template.Functions"] "HasExercise" con
-  = Just
-  $ vcat [ text "Tried to exercise a choice" <+> ppr choiceName <+> text "which doesn't exist on" <+> ppr (tyConName target)
-         , text "If the choice" <+> ppr choiceName <+> text "belongs to an interface, try casting" <+> ppr (tyConName target) <+> text "using toInterface or toInterfaceContractId"
-         ]
+  = Just $ TriedExercise { target = tyConName target, choice = tyConName choice, result = result }
   | TyConApp con [TyConApp target [], LitTy (StrTyLit methodName), result] <- ctev_pred (ctEvidence ct)
   , check ["DA.Internal.Desugar"] "HasMethod" con
-  = Just
-  $ text "Tried to implement method" <+> ppr methodName <> text ", but interface" <+> ppr (tyConName target) <+> text "does not have a method with that name."
+  = Just $ TriedCall { target = tyConName target, method = methodName, result = result }
   | otherwise
   = Nothing
+
+displayError :: DamlInfo -> DamlError -> SDoc
+displayError info TriedView { target = target, result = result }
+  = vcat [ text "Tried to get an interface view of type" <+> ppr result <+> text "from a non-interface" <+> ppr target
+         , text "If" <+> ppr target <+> text "is a template, try casting it using toInterface or toInterfaceContractId"
+         ]
+displayError info TriedExercise { target = target, result = result, choice = choice }
+  = vcat [ text "Tried to exercise a choice" <+> ppr choice <+> text "which doesn't exist on" <+> ppr target
+         , text "If the choice" <+> ppr choice <+> text "belongs to an interface, try casting" <+> ppr target <+> text "using toInterface or toInterfaceContractId"
+         ]
+displayError info TriedCall { target = target, method = method, result = result }
+  = text "Tried to implement method" <+> ppr method <> text ", but interface" <+> ppr target <+> text "does not have a method with that name."
 
 data DamlVariant = Template Name | Interface Name | Choice Name
 
