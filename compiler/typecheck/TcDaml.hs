@@ -44,8 +44,6 @@ customDamlErrors ct = do
   traceTc "TcGblEnv info" (ppr $ extractDamlInfoFromGblEnv $ env_gbl env)
   eps <- readMutVar $ hsc_EPS $ env_top env
   traceTc "TcGblEnv info" (ppr $ extractDamlInfoFromEPS eps)
-  --let modIfaces = moduleEnvElts $ eps_PIT eps
-  --mapM (traceTc "TcGblEnv ModInfo" . ppr . extractDamlInfoFromIFace) modIfaces
   customDamlErrorsPure <$> getGblEnv <*> pure ct
 
 customDamlErrorsPure :: TcGblEnv -> Ct -> Maybe SDoc
@@ -208,123 +206,6 @@ extractDamlInfoFromClsInst inst =
       | Just [template, interface] <-
           clsInstMatch (qualifyDesugar (mkClsOcc "ToInterface")) clsInst
       = Just (template, interface)
-      | otherwise
-      = Nothing
-
-    clsInstMatch :: RdrName -> ClsInst -> Maybe [Type]
-    clsInstMatch rdrName clsInst
-      | similarName rdrName (is_cls_nm clsInst)
-      = Just $ is_tys clsInst
-      | otherwise
-      = Nothing
-
-extractDamlInfoFromIFace :: ModIface -> DamlInfo
-extractDamlInfoFromIFace iface =
-  DamlInfo
-    { templates = mapMaybe matchTemplate ifaceDecls
-    , interfaces = mapMaybe matchInterface ifaceDecls
-    , choices = mapMaybe matchChoice (mi_insts iface)
-    -- IfaceClsInst does not store symbols, so we cannot extract via mi_insts.
-    -- We extract by looking for exported typeclass dictionaries instead.
-    , methods = [] -- mapMaybe matchMethod ifaceDecls
-    , implements = []
-    }
-  where
-    ifaceDecls :: [IfaceDecl]
-    ifaceDecls = map snd $ mi_decls iface
-
-    matchTemplate, matchInterface :: IfaceDecl -> Maybe Name
-    matchTemplate = dataTypeWithConstraint ghcTypesDamlTemplate
-    matchInterface = dataTypeWithConstraint ghcTypesDamlInterface
-
-    matchChoice :: IfaceClsInst -> Maybe (Name, Name)
-    matchChoice inst
-      | similarName (qualifyDesugar (mkClsOcc "ToInterface")) (ifInstCls inst)
-      , [Just contractType, Just choiceType, Just returnType] <- ifInstTys inst
-      = Just (ifaceTyConName contractType, ifaceTyConName choiceType)
-      | otherwise
-      = Nothing
-
-    matchMethod :: IfaceDecl -> Maybe (FastString, Type)
-    matchMethod decl
-      | IfaceId { ifType = type_ } <- decl
-      , IfaceTyConApp headTyCon ifaceArgs <- type_
-      , similarName (qualifyDesugar (mkClsOcc "HasMethod")) (ifaceTyConName headTyCon)
-      , IA_Arg tyArg1 _ (IA_Arg tyArg2 _ IA_Nil) <- ifaceArgs
-      , IfaceTyConApp contractType IA_Nil <- tyArg1
-      , IfaceLitTy (IfaceStrTyLit choiceName) <- tyArg2
-      = undefined -- Just (choiceName, contractType)
-      | otherwise
-      = Nothing
-
-    dataTypeWithConstraint :: RdrName -> IfaceDecl -> Maybe Name
-    dataTypeWithConstraint loneConstraintName decl
-      | IfaceData { ifName = name, ifCtxt = ctxt } <- decl
-      , any (isMatchingLoneConstraint loneConstraintName) ctxt
-      = Just name
-      | otherwise
-      = Nothing
-
-    isMatchingLoneConstraint :: RdrName -> IfaceType -> Bool
-    isMatchingLoneConstraint targetName type_
-      | IfaceTyConApp (IfaceTyCon tyConName _info) IA_Nil <- type_
-      , similarName targetName tyConName
-      = True
-      | otherwise
-      = False
-
-extractDamlInfo :: TcGblEnv -> DamlInfo
-extractDamlInfo env =
-  DamlInfo
-    { templates = mapMaybe matchTemplate $ tcg_tcs env
-    , interfaces = mapMaybe matchInterface $ tcg_tcs env
-    , choices = mapMaybe matchChoice $ tcg_insts env
-    , methods = mapMaybe matchMethod $ tcg_insts env
-    , implements = mapMaybe matchImplements $ tcg_insts env
-    }
-  where
-    matchTemplate, matchInterface :: TyCon -> Maybe Name
-    matchTemplate = tyconWithConstraint ghcTypesDamlTemplate
-    matchInterface = tyconWithConstraint ghcTypesDamlInterface
-
-    matchChoice :: ClsInst -> Maybe (Name, Name)
-    matchChoice clsInst
-      | Just [contractType, choiceType, returnType] <-
-          clsInstMatch (qualifyDesugar (mkClsOcc "HasExercise")) clsInst
-      , Just (contractTyCon, []) <- splitTyConApp_maybe contractType
-      , Just (choiceTyCon, []) <- splitTyConApp_maybe choiceType
-      = Just (tyConName contractTyCon, tyConName choiceTyCon)
-      | otherwise
-      = Nothing
-
-    matchMethod :: ClsInst -> Maybe (FastString, Type)
-    matchMethod clsInst
-      | Just [contractType, methodNameType, returnType] <-
-          clsInstMatch (qualifyDesugar (mkClsOcc "HasMethod")) clsInst
-      , Just (StrTyLit methodName) <- isLitTy methodNameType
-      = Just (methodName, contractType)
-      | otherwise
-      = Nothing
-
-    matchImplements :: ClsInst -> Maybe (Type, Type)
-    matchImplements clsInst
-      | Just [template, interface] <-
-          clsInstMatch (qualifyDesugar (mkClsOcc "ToInterface")) clsInst
-      = Just (template, interface)
-      | otherwise
-      = Nothing
-
-    tyconWithConstraint :: RdrName -> TyCon -> Maybe Name
-    tyconWithConstraint targetName tycon
-      | isAlgTyCon tycon
-      , let isMatchingLoneConstraint type_
-              | Just (loneConstraint, []) <- splitTyConApp_maybe type_
-              , similarName targetName (tyConName loneConstraint)
-              = True
-              | otherwise
-              = False
-      , any isMatchingLoneConstraint (tyConStupidTheta tycon)
-      = Just $ tyConName tycon
       | otherwise
       = Nothing
 
