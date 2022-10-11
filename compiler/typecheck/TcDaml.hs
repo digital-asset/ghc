@@ -68,15 +68,19 @@ customDamlError ct
   | otherwise
   = Nothing
 
-hcatWithCommas :: [SDoc] -> SDoc
-hcatWithCommas outs = hcat (punctuate (text ", ") outs)
+printListWithHeader :: SDoc -> SDoc -> [SDoc] -> SDoc
+printListWithHeader emptyMsg _ [] = emptyMsg
+printListWithHeader _ nonEmptyMsg outs = nonEmptyMsg <+> hcat (punctuate (text ", ") outs)
 
 displayError :: DamlInfo -> DamlError -> SDoc
 displayError info TriedView { target = target, result = result }
   | isTemplate info target
   = vcat [ text "Tried to get an interface view of type" <+> ppr result <+> text "from template" <+> ppr target
          , text "Cast template" <+> ppr target <+> text "to an interface before getting its view."
-         , text "Known interfaces for template" <+> ppr target <+> text "include:" <+> hcatWithCommas (map ppr (allImplementedInterfaces info target))
+         , printListWithHeader
+              (text "Template" <+> ppr target <+> text "does not have any known interface implementations.")
+              (text "Template" <+> ppr target <+> text "has the following interfaces:")
+              (map ppr (allImplementedInterfaces info target))
          ]
   | isInterface info target
   , Just view <- interfaceView info target
@@ -94,13 +98,13 @@ displayError info TriedExercise { target = target, result = result, choice = cho
          , text "This choice" <+> ppr choice <+> text "belongs to interface" <+> ppr implementor <+> text "which" <+> ppr target <+> text "implements."
          , text "Cast template" <+> ppr target <+> text "to interface" <+> ppr implementor <+> text "before exercising the choice."
          ]
-  | [implementor] <- choiceImplementor info choice
-  , target /= implementor -- since interfaces implement themselves, we ignore if the target is itself
-  = vcat [ text "Tried to exercise a choice" <+> ppr choice <+> text "on" <+> ppr target <+> text "but no choice of that name exists on" <+> ppr target
-         , text "This choice" <+> ppr choice <+> text "belongs to" <+> variantName info implementor <+> ppr implementor <+> text "instead."
-         ]
   | otherwise
-  = text "Tried to exercise a choice" <+> ppr choice <+> text "on" <+> ppr target <+> text "but no choice of that name exists on" <+> ppr target
+  = vcat [ text "Tried to exercise a choice" <+> ppr choice <+> text "on" <+> ppr target <+> text "but no choice of that name exists on" <+> ppr target
+         , printListWithHeader
+              (text "Choice" <+> ppr choice <+> text "does not belong to any known templates or interfaces.")
+              (text "Choice" <+> ppr choice <+> text "belongs to")
+              (map (\tplOrIface -> variantName info tplOrIface <+> ppr tplOrIface) (choiceImplementor info choice))
+         ]
 displayError info TriedImplementMethod { target = target, method = method, result = result } =
   let ifaces = definesMethod info method
   in
