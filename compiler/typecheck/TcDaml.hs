@@ -115,7 +115,10 @@ displayError info TriedImplementMethod { target = target, method = method, resul
     Nothing
       | not (null ifaces)
       -> hcat [ text "Tried to implement method" <+> ppr method <> text ", but interface" <+> ppr target <+> text "does not have a method with that name."
-              , text "Method" <+> ppr method <+> text "is only a method on the following interfaces:" <+> hcatWithCommas (map ppr ifaces)
+              , printListWithHeader
+                  (text "Method" <+> ppr method <+> text "does not belong to any known interfaces.")
+                  (text "Method" <+> ppr method <+> text "is only a method on the following interfaces:")
+                  (map ppr ifaces)
               ]
     _ ->
       text "Tried to implement method" <+> ppr method <> text ", but interface" <+> ppr target <+> text "does not have a method with that name."
