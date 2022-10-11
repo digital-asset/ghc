@@ -192,10 +192,10 @@ extractDamlInfoFromTyThing tything =
     _ -> mempty
   where
     matchTemplate, matchInterface :: TyCon -> Maybe Name
-    matchTemplate = tyconWithConstraint ghcTypesDamlTemplate
-    matchInterface = tyconWithConstraint ghcTypesDamlInterface
+    matchTemplate = tyconWithConstraint "DamlTemplate"
+    matchInterface = tyconWithConstraint "DamlInterface"
 
-    tyconWithConstraint :: RdrName -> TyCon -> Maybe Name
+    tyconWithConstraint :: String -> TyCon -> Maybe Name
     tyconWithConstraint targetName tycon
       | isAlgTyCon tycon
       , let isMatchingLoneConstraint type_
@@ -212,7 +212,7 @@ extractDamlInfoFromTyThing tything =
     matchChoice :: Id -> Maybe (Name, Name)
     matchChoice identifier
       | TyConApp headTyCon [contractType, choiceType, returnType] <- varType identifier
-      , similarName (qualifyDesugar (mkClsOcc "HasExercise")) (tyConName headTyCon)
+      , similarName "HasExercise" (tyConName headTyCon)
       , Just (contractTyCon, []) <- splitTyConApp_maybe contractType
       , Just (choiceTyCon, []) <- splitTyConApp_maybe choiceType
       = Just (tyConName contractTyCon, tyConName choiceTyCon)
@@ -222,7 +222,7 @@ extractDamlInfoFromTyThing tything =
     matchMethod :: Id -> Maybe (FastString, (Name, Type))
     matchMethod identifier
       | TyConApp headTyCon [contractType, methodNameType, returnType] <- varType identifier
-      , similarName (qualifyDesugar (mkClsOcc "HasMethod")) (tyConName headTyCon)
+      , similarName "HasMethod" (tyConName headTyCon)
       , LitTy (StrTyLit methodName) <- methodNameType
       , Just (contractTyCon, []) <- splitTyConApp_maybe contractType
       = Just (methodName, (tyConName contractTyCon, returnType))
@@ -232,14 +232,14 @@ extractDamlInfoFromTyThing tything =
     matchImplements :: Id -> Maybe (Name, Name)
     matchImplements identifier
       | TyConApp headTyCon [templateType, interfaceType] <- varType identifier
-      , similarName (qualifyDesugar (mkClsOcc "HasToInterface")) (tyConName headTyCon)
+      , similarName "HasToInterface" (tyConName headTyCon)
       , Just (templateTyCon, []) <- splitTyConApp_maybe templateType
       , Just (interfaceTyCon, []) <- splitTyConApp_maybe interfaceType
       = Just (tyConName templateTyCon, tyConName interfaceTyCon)
       | otherwise
       = Nothing
 
-    isMatchingLoneConstraint :: RdrName -> IfaceType -> Bool
+    isMatchingLoneConstraint :: String -> IfaceType -> Bool
     isMatchingLoneConstraint targetName type_
       | IfaceTyConApp (IfaceTyCon tyConName _info) IA_Nil <- type_
       , similarName targetName tyConName
@@ -259,7 +259,7 @@ extractDamlInfoFromClsInst inst =
     matchChoice :: ClsInst -> Maybe (Name, Name)
     matchChoice clsInst
       | Just [contractType, choiceType, returnType] <-
-          clsInstMatch (qualifyDesugar (mkClsOcc "HasExercise")) clsInst
+          clsInstMatch "HasExercise" clsInst
       , Just (contractTyCon, []) <- splitTyConApp_maybe contractType
       , Just (choiceTyCon, []) <- splitTyConApp_maybe choiceType
       = Just (tyConName contractTyCon, tyConName choiceTyCon)
@@ -269,7 +269,7 @@ extractDamlInfoFromClsInst inst =
     matchMethod :: ClsInst -> Maybe (FastString, (Name, Type))
     matchMethod clsInst
       | Just [contractType, methodNameType, returnType] <-
-          clsInstMatch (qualifyDesugar (mkClsOcc "HasMethod")) clsInst
+          clsInstMatch "HasMethod" clsInst
       , Just (StrTyLit methodName) <- isLitTy methodNameType
       , Just (contractTyCon, []) <- splitTyConApp_maybe contractType
       = Just (methodName, (tyConName contractTyCon, returnType))
@@ -279,7 +279,7 @@ extractDamlInfoFromClsInst inst =
     matchImplements :: ClsInst -> Maybe (Name, Name)
     matchImplements clsInst
       | Just [templateType, interfaceType] <-
-          clsInstMatch (qualifyDesugar (mkClsOcc "HasToInterface")) clsInst
+          clsInstMatch "HasToInterface" clsInst
       , Just (templateTyCon, []) <- splitTyConApp_maybe templateType
       , Just (interfaceTyCon, []) <- splitTyConApp_maybe interfaceType
       = Just (tyConName templateTyCon, tyConName interfaceTyCon)
@@ -289,24 +289,19 @@ extractDamlInfoFromClsInst inst =
     matchView :: ClsInst -> Maybe (Name, Type)
     matchView clsInst
       | Just [ifaceType, viewType] <-
-          clsInstMatch (qualifyDesugar (mkClsOcc "HasInterfaceView")) clsInst
+          clsInstMatch "HasInterfaceView" clsInst
       , Just (ifaceTyCon, []) <- splitTyConApp_maybe ifaceType
       = Just (tyConName ifaceTyCon, viewType)
       | otherwise
       = Nothing
 
-    clsInstMatch :: RdrName -> ClsInst -> Maybe [Type]
-    clsInstMatch rdrName clsInst
-      | similarName rdrName (is_cls_nm clsInst)
+    clsInstMatch :: String -> ClsInst -> Maybe [Type]
+    clsInstMatch targetName clsInst
+      | similarName targetName (is_cls_nm clsInst)
       = Just $ is_tys clsInst
       | otherwise
       = Nothing
 
-similarName :: RdrName -> Name -> Bool
-similarName (Qual targetModuleName targetOccName) name
-  | Just actualModule <- nameModule_maybe name
-  , moduleName actualModule == targetModuleName
-  , nameOccName name == targetOccName
-  = True
-similarName _ _ = False
+similarName :: String -> Name -> Bool
+similarName target name = occNameString (nameOccName name) == target
 
