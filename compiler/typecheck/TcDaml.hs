@@ -114,7 +114,7 @@ displayError info TriedImplementMethod { target = target, method = method, resul
       -> text "Implementation of method" <+> ppr method <+> text "on interface" <+> ppr target <+> text "should return" <+> ppr expectedResult <+> text "but instead returns " <+> ppr result
     Nothing
       | not (null ifaces)
-      -> hcat [ text "Tried to implement method" <+> ppr method <> text ", but interface" <+> ppr target <+> text "does not have a method with that name."
+      -> vcat [ text "Tried to implement method" <+> ppr method <> text ", but interface" <+> ppr target <+> text "does not have a method with that name."
               , printListWithHeader
                   (text "Method" <+> ppr method <+> text "does not belong to any known interfaces.")
                   (text "Method" <+> ppr method <+> text "is only a method on the following interfaces:")
