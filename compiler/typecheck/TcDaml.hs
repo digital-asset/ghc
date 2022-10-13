@@ -136,13 +136,10 @@ data DamlInfo = DamlInfo
 
 isTemplate info name = name `elem` templates info
 isInterface info name = name `elem` interfaces info
-variantName shouldCap info name
-  | isTemplate info name = capitalize shouldCap "template" <+> ppr name
-  | isInterface info name = capitalize shouldCap "interface" <+> ppr name
-  | otherwise = capitalize shouldCap "type" <+> ppr name
-  where
-    capitalize True (c:cs) = text (toUpper c : cs)
-    capitalize False s = text s
+variantName info name
+  | isTemplate info name = text "template" <+> ppr name
+  | isInterface info name = text "interface" <+> ppr name
+  | otherwise = text "type" <+> ppr name
 allImplementedInterfaces info name = [iface | (tpl, iface) <- implementations info, name == tpl]
 allImplementingTemplates info name = [tpl | (tpl, iface) <- implementations info, name == iface]
 implements info tpl iface = (tpl, iface) `elem` implementations info
