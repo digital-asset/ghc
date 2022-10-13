@@ -94,16 +94,16 @@ displayError info TriedExercise { target = target, result = result, choice = cho
   , isInterface info implementor
   , implements info target implementor
   , target /= implementor -- since interfaces implement themselves, we ignore if the target is itself
-  = vcat [ text "Tried to exercise a choice" <+> ppr choice <+> text "on" <+> ppr target
-         , text "This choice" <+> ppr choice <+> text "belongs to interface" <+> ppr implementor <+> text "which" <+> ppr target <+> text "implements."
-         , text "Cast template" <+> ppr target <+> text "to interface" <+> ppr implementor <+> text "before exercising the choice."
+  = vcat [ text "Tried to exercise a choice" <+> ppr choice <+> text "on" <+> variantName info target
+         , text "This choice" <+> ppr choice <+> text "belongs to" <+> variantName info implementor <+> text "which" <+> ppr target <+> text "implements."
+         , text "Cast " <+> variantName info target <+> text "to" <+> variantName info implementor <+> text "before exercising the choice."
          ]
   | otherwise
-  = vcat [ text "Tried to exercise a choice" <+> ppr choice <+> text "on" <+> ppr target <+> text "but no choice of that name exists on" <+> ppr target
+  = vcat [ text "Tried to exercise a choice" <+> ppr choice <+> text "on" <+> variantName info target <+> text "but no choice of that name exists on" <+> variantName info target
          , printListWithHeader
               (text "Choice" <+> ppr choice <+> text "does not belong to any known templates or interfaces.")
-              (text "Choice" <+> ppr choice <+> text "belongs to")
-              (map (\tplOrIface -> variantName info tplOrIface <+> ppr tplOrIface) (choiceImplementor info choice))
+              (text "Choice" <+> ppr choice <+> text "belongs only to the following types")
+              (map (\tplOrIface -> variantName info tplOrIface) (choiceImplementor info choice))
          ]
 displayError info TriedImplementMethod { target = target, method = method, result = result } =
   let ifaces = definesMethod info method
@@ -136,10 +136,13 @@ data DamlInfo = DamlInfo
 
 isTemplate info name = name `elem` templates info
 isInterface info name = name `elem` interfaces info
-variantName info name
-  | isTemplate info name = text "template"
-  | isInterface info name = text "interface"
-  | otherwise = text "type"
+variantName shouldCap info name
+  | isTemplate info name = capitalize shouldCap "template" <+> ppr name
+  | isInterface info name = capitalize shouldCap "interface" <+> ppr name
+  | otherwise = capitalize shouldCap "type" <+> ppr name
+  where
+    capitalize True (c:cs) = text (toUpper c : cs)
+    capitalize False s = text s
 allImplementedInterfaces info name = [iface | (tpl, iface) <- implementations info, name == tpl]
 allImplementingTemplates info name = [tpl | (tpl, iface) <- implementations info, name == iface]
 implements info tpl iface = (tpl, iface) `elem` implementations info
