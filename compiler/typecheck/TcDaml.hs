@@ -103,7 +103,7 @@ displayError info TriedExercise { target = target, result = result, choice = cho
          , printListWithHeader
               (text "Choice" <+> ppr choice <+> text "does not belong to any known templates or interfaces.")
               (text "Choice" <+> ppr choice <+> text "belongs only to the following types")
-              (map (\tplOrIface -> variantName info tplOrIface) (choiceImplementor info choice))
+              (map (variantName info) (choiceImplementor info choice))
          ]
 displayError info TriedImplementMethod { target = target, method = method, result = result } =
   let ifaces = definesMethod info method
