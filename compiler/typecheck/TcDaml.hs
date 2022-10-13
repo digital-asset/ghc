@@ -101,7 +101,7 @@ displayError info TriedExercise { target = target, result = result, choice = cho
   | otherwise
   = vcat [ text "Tried to exercise a choice" <+> ppr choice <+> text "on" <+> variantName info target <+> text "but no choice of that name exists on" <+> variantName info target
          , printListWithHeader
-              mempty
+              empty
               (text "Choice" <+> ppr choice <+> text "belongs only to the following types")
               (map (variantName info) (choiceImplementor info choice))
          ]
@@ -117,7 +117,7 @@ displayError info TriedImplementMethod { target = target, method = method, resul
     Nothing ->
       vcat [ text "Tried to implement method" <+> ppr method <> text ", but interface" <+> ppr target <+> text "does not have a method with that name."
            , printListWithHeader
-               mempty
+               empty
                (text "Method" <+> ppr method <+> text "is only a method on the following interfaces:")
                (map (ppr . fst) ifaces)
            ]
