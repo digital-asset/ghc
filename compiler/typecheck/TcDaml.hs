@@ -101,7 +101,7 @@ displayError info TriedExercise { target = target, result = result, choice = cho
   | otherwise
   = vcat [ text "Tried to exercise a choice" <+> ppr choice <+> text "on" <+> variantName info target <+> text "but no choice of that name exists on" <+> variantName info target
          , printListWithHeader
-              (text "Choice" <+> ppr choice <+> text "does not belong to any known templates or interfaces.")
+              mempty
               (text "Choice" <+> ppr choice <+> text "belongs only to the following types")
               (map (variantName info) (choiceImplementor info choice))
          ]
@@ -112,16 +112,15 @@ displayError info TriedImplementMethod { target = target, method = method, resul
     Just expectedResult
       | not (eqType expectedResult result)
       -> text "Implementation of method" <+> ppr method <+> text "on interface" <+> ppr target <+> text "should return" <+> ppr expectedResult <+> text "but instead returns " <+> ppr result
-    Nothing
-      | not (null ifaces)
-      -> vcat [ text "Tried to implement method" <+> ppr method <> text ", but interface" <+> ppr target <+> text "does not have a method with that name."
-              , printListWithHeader
-                  (text "Method" <+> ppr method <+> text "does not belong to any known interfaces.")
-                  (text "Method" <+> ppr method <+> text "is only a method on the following interfaces:")
-                  (map ppr ifaces)
-              ]
-    _ ->
-      text "Tried to implement method" <+> ppr method <> text ", but interface" <+> ppr target <+> text "does not have a method with that name."
+      | otherwise
+      -> text "Implementation of method" <+> ppr method <+> text "on interface" <+> ppr target <+> text "failed."
+    Nothing ->
+      vcat [ text "Tried to implement method" <+> ppr method <> text ", but interface" <+> ppr target <+> text "does not have a method with that name."
+           , printListWithHeader
+               mempty
+               (text "Method" <+> ppr method <+> text "is only a method on the following interfaces:")
+               (map (ppr . fst) ifaces)
+           ]
 
 data DamlVariant = Template Name | Interface Name | Choice Name
 
