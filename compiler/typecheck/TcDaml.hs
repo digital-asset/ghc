@@ -47,8 +47,7 @@ customDamlErrors ct = do
   let gblEnvDamlInfo = extractDamlInfoFromGblEnv $ env_gbl env
   let epsDamlInfo = extractDamlInfoFromEPS eps
   let info = dedupe (gblEnvDamlInfo `mappend` epsDamlInfo)
-  traceTc "TcGblEnv info" (ppr gblEnvDamlInfo)
-  traceTc "TcGblEnv info" (ppr epsDamlInfo)
+  traceTc "DamlInfo extracted" (ppr info)
   pure $ fmap (displayError info) (customDamlError ct)
 
 data DamlError
