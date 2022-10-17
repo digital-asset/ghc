@@ -24,6 +24,8 @@ import IfaceSyn
 import HscTypes
 import Var
 import UniqFM
+import Util
+import qualified Data.Map as M
 
 import Data.Maybe
 import Data.List
@@ -44,7 +46,7 @@ customDamlErrors ct = do
   eps <- readMutVar $ hsc_EPS $ env_top env
   let gblEnvDamlInfo = extractDamlInfoFromGblEnv $ env_gbl env
   let epsDamlInfo = extractDamlInfoFromEPS eps
-  let info = gblEnvDamlInfo `mappend` epsDamlInfo
+  let info = dedupe (gblEnvDamlInfo `mappend` epsDamlInfo)
   traceTc "TcGblEnv info" (ppr gblEnvDamlInfo)
   traceTc "TcGblEnv info" (ppr epsDamlInfo)
   pure $ fmap (displayError info) (customDamlError ct)
@@ -132,6 +134,19 @@ data DamlInfo = DamlInfo
   , implementations :: [(Name, Name)]
   , views :: [(Name, Type)]
   }
+
+dedupe :: DamlInfo -> DamlInfo
+dedupe (DamlInfo x0 x1 x2 x3 x4 x5) =
+  DamlInfo
+    (nubSort x0)
+    (nubSort x1)
+    (nubSort x2)
+    (nubSortBy (\(mName, (cName, type_)) -> (mName, cName)) x3)
+    (nubSort x4)
+    (nubSortBy fst x5)
+  where
+    nubSortBy :: Ord b => (a -> b) -> [a] -> [a]
+    nubSortBy f xs = M.elems $ M.fromList $ map (\x -> (f x, x)) xs
 
 isTemplate info name = name `elem` templates info
 isInterface info name = name `elem` interfaces info
