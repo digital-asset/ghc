@@ -157,12 +157,13 @@ instance Semigroup DamlInfo where
 instance Outputable DamlInfo where
   ppr info =
     hang (text "DamlInfo {") 2 $
-    vcat [ text "templates:" <+> ppr (templates info)
-         , text "interfaces:" <+> ppr (interfaces info)
-         , text "choices:" <+> ppr (choices info)
-         , text "methods:" <+> ppr (methods info)
-         , text "implementations:" <+> ppr (implementations info)
-         , text "views:" <+> ppr (views info)
+    vcat [ text "templates =" <+> ppr (templates info)
+         , text "interfaces =" <+> ppr (interfaces info)
+         , text "choices =" <+> ppr (choices info)
+         , text "methods =" <+> ppr (methods info)
+         , text "implementations =" <+> ppr (implementations info)
+         , text "views =" <+> ppr (views info)
+         , text "}"
          ]
 
 getEnvDaml :: TcM DamlInfo
