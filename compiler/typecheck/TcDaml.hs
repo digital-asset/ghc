@@ -247,13 +247,6 @@ extractDamlInfoFromTyThing tything =
       (interfaceTyCon, []) <- splitTyConApp_maybe interfaceType
       pure (tyConName templateTyCon, tyConName interfaceTyCon)
 
-    isMatchingLoneConstraint :: String -> IfaceType -> Bool
-    isMatchingLoneConstraint targetName type_
-      | IfaceTyConApp (IfaceTyCon tyConName _info) IA_Nil <- type_
-      = similarName targetName tyConName
-      | otherwise
-      = False
-
 extractDamlInfoFromClsInst :: ClsInst -> DamlInfo
 extractDamlInfoFromClsInst inst =
   mempty
