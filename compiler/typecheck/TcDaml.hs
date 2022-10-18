@@ -1,3 +1,4 @@
+{-# LANGUAGE NamedFieldPuns #-}
 module TcDaml where
 
 import GhcPrelude
@@ -58,10 +59,10 @@ customDamlError ct
   = Just $ TriedView { target = tyConName target, result = viewType }
   | TyConApp con [TyConApp target [], TyConApp choice [], result] <- ctev_pred (ctEvidence ct)
   , check ["DA.Internal.Desugar", "DA.Internal.Template.Functions"] "HasExercise" con
-  = Just $ TriedExercise { target = tyConName target, choice = tyConName choice, result = result }
+  = Just $ TriedExercise { target = tyConName target, choice = tyConName choice, result }
   | TyConApp con [TyConApp target [], LitTy (StrTyLit methodName), result] <- ctev_pred (ctEvidence ct)
   , check ["DA.Internal.Desugar"] "HasMethod" con
-  = Just $ TriedImplementMethod { target = tyConName target, method = methodName, result = result }
+  = Just $ TriedImplementMethod { target = tyConName target, method = methodName, result }
   | otherwise
   = Nothing
 
@@ -70,7 +71,7 @@ printListWithHeader emptyMsg _ [] = emptyMsg
 printListWithHeader _ nonEmptyMsg outs = nonEmptyMsg <+> hcat (punctuate (text ", ") outs)
 
 displayError :: DamlInfo -> DamlError -> Maybe SDoc
-displayError info TriedView { target = target, result = result }
+displayError info TriedView { target, result }
   | isTemplate info target
   = pure
   $ vcat [ text "Tried to get an interface view of type" <+> pprq result <+> text "from template" <+> pprq target
@@ -90,7 +91,7 @@ displayError info TriedView { target = target, result = result }
   | otherwise
   = pure
   $ text "Tried to get an interface view of type" <+> pprq result <+> text "from type" <+> pprq target <+> text "which is neither an interface nor a template"
-displayError info TriedExercise { target = target, result = result, choice = choice }
+displayError info TriedExercise { target, result, choice }
   | [implementor] <- choiceImplementor info choice
   , isInterface info implementor
   , implements info target implementor
@@ -108,7 +109,7 @@ displayError info TriedExercise { target = target, result = result, choice = cho
               (text "Choice" <+> pprq choice <+> text "belongs only to the following types:")
               (map (variantName info) (choiceImplementor info choice))
          ]
-displayError info TriedImplementMethod { target = target, method = method, result = result } =
+displayError info TriedImplementMethod { target, method, result } =
   let ifaces = definesMethod info method
   in
   case target `lookup` ifaces of
