@@ -132,17 +132,30 @@ dedupe (DamlInfo x0 x1 x2 x3 x4 x5) =
     nubSortBy :: Ord b => (a -> b) -> [a] -> [a]
     nubSortBy f xs = M.elems $ M.fromList $ map (\x -> (f x, x)) xs
 
+isTemplate, isInterface :: DamlInfo -> Name -> Bool
 isTemplate info name = name `elem` templates info
 isInterface info name = name `elem` interfaces info
+
+variantName :: DamlInfo -> Name -> SDoc
 variantName info name
   | isTemplate info name = text "template" <+> ppr name
   | isInterface info name = text "interface" <+> ppr name
   | otherwise = text "type" <+> ppr name
+
+allImplementedInterfaces, allImplementingTemplates :: DamlInfo -> Name -> [Name]
 allImplementedInterfaces info name = [iface | (tpl, iface) <- implementations info, name == tpl]
 allImplementingTemplates info name = [tpl | (tpl, iface) <- implementations info, name == iface]
+
+implements :: DamlInfo -> Name -> Name -> Bool
 implements info tpl iface = (tpl, iface) `elem` implementations info
+
+choiceImplementor :: DamlInfo -> Name -> [Name]
 choiceImplementor info name = [tplOrIface | (tplOrIface, choice) <- choices info, name == choice]
+
+interfaceView :: DamlInfo -> Name -> Maybe Type
 interfaceView info name = lookup name (views info)
+
+definesMethod :: DamlInfo -> FastString -> [(Name, Type)]
 definesMethod info method = [nameAndType | (m, nameAndType) <- methods info, m == method]
 
 instance Monoid DamlInfo where
