@@ -42,12 +42,7 @@ check modules name namedThing
 
 customDamlErrors :: Ct -> TcM (Maybe SDoc)
 customDamlErrors ct = do
-  env <- getEnv
-  eps <- readMutVar $ hsc_EPS $ env_top env
-  let gblEnvDamlInfo = extractDamlInfoFromGblEnv $ env_gbl env
-  let epsDamlInfo = extractDamlInfoFromEPS eps
-  let info = dedupe (gblEnvDamlInfo `mappend` epsDamlInfo)
-  traceTc "DamlInfo extracted" (ppr info)
+  info <- getEnvDaml
   pure $ fmap (displayError info) (customDamlError ct)
 
 data DamlError
@@ -125,15 +120,6 @@ displayError info TriedImplementMethod { target = target, method = method, resul
 
 data DamlVariant = Template Name | Interface Name | Choice Name
 
-data DamlInfo = DamlInfo
-  { templates :: [Name]
-  , interfaces :: [Name]
-  , choices :: [(Name, Name)]
-  , methods :: [(FastString, (Name, Type))]
-  , implementations :: [(Name, Name)]
-  , views :: [(Name, Type)]
-  }
-
 dedupe :: DamlInfo -> DamlInfo
 dedupe (DamlInfo x0 x1 x2 x3 x4 x5) =
   DamlInfo
@@ -177,6 +163,21 @@ instance Outputable DamlInfo where
          , text "implementations:" <+> ppr (implementations info)
          , text "views:" <+> ppr (views info)
          ]
+
+getEnvDaml :: TcM DamlInfo
+getEnvDaml = do
+    env <- getEnv
+    mb_daml <- readMutVar (env_daml env)
+    case mb_daml of
+      Nothing -> do
+        eps <- readMutVar $ hsc_EPS $ env_top env
+        let gblEnvDamlInfo = extractDamlInfoFromGblEnv (env_gbl env)
+        let epsDamlInfo = extractDamlInfoFromEPS eps
+        let new_info = dedupe (gblEnvDamlInfo `mappend` epsDamlInfo)
+        traceTc "DamlInfo extracted" (ppr new_info)
+        writeMutVar (env_daml env) (Just new_info)
+        pure new_info
+      Just info -> pure info
 
 extractDamlInfoFromGblEnv :: TcGblEnv -> DamlInfo
 extractDamlInfoFromGblEnv env =

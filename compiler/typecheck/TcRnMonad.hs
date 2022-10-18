@@ -412,11 +412,13 @@ initTcRnIf :: Char              -- Tag for unique supply
 initTcRnIf uniq_tag hsc_env gbl_env lcl_env thing_inside
    = do { us     <- mkSplitUniqSupply uniq_tag ;
         ; us_var <- newIORef us ;
+        ; daml_var <- newIORef Nothing
 
         ; let { env = Env { env_top = hsc_env,
                             env_us  = us_var,
                             env_gbl = gbl_env,
-                            env_lcl = lcl_env} }
+                            env_lcl = lcl_env,
+                            env_daml = daml_var} }
 
         ; runIOEnv env thing_inside
         }

@@ -28,6 +28,7 @@ module TcRnTypes(
         TcGblEnv(..), TcLclEnv(..),
         IfGblEnv(..), IfLclEnv(..),
         tcVisibleOrphanMods,
+        DamlInfo(..),
 
         -- Frontend types (shouldn't really be here)
         FrontendResult(..),
@@ -285,7 +286,12 @@ data Env gbl lcl
         env_gbl  :: gbl,     -- Info about things defined at the top level
                              -- of the module being compiled
 
-        env_lcl  :: lcl      -- Nested stuff; changes as we go into
+        env_lcl  :: lcl,     -- Nested stuff; changes as we go into
+
+        env_daml :: !(IORef (Maybe DamlInfo))
+                 -- Extracted info related to DAML
+                 -- `Nothing` when no info has been extracted yet
+                 -- Updated to DamlInfo when necessary
     }
 
 instance ContainsDynFlags (Env gbl lcl) where
@@ -294,6 +300,14 @@ instance ContainsDynFlags (Env gbl lcl) where
 instance ContainsModule gbl => ContainsModule (Env gbl lcl) where
     extractModule env = extractModule (env_gbl env)
 
+data DamlInfo = DamlInfo
+  { templates :: [Name]
+  , interfaces :: [Name]
+  , choices :: [(Name, Name)]
+  , methods :: [(FastString, (Name, Type))]
+  , implementations :: [(Name, Name)]
+  , views :: [(Name, Type)]
+  }
 
 {-
 ************************************************************************
