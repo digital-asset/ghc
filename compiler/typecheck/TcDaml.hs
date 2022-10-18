@@ -119,8 +119,6 @@ displayError info TriedImplementMethod { target = target, method = method, resul
                (map (ppr . fst) ifaces)
            ]
 
-data DamlVariant = Template Name | Interface Name | Choice Name
-
 dedupe :: DamlInfo -> DamlInfo
 dedupe (DamlInfo x0 x1 x2 x3 x4 x5) =
   DamlInfo
