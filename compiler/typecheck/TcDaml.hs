@@ -44,7 +44,7 @@ check modules name namedThing
 customDamlErrors :: Ct -> TcM (Maybe SDoc)
 customDamlErrors ct = do
   info <- getEnvDaml
-  pure $ fmap (displayError info) (customDamlError ct)
+  pure $ displayError info =<< customDamlError ct
 
 data DamlError
   = TriedView { target :: Name, result :: Type }
@@ -69,10 +69,11 @@ printListWithHeader :: SDoc -> SDoc -> [SDoc] -> SDoc
 printListWithHeader emptyMsg _ [] = emptyMsg
 printListWithHeader _ nonEmptyMsg outs = nonEmptyMsg <+> hcat (punctuate (text ", ") outs)
 
-displayError :: DamlInfo -> DamlError -> SDoc
+displayError :: DamlInfo -> DamlError -> Maybe SDoc
 displayError info TriedView { target = target, result = result }
   | isTemplate info target
-  = vcat [ text "Tried to get an interface view of type" <+> ppr result <+> text "from template" <+> ppr target
+  = pure
+  $ vcat [ text "Tried to get an interface view of type" <+> ppr result <+> text "from template" <+> ppr target
          , text "Cast template" <+> ppr target <+> text "to an interface before getting its view."
          , printListWithHeader
               (text "Template" <+> ppr target <+> text "does not have any known interface implementations.")
@@ -81,22 +82,27 @@ displayError info TriedView { target = target, result = result }
          ]
   | isInterface info target
   , Just view <- interfaceView info target
-  = text "Tried to get an interface view of type" <+> ppr result <+> text "from interface" <+> ppr target <+> text "but that interface's view is of type" <+> ppr view
+  = pure
+  $ text "Tried to get an interface view of type" <+> ppr result <+> text "from interface" <+> ppr target <+> text "but that interface's view is of type" <+> ppr view
   | isInterface info target
-  = text "Tried to get an interface view of type" <+> ppr result <+> text "from interface" <+> ppr target <+> text "but that interface's view is not of type" <+> ppr result
+  = pure
+  $ text "Tried to get an interface view of type" <+> ppr result <+> text "from interface" <+> ppr target <+> text "but that interface's view is not of type" <+> ppr result
   | otherwise
-  = text "Tried to get an interface view of type" <+> ppr result <+> text "from type" <+> ppr target <+> text "which is neither an interface nor a template"
+  = pure
+  $ text "Tried to get an interface view of type" <+> ppr result <+> text "from type" <+> ppr target <+> text "which is neither an interface nor a template"
 displayError info TriedExercise { target = target, result = result, choice = choice }
   | [implementor] <- choiceImplementor info choice
   , isInterface info implementor
   , implements info target implementor
   , target /= implementor -- since interfaces implement themselves, we ignore if the target is itself
-  = vcat [ text "Tried to exercise a choice" <+> ppr choice <+> text "on" <+> variantName info target
+  = pure
+  $ vcat [ text "Tried to exercise a choice" <+> ppr choice <+> text "on" <+> variantName info target
          , text "This choice" <+> ppr choice <+> text "belongs to" <+> variantName info implementor <+> text "which" <+> ppr target <+> text "implements."
          , text "Cast" <+> variantName info target <+> text "to" <+> variantName info implementor <+> text "before exercising the choice."
          ]
   | otherwise
-  = vcat [ text "Tried to exercise a choice" <+> ppr choice <+> text "on" <+> variantName info target <+> text "but no choice of that name exists on" <+> variantName info target
+  = pure
+  $ vcat [ text "Tried to exercise a choice" <+> ppr choice <+> text "on" <+> variantName info target <+> text "but no choice of that name exists on" <+> variantName info target
          , printListWithHeader
               empty
               (text "Choice" <+> ppr choice <+> text "belongs only to the following types:")
@@ -108,10 +114,11 @@ displayError info TriedImplementMethod { target = target, method = method, resul
   case target `lookup` ifaces of
     Just expectedResult
       | not (eqType expectedResult result)
-      -> text "Implementation of method" <+> ppr method <+> text "on interface" <+> ppr target <+> text "should return" <+> ppr expectedResult <+> text "but instead returns " <+> ppr result
+      -> pure $ text "Implementation of method" <+> ppr method <+> text "on interface" <+> ppr target <+> text "should return" <+> ppr expectedResult <+> text "but instead returns " <+> ppr result
       | otherwise
-      -> text "Implementation of method" <+> ppr method <+> text "on interface" <+> ppr target <+> text "failed."
+      -> Nothing
     Nothing ->
+      pure $
       vcat [ text "Tried to implement method" <+> ppr method <> text ", but interface" <+> ppr target <+> text "does not have a method with that name."
            , printListWithHeader
                empty
