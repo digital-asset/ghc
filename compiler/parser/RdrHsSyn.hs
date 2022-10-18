@@ -2955,15 +2955,20 @@ mkInterfaceMethodDecl ifaceTy methodName methodType mbDocString =
         name = occNameString $ occName rdrName
         L _ rdrName = methodName
 
-mkHasInterfaceViewDecl :: Located RdrName -> Maybe (LHsType GhcPs) -> [LHsDecl GhcPs]
-mkHasInterfaceViewDecl _ Nothing = []
-mkHasInterfaceViewDecl iface (Just viewType) = pure $
-  L (getLoc iface) $ unLoc $
-    instDecl $ classInstDecl
-      (hasInterfaceViewClass
-        `mkAppTy` rdrNameToType iface
-        `mkAppTy` viewType)
-      (unitBag (mkPrimMethod "_view" "EViewInterface"))
+mkHasInterfaceViewInstances :: Located RdrName -> Maybe (LHsType GhcPs) -> [LHsDecl GhcPs]
+mkHasInterfaceViewInstances _ Nothing = []
+mkHasInterfaceViewInstances iface (Just viewType) =
+  [ mkInstance "HasInterfaceView" $ mkPrimMethod "_view" "EViewInterface"
+  , mkInstance "HasFromAnyView" $ mkPrimMethod "_fromAnyView" "EFromAnyView"
+  , mkInstance "HasToAnyView" $ mkPrimMethod "_toAnyView" "EToAnyView"
+  ]
+  where
+    mkInstance name method =
+      L (getLoc iface) $ unLoc $
+        instDecl $
+          classInstDecl
+            (mkQualClass name `mkAppTy` rdrNameToType iface `mkAppTy` viewType)
+            (unitBag method)
 
 mkInterfaceInstances :: LHsType GhcPs -> [LHsDecl GhcPs]
 mkInterfaceInstances interfaceType =
@@ -3784,9 +3789,6 @@ requiresType = mkQualType "RequiresT"
 requiresCon :: LHsExpr GhcPs
 requiresCon = mkQualVar $ mkDataOcc "RequiresT"
 
-hasInterfaceViewClass :: LHsType GhcPs
-hasInterfaceViewClass = mkQualType "HasInterfaceView"
-
 interfaceViewType :: LHsType GhcPs
 interfaceViewType = mkQualType "InterfaceView"
 
@@ -3906,7 +3908,7 @@ mkInterfaceDecl tycon (L requiresLoc requires) decls = do
             ]
 
         viewTypeDecls :: [LHsDecl GhcPs]
-        viewTypeDecls = mkHasInterfaceViewDecl tycon viViewType
+        viewTypeDecls = mkHasInterfaceViewInstances tycon viViewType
 
     choiceTys <- concat <$> sequence
             [ mkChoiceDataDecls $ interfaceChoiceToCombinedChoiceData choiceSig choiceBody
