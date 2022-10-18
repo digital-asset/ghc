@@ -73,39 +73,39 @@ displayError :: DamlInfo -> DamlError -> Maybe SDoc
 displayError info TriedView { target = target, result = result }
   | isTemplate info target
   = pure
-  $ vcat [ text "Tried to get an interface view of type" <+> ppr result <+> text "from template" <+> ppr target
-         , text "Cast template" <+> ppr target <+> text "to an interface before getting its view."
+  $ vcat [ text "Tried to get an interface view of type" <+> pprq result <+> text "from template" <+> pprq target
+         , text "Cast template" <+> pprq target <+> text "to an interface before getting its view."
          , printListWithHeader
-              (text "Template" <+> ppr target <+> text "does not have any known interface implementations.")
-              (text "Template" <+> ppr target <+> text "has the following interfaces:")
-              (map ppr (allImplementedInterfaces info target))
+              (text "Template" <+> pprq target <+> text "does not have any known interface implementations.")
+              (text "Template" <+> pprq target <+> text "has the following interfaces:")
+              (map pprq (allImplementedInterfaces info target))
          ]
   | isInterface info target
   , Just view <- interfaceView info target
   = pure
-  $ text "Tried to get an interface view of type" <+> ppr result <+> text "from interface" <+> ppr target <+> text "but that interface's view is of type" <+> ppr view
+  $ text "Tried to get an interface view of type" <+> pprq result <+> text "from interface" <+> pprq target <+> text "but that interface's view is of type" <+> pprq view
   | isInterface info target
   = pure
-  $ text "Tried to get an interface view of type" <+> ppr result <+> text "from interface" <+> ppr target <+> text "but that interface's view is not of type" <+> ppr result
+  $ text "Tried to get an interface view of type" <+> pprq result <+> text "from interface" <+> pprq target <+> text "but that interface's view is not of type" <+> pprq result
   | otherwise
   = pure
-  $ text "Tried to get an interface view of type" <+> ppr result <+> text "from type" <+> ppr target <+> text "which is neither an interface nor a template"
+  $ text "Tried to get an interface view of type" <+> pprq result <+> text "from type" <+> pprq target <+> text "which is neither an interface nor a template"
 displayError info TriedExercise { target = target, result = result, choice = choice }
   | [implementor] <- choiceImplementor info choice
   , isInterface info implementor
   , implements info target implementor
   , target /= implementor -- since interfaces implement themselves, we ignore if the target is itself
   = pure
-  $ vcat [ text "Tried to exercise a choice" <+> ppr choice <+> text "on" <+> variantName info target
-         , text "This choice" <+> ppr choice <+> text "belongs to" <+> variantName info implementor <+> text "which" <+> ppr target <+> text "implements."
+  $ vcat [ text "Tried to exercise a choice" <+> pprq choice <+> text "on" <+> variantName info target
+         , text "This choice" <+> pprq choice <+> text "belongs to" <+> variantName info implementor <+> text "which" <+> pprq target <+> text "implements."
          , text "Cast" <+> variantName info target <+> text "to" <+> variantName info implementor <+> text "before exercising the choice."
          ]
   | otherwise
   = pure
-  $ vcat [ text "Tried to exercise a choice" <+> ppr choice <+> text "on" <+> variantName info target <+> text "but no choice of that name exists on" <+> variantName info target
+  $ vcat [ text "Tried to exercise a choice" <+> pprq choice <+> text "on" <+> variantName info target <+> text "but no choice of that name exists on" <+> variantName info target
          , printListWithHeader
               empty
-              (text "Choice" <+> ppr choice <+> text "belongs only to the following types:")
+              (text "Choice" <+> pprq choice <+> text "belongs only to the following types:")
               (map (variantName info) (choiceImplementor info choice))
          ]
 displayError info TriedImplementMethod { target = target, method = method, result = result } =
@@ -114,16 +114,16 @@ displayError info TriedImplementMethod { target = target, method = method, resul
   case target `lookup` ifaces of
     Just expectedResult
       | not (eqType expectedResult result)
-      -> pure $ text "Implementation of method" <+> ppr method <+> text "on interface" <+> ppr target <+> text "should return" <+> ppr expectedResult <+> text "but instead returns " <+> ppr result
+      -> pure $ text "Implementation of method" <+> pprq method <+> text "on interface" <+> pprq target <+> text "should return" <+> pprq expectedResult <+> text "but instead returns " <+> pprq result
       | otherwise
       -> Nothing
     Nothing ->
       pure $
-      vcat [ text "Tried to implement method" <+> ppr method <> text ", but interface" <+> ppr target <+> text "does not have a method with that name."
+      vcat [ text "Tried to implement method" <+> pprq method <> text ", but interface" <+> pprq target <+> text "does not have a method with that name."
            , printListWithHeader
                empty
-               (text "Method" <+> ppr method <+> text "is only a method on the following interfaces:")
-               (map (ppr . fst) ifaces)
+               (text "Method" <+> pprq method <+> text "is only a method on the following interfaces:")
+               (map (pprq . fst) ifaces)
            ]
 
 dedupe :: DamlInfo -> DamlInfo
@@ -139,15 +139,18 @@ dedupe (DamlInfo x0 x1 x2 x3 x4 x5) =
     nubSortBy :: Ord b => (a -> b) -> [a] -> [a]
     nubSortBy f xs = M.elems $ M.fromList $ map (\x -> (f x, x)) xs
 
+pprq :: Outputable a => a -> SDoc
+pprq = quotes . ppr
+
 isTemplate, isInterface :: DamlInfo -> Name -> Bool
 isTemplate info name = name `elem` templates info
 isInterface info name = name `elem` interfaces info
 
 variantName :: DamlInfo -> Name -> SDoc
 variantName info name
-  | isTemplate info name = text "template" <+> ppr name
-  | isInterface info name = text "interface" <+> ppr name
-  | otherwise = text "type" <+> ppr name
+  | isTemplate info name = text "template" <+> pprq name
+  | isInterface info name = text "interface" <+> pprq name
+  | otherwise = text "type" <+> pprq name
 
 allImplementedInterfaces, allImplementingTemplates :: DamlInfo -> Name -> [Name]
 allImplementedInterfaces info name = [iface | (tpl, iface) <- implementations info, name == tpl]
