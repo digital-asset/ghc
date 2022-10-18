@@ -93,13 +93,13 @@ displayError info TriedExercise { target = target, result = result, choice = cho
   , target /= implementor -- since interfaces implement themselves, we ignore if the target is itself
   = vcat [ text "Tried to exercise a choice" <+> ppr choice <+> text "on" <+> variantName info target
          , text "This choice" <+> ppr choice <+> text "belongs to" <+> variantName info implementor <+> text "which" <+> ppr target <+> text "implements."
-         , text "Cast " <+> variantName info target <+> text "to" <+> variantName info implementor <+> text "before exercising the choice."
+         , text "Cast" <+> variantName info target <+> text "to" <+> variantName info implementor <+> text "before exercising the choice."
          ]
   | otherwise
   = vcat [ text "Tried to exercise a choice" <+> ppr choice <+> text "on" <+> variantName info target <+> text "but no choice of that name exists on" <+> variantName info target
          , printListWithHeader
               empty
-              (text "Choice" <+> ppr choice <+> text "belongs only to the following types")
+              (text "Choice" <+> ppr choice <+> text "belongs only to the following types:")
               (map (variantName info) (choiceImplementor info choice))
          ]
 displayError info TriedImplementMethod { target = target, method = method, result = result } =
