@@ -65,7 +65,7 @@ module   RdrHsSyn (
         ValidInterfaceInstanceMethodDecl(..),
         ghcTypesDamlInterface,
 
-        -- DAML name utilies
+        -- DAML name utilities
         qualifyDesugar,
 
         -- Stuff to do with Foreign declarations
