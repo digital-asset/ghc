@@ -97,7 +97,7 @@ displayError info TriedExercise { target = target, result = result, choice = cho
   , target /= implementor -- since interfaces implement themselves, we ignore if the target is itself
   = pure
   $ vcat [ text "Tried to exercise a choice" <+> pprq choice <+> text "on" <+> variantName info target
-         , text "This choice" <+> pprq choice <+> text "belongs to" <+> variantName info implementor <+> text "which" <+> pprq target <+> text "implements."
+         , text "The choice" <+> pprq choice <+> text "belongs to" <+> variantName info implementor <+> text "which" <+> pprq target <+> text "implements."
          , text "Cast" <+> variantName info target <+> text "to" <+> variantName info implementor <+> text "before exercising the choice."
          ]
   | otherwise
