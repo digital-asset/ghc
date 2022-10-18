@@ -30,6 +30,7 @@ import qualified Data.Map as M
 import Data.Maybe
 import Data.List
 import qualified Prelude as P ((<>))
+import Control.Monad
 
 check :: NamedThing a => [String] -> String -> a -> Bool
 check modules name namedThing
@@ -214,8 +215,7 @@ extractDamlInfoFromTyThing tything =
       | isAlgTyCon tycon
       , let isMatchingLoneConstraint type_
               | Just (loneConstraint, []) <- splitTyConApp_maybe type_
-              , similarName targetName (tyConName loneConstraint)
-              = True
+              = similarName targetName (tyConName loneConstraint)
               | otherwise
               = False
       , any isMatchingLoneConstraint (tyConStupidTheta tycon)
@@ -224,40 +224,33 @@ extractDamlInfoFromTyThing tything =
       = Nothing
 
     matchChoice :: Id -> Maybe (Name, Name)
-    matchChoice identifier
-      | TyConApp headTyCon [contractType, choiceType, returnType] <- varType identifier
-      , similarName "HasExercise" (tyConName headTyCon)
-      , Just (contractTyCon, []) <- splitTyConApp_maybe contractType
-      , Just (choiceTyCon, []) <- splitTyConApp_maybe choiceType
-      = Just (tyConName contractTyCon, tyConName choiceTyCon)
-      | otherwise
-      = Nothing
+    matchChoice identifier = do
+      TyConApp headTyCon [contractType, choiceType, returnType] <- pure (varType identifier)
+      guard $ similarName "HasExercise" (tyConName headTyCon)
+      (contractTyCon, []) <- splitTyConApp_maybe contractType
+      (choiceTyCon, []) <- splitTyConApp_maybe choiceType
+      pure (tyConName contractTyCon, tyConName choiceTyCon)
 
     matchMethod :: Id -> Maybe (FastString, (Name, Type))
-    matchMethod identifier
-      | TyConApp headTyCon [contractType, methodNameType, returnType] <- varType identifier
-      , similarName "HasMethod" (tyConName headTyCon)
-      , LitTy (StrTyLit methodName) <- methodNameType
-      , Just (contractTyCon, []) <- splitTyConApp_maybe contractType
-      = Just (methodName, (tyConName contractTyCon, returnType))
-      | otherwise
-      = Nothing
+    matchMethod identifier = do
+      TyConApp headTyCon [contractType, methodNameType, returnType] <- pure (varType identifier)
+      guard $ similarName "HasMethod" (tyConName headTyCon)
+      LitTy (StrTyLit methodName) <- pure methodNameType
+      (contractTyCon, []) <- splitTyConApp_maybe contractType
+      pure (methodName, (tyConName contractTyCon, returnType))
 
     matchImplements :: Id -> Maybe (Name, Name)
-    matchImplements identifier
-      | TyConApp headTyCon [templateType, interfaceType] <- varType identifier
-      , similarName "HasToInterface" (tyConName headTyCon)
-      , Just (templateTyCon, []) <- splitTyConApp_maybe templateType
-      , Just (interfaceTyCon, []) <- splitTyConApp_maybe interfaceType
-      = Just (tyConName templateTyCon, tyConName interfaceTyCon)
-      | otherwise
-      = Nothing
+    matchImplements identifier = do
+      TyConApp headTyCon [templateType, interfaceType] <- pure (varType identifier)
+      guard $ similarName "HasToInterface" (tyConName headTyCon)
+      (templateTyCon, []) <- splitTyConApp_maybe templateType
+      (interfaceTyCon, []) <- splitTyConApp_maybe interfaceType
+      pure (tyConName templateTyCon, tyConName interfaceTyCon)
 
     isMatchingLoneConstraint :: String -> IfaceType -> Bool
     isMatchingLoneConstraint targetName type_
       | IfaceTyConApp (IfaceTyCon tyConName _info) IA_Nil <- type_
-      , similarName targetName tyConName
-      = True
+      = similarName targetName tyConName
       | otherwise
       = False
 
@@ -271,50 +264,40 @@ extractDamlInfoFromClsInst inst =
     }
   where
     matchChoice :: ClsInst -> Maybe (Name, Name)
-    matchChoice clsInst
-      | Just [contractType, choiceType, returnType] <-
+    matchChoice clsInst = do
+      [contractType, choiceType, returnType] <-
           clsInstMatch "HasExercise" clsInst
-      , Just (contractTyCon, []) <- splitTyConApp_maybe contractType
-      , Just (choiceTyCon, []) <- splitTyConApp_maybe choiceType
-      = Just (tyConName contractTyCon, tyConName choiceTyCon)
-      | otherwise
-      = Nothing
+      (contractTyCon, []) <- splitTyConApp_maybe contractType
+      (choiceTyCon, []) <- splitTyConApp_maybe choiceType
+      pure (tyConName contractTyCon, tyConName choiceTyCon)
 
     matchMethod :: ClsInst -> Maybe (FastString, (Name, Type))
-    matchMethod clsInst
-      | Just [contractType, methodNameType, returnType] <-
+    matchMethod clsInst = do
+      [contractType, methodNameType, returnType] <-
           clsInstMatch "HasMethod" clsInst
-      , Just (StrTyLit methodName) <- isLitTy methodNameType
-      , Just (contractTyCon, []) <- splitTyConApp_maybe contractType
-      = Just (methodName, (tyConName contractTyCon, returnType))
-      | otherwise
-      = Nothing
+      (StrTyLit methodName) <- isLitTy methodNameType
+      (contractTyCon, []) <- splitTyConApp_maybe contractType
+      pure (methodName, (tyConName contractTyCon, returnType))
 
     matchImplements :: ClsInst -> Maybe (Name, Name)
-    matchImplements clsInst
-      | Just [templateType, interfaceType] <-
+    matchImplements clsInst = do
+      [templateType, interfaceType] <-
           clsInstMatch "HasToInterface" clsInst
-      , Just (templateTyCon, []) <- splitTyConApp_maybe templateType
-      , Just (interfaceTyCon, []) <- splitTyConApp_maybe interfaceType
-      = Just (tyConName templateTyCon, tyConName interfaceTyCon)
-      | otherwise
-      = Nothing
+      (templateTyCon, []) <- splitTyConApp_maybe templateType
+      (interfaceTyCon, []) <- splitTyConApp_maybe interfaceType
+      pure (tyConName templateTyCon, tyConName interfaceTyCon)
 
     matchView :: ClsInst -> Maybe (Name, Type)
-    matchView clsInst
-      | Just [ifaceType, viewType] <-
+    matchView clsInst = do
+      [ifaceType, viewType] <-
           clsInstMatch "HasInterfaceView" clsInst
-      , Just (ifaceTyCon, []) <- splitTyConApp_maybe ifaceType
-      = Just (tyConName ifaceTyCon, viewType)
-      | otherwise
-      = Nothing
+      (ifaceTyCon, []) <- splitTyConApp_maybe ifaceType
+      pure (tyConName ifaceTyCon, viewType)
 
     clsInstMatch :: String -> ClsInst -> Maybe [Type]
-    clsInstMatch targetName clsInst
-      | similarName targetName (is_cls_nm clsInst)
-      = Just $ is_tys clsInst
-      | otherwise
-      = Nothing
+    clsInstMatch targetName clsInst = do
+      guard $ similarName targetName (is_cls_nm clsInst)
+      pure $ is_tys clsInst
 
 similarName :: String -> Name -> Bool
 similarName target name = occNameString (nameOccName name) == target
