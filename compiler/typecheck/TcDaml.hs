@@ -216,12 +216,6 @@ getEnvDaml = do
 extractDamlInfoFromTyThing :: TyThing -> DamlInfo
 extractDamlInfoFromTyThing tything =
   case tything of
-    AnId id ->
-      mempty
-        { methods = mapMaybe matchMethod [id]
-        , implementations = mapMaybe matchImplements [id]
-        , choices = mapMaybe matchChoice [id]
-        }
     ATyCon tycon ->
       mempty
         { templates = mapMaybe matchTemplate [tycon]
@@ -245,30 +239,6 @@ extractDamlInfoFromTyThing tything =
       = Just $ tyConName tycon
       | otherwise
       = Nothing
-
-    matchChoice :: Id -> Maybe (Name, Name)
-    matchChoice identifier = do
-      TyConApp headTyCon [contractType, choiceType, returnType] <- pure (varType identifier)
-      guard $ similarName "HasExercise" (tyConName headTyCon)
-      (contractTyCon, []) <- splitTyConApp_maybe contractType
-      (choiceTyCon, []) <- splitTyConApp_maybe choiceType
-      pure (tyConName contractTyCon, tyConName choiceTyCon)
-
-    matchMethod :: Id -> Maybe (FastString, (Name, Type))
-    matchMethod identifier = do
-      TyConApp headTyCon [contractType, methodNameType, returnType] <- pure (varType identifier)
-      guard $ similarName "HasMethod" (tyConName headTyCon)
-      LitTy (StrTyLit methodName) <- pure methodNameType
-      (contractTyCon, []) <- splitTyConApp_maybe contractType
-      pure (methodName, (tyConName contractTyCon, returnType))
-
-    matchImplements :: Id -> Maybe (Name, Name)
-    matchImplements identifier = do
-      TyConApp headTyCon [templateType, interfaceType] <- pure (varType identifier)
-      guard $ similarName "HasToInterface" (tyConName headTyCon)
-      (templateTyCon, []) <- splitTyConApp_maybe templateType
-      (interfaceTyCon, []) <- splitTyConApp_maybe interfaceType
-      pure (tyConName templateTyCon, tyConName interfaceTyCon)
 
 extractDamlInfoFromClsInst :: ClsInst -> DamlInfo
 extractDamlInfoFromClsInst inst =
