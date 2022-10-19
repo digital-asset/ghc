@@ -32,6 +32,7 @@ import Data.Maybe
 import Data.List
 import qualified Prelude as P ((<>))
 import Control.Monad
+import Data.Foldable (fold)
 
 check :: NamedThing a => [String] -> String -> a -> Bool
 check modules name namedThing
@@ -190,28 +191,27 @@ instance Outputable DamlInfo where
 
 getEnvDaml :: TcM DamlInfo
 getEnvDaml = do
-    env <- getEnv
-    mb_daml <- readMutVar (env_daml env)
-    case mb_daml of
-      Nothing -> do
-        eps <- readMutVar $ hsc_EPS $ env_top env
-        let gblEnvDamlInfo = extractDamlInfoFromGblEnv (env_gbl env)
-        let epsDamlInfo = extractDamlInfoFromEPS eps
-        let new_info = dedupe (gblEnvDamlInfo `mappend` epsDamlInfo)
-        traceTc "DamlInfo extracted" (ppr new_info)
-        writeMutVar (env_daml env) (Just new_info)
-        pure new_info
-      Just info -> pure info
+  env <- getEnv
+  mb_daml <- readMutVar (env_daml env)
+  case mb_daml of
+    Nothing -> do
+      eps <- readMutVar $ hsc_EPS $ env_top env
 
-extractDamlInfoFromGblEnv :: TcGblEnv -> DamlInfo
-extractDamlInfoFromGblEnv env =
-  foldMap extractDamlInfoFromTyThing (typeEnvElts $ tcg_type_env env) `mappend`
-    foldMap extractDamlInfoFromClsInst (instEnvElts $ tcg_inst_env env)
+      let tcg_tythings = foldMap extractDamlInfoFromTyThing (typeEnvElts $ tcg_type_env $ env_gbl env)
+      let tcg_insts = foldMap extractDamlInfoFromClsInst (instEnvElts $ tcg_inst_env $ env_gbl env)
+      let eps_tythings = foldMap extractDamlInfoFromTyThing (typeEnvElts $ eps_PTE eps)
+      let eps_insts = foldMap extractDamlInfoFromClsInst (instEnvElts $ eps_inst_env eps)
+      traceTc "DamlInfo tcg_tythings extracted" $ ppr tcg_tythings
+      traceTc "DamlInfo tcg_insts extracted" $ ppr tcg_insts
+      traceTc "DamlInfo eps_tythings extracted" $ ppr eps_tythings
+      traceTc "DamlInfo eps_insts extracted" $ ppr eps_insts
 
-extractDamlInfoFromEPS :: ExternalPackageState -> DamlInfo
-extractDamlInfoFromEPS eps =
-  foldMap extractDamlInfoFromTyThing (typeEnvElts $ eps_PTE eps) `mappend`
-    foldMap extractDamlInfoFromClsInst (instEnvElts $ eps_inst_env eps)
+      let new_info = dedupe (fold [tcg_tythings, tcg_insts, eps_tythings, eps_insts])
+      traceTc "DamlInfo new_info" $ ppr new_info
+
+      writeMutVar (env_daml env) (Just new_info)
+      pure new_info
+    Just info -> pure info
 
 extractDamlInfoFromTyThing :: TyThing -> DamlInfo
 extractDamlInfoFromTyThing tything =
