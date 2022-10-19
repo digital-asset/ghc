@@ -78,7 +78,6 @@ import Data.List
 import Data.List.NonEmpty ( NonEmpty(..) )
 import qualified Data.Set as Set
 
-
 {-
 ************************************************************************
 *                                                                      *
@@ -128,7 +127,11 @@ tcTyAndClassDecls tyclds_s
   -- The code recovers internally, but if anything gave rise to
   -- an error we'd better stop now, to avoid a cascade
   -- Type check each group in dependency order folding the global env
-  = checkNoErrs $ fold_env [] [] tyclds_s
+  = checkNoErrs $ do
+    traceTc "---- tcTyAndClassDecls ---- {" empty
+    ret@(env, _, _) <- fold_env [] [] tyclds_s
+    traceTc "---- end tcTyAndClassDecls ---- }" empty
+    pure ret
   where
     fold_env :: [InstInfo GhcRn]
              -> [DerivInfo]
