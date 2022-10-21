@@ -2412,8 +2412,14 @@ mk_dict_err :: ReportErrCtxt -> (Ct, ClsInstLookupResult)
 mk_dict_err ctxt@(CEC {cec_encl = implics}) (ct, (matches, unifiers, unsafe_overlapped))
   | null matches  -- No matches but perhaps several unifiers
   = do { (ctxt, binds_msg, ct) <- relevantBindings True ctxt ct
-       ; candidate_insts <- get_candidate_instances
-       ; return (ctxt, cannot_resolve_msg ct candidate_insts binds_msg) }
+       ; mb_daml_error <- customDamlErrors ct
+       ; case mb_daml_error of
+           Just msg -> pure (ctxt, msg)
+           Nothing -> do
+             { candidate_insts <- get_candidate_instances
+             ; pure (ctxt, cannot_resolve_msg ct candidate_insts binds_msg)
+             }
+       }
 
   | null unsafe_overlapped   -- Some matches => overlap errors
   = return (ctxt, overlap_msg)
@@ -2452,9 +2458,6 @@ mk_dict_err ctxt@(CEC {cec_encl = implics}) (ct, (matches, unifiers, unsafe_over
 
     cannot_resolve_msg :: Ct -> [ClsInst] -> SDoc -> SDoc
     cannot_resolve_msg ct candidate_insts binds_msg
-      | Just message <- customDamlErrors ct candidate_insts binds_msg
-      = message
-      | otherwise
       = vcat [ no_inst_msg
              , nest 2 extra_note
              , vcat (pp_givens useful_givens)
