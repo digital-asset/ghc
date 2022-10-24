@@ -2967,7 +2967,6 @@ mkHasInterfaceViewInstances _ Nothing = []
 mkHasInterfaceViewInstances iface (Just viewType) =
   [ mkInstance "HasInterfaceView" $ mkPrimMethod "_view" "EViewInterface"
   , mkInstance "HasFromAnyView" $ mkPrimMethod "_fromAnyView" "EFromAnyView"
-  , mkInstance "HasToAnyView" $ mkPrimMethod "_toAnyView" "EToAnyView"
   ]
   where
     mkInstance name method =
