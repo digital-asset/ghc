@@ -3093,7 +3093,7 @@ aexp2   :: { LHsExpr GhcPs }
         -- correct Haskell (you'd have to write '((+ 3), (4 -))')
         -- but the less cluttered version fell out of having texps.
         | '(' texp ')'                  {% ams (sLL $1 $> (HsPar noExt $2)) [mop $1,mcp $3] }
-        | '(' tup_exprs ')'             {% do { e <- mkSumOrTuple Boxed (comb2 $1 $3) (snd $2)
+        | '(' tup_exprs ')'             {% do { e <- mkWrittenSumOrTuple Boxed (comb2 $1 $3) (snd $2)
                                               ; ams (sLL $1 $> e) ((mop $1:fst $2) ++ [mcp $3]) } }
 
         | '(#' texp '#)'                {% ams (sLL $1 $> (ExplicitTuple noExt [cL (gl $2)

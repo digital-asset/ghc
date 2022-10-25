@@ -116,7 +116,7 @@ module   RdrHsSyn (
         warnStarIsType,
         failOpFewArgs,
 
-        SumOrTuple (..), mkSumOrTuple
+        SumOrTuple (..), mkSumOrTuple, userWrittenTuple, mkWrittenSumOrTuple
 
     ) where
 
@@ -2478,13 +2478,12 @@ argPatOfChoice choiceConName _ = asPatRecWild "arg" choiceConName
 --------------------------------------------------------------------------------
 -- Utilities for constructing types and values
 
+userWrittenTuple :: LHsExpr GhcPs
+userWrittenTuple = mkQualVar $ mkVarOcc "userWrittenTuple"
+
 mkTupleExp :: [LHsExpr GhcPs] -> LHsExpr GhcPs
 mkTupleExp [e] = e
-mkTupleExp es =
-  let allowLargeTuples = mkQualVar $ mkVarOcc "codeGenAllowLargeTuples"
-      tupleExp = noLoc $ ExplicitTuple noExt (map (noLoc . Present noExt) es) Boxed
-  in
-  if length es > 5 then mkApp allowLargeTuples tupleExp else tupleExp
+mkTupleExp es = noLoc $ ExplicitTuple noExt (map (noLoc . Present noExt) es) Boxed
 
 mkRdrExp :: RdrName -> LHsExpr GhcPs
 mkRdrExp = noLoc . HsVar noExt . noLoc
@@ -4358,6 +4357,14 @@ hintBangPat span e = do
 data SumOrTuple
   = Sum ConTag Arity (LHsExpr GhcPs)
   | Tuple [LHsTupArg GhcPs]
+
+mkWrittenSumOrTuple :: Boxity -> SrcSpan -> SumOrTuple -> P (HsExpr GhcPs)
+mkWrittenSumOrTuple boxity span sumOrTuple =
+  let wrap = case sumOrTuple of
+               Tuple _ -> fmap (HsApp noExt userWrittenTuple . noLoc)
+               _ -> id
+  in
+  wrap $ mkSumOrTuple boxity span sumOrTuple
 
 mkSumOrTuple :: Boxity -> SrcSpan -> SumOrTuple -> P (HsExpr GhcPs)
 
