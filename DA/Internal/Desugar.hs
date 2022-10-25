@@ -157,6 +157,9 @@ class HasFromInterface t i where
 class HasInterfaceView i v | i -> v where
   _view : i -> v
 
+class HasFromAnyView i v | i -> v where
+  _fromAnyView : proxy i -> Any -> Optional v
+
 type Implements t i =
   ( HasInterfaceTypeRep i
   , HasToInterface t i
