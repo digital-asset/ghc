@@ -116,7 +116,10 @@ module   RdrHsSyn (
         warnStarIsType,
         failOpFewArgs,
 
-        SumOrTuple (..), mkSumOrTuple, userWrittenTuple, mkWrittenSumOrTuple
+        SumOrTuple (..),
+        mkSumOrTuple,
+        userWrittenTuple,
+        mkWrittenSumOrTuple
 
     ) where
 
@@ -1151,6 +1154,10 @@ checkLPat msg e@(dL->L l _) = checkPat msg l e []
 
 checkPat :: SDoc -> SrcSpan -> LHsExpr GhcPs -> [LPat GhcPs]
          -> P (LPat GhcPs)
+checkPat msg span expr args
+  | HsApp _ (unLoc -> HsVar _ (unLoc -> funcVar)) subpat <- unLoc expr
+  , funcVar == userWrittenTupleName
+  = checkPat msg span subpat args
 checkPat _ loc (dL->L l e@(HsVar _ (dL->L _ c))) args
   | isRdrDataCon c = return (cL loc (ConPatIn (cL l c) (PrefixCon args)))
   | not (null args) && patIsRec c =
@@ -2478,8 +2485,11 @@ argPatOfChoice choiceConName _ = asPatRecWild "arg" choiceConName
 --------------------------------------------------------------------------------
 -- Utilities for constructing types and values
 
+userWrittenTupleName :: RdrName
+userWrittenTupleName = qualifyDesugar $ mkVarOcc "userWrittenTuple"
+
 userWrittenTuple :: LHsExpr GhcPs
-userWrittenTuple = mkQualVar $ mkVarOcc "userWrittenTuple"
+userWrittenTuple = noLoc $ HsVar noExt $ noLoc userWrittenTupleName
 
 mkTupleExp :: [LHsExpr GhcPs] -> LHsExpr GhcPs
 mkTupleExp [e] = e
@@ -4359,12 +4369,12 @@ data SumOrTuple
   | Tuple [LHsTupArg GhcPs]
 
 mkWrittenSumOrTuple :: Boxity -> SrcSpan -> SumOrTuple -> P (HsExpr GhcPs)
-mkWrittenSumOrTuple boxity span sumOrTuple =
-  let wrap = case sumOrTuple of
-               Tuple _ -> fmap (HsApp noExt userWrittenTuple . noLoc)
-               _ -> id
-  in
-  wrap $ mkSumOrTuple boxity span sumOrTuple
+mkWrittenSumOrTuple boxity span sumOrTuple = do
+  isDaml <- getBit DamlSyntaxBit
+  result <- mkSumOrTuple boxity span sumOrTuple
+  case sumOrTuple of
+    Tuple _ | isDaml -> pure $ HsApp noExt userWrittenTuple (noLoc result)
+    _ -> pure result
 
 mkSumOrTuple :: Boxity -> SrcSpan -> SumOrTuple -> P (HsExpr GhcPs)
 
