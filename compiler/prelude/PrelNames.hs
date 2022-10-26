@@ -240,6 +240,11 @@ basicKnownKeyNames
         semigroupClassName, sappendName,
         monoidClassName, memptyName, mappendName, mconcatName,
 
+        -- Daml Classes
+        daHasInterfaceViewClassName,
+        daHasExerciseClassName,
+        daHasMethodClassName,
+
         -- The IO type
         -- See Note [TyConRepNames for non-wired-in TyCons]
         ioTyConName, ioDataConName,
@@ -599,6 +604,15 @@ mAIN, rOOT_MAIN :: Module
 mAIN            = mkMainModule_ mAIN_NAME
 rOOT_MAIN       = mkMainModule (fsLit ":Main") -- Root module for initialisation
 
+dA_INTERNAL_INTERFACE :: Module
+dA_INTERNAL_INTERFACE = mkDamlStdlibModule (fsLit "DA.Internal.Interface")
+
+dA_INTERNAL_TEMPLATE_FUNCTIONS :: Module
+dA_INTERNAL_TEMPLATE_FUNCTIONS = mkDamlStdlibModule (fsLit "DA.Internal.Template.Functions")
+
+dA_INTERNAL_DESUGAR :: Module
+dA_INTERNAL_DESUGAR = mkDamlStdlibModule (fsLit "DA.Internal.Desugar")
+
 mkInteractiveModule :: Int -> Module
 -- (mkInteractiveMoudule 9) makes module 'interactive:M9'
 mkInteractiveModule n = mkModule interactiveUnitId (mkModuleName ("Ghci" ++ show n))
@@ -622,6 +636,17 @@ mkBaseModule m = mkModule baseUnitId (mkModuleNameFS m)
 
 mkBaseModule_ :: ModuleName -> Module
 mkBaseModule_ m = mkModule baseUnitId m
+
+mkDamlStdlibModule :: FastString -> Module
+mkDamlStdlibModule_ :: ModuleName -> Module
+
+#ifdef DAML_PRIM
+mkDamlStdlibModule m = mkModule damlStdlibUnitId (mkModuleNameFS m)
+mkDamlStdlibModule_ m = mkModule damlStdlibUnitId m
+#else
+mkDamlStdlibModule _ = mkModule baseUnitId (mkModuleName "DA.Internal.Desugar")
+mkDamlStdlibModule_ _ = mkModule baseUnitId (mkModuleName "DA.Internal.Desugar")
+#endif
 
 mkThisGhcModule :: FastString -> Module
 mkThisGhcModule m = mkModule thisGhcUnitId (mkModuleNameFS m)
@@ -1544,6 +1569,16 @@ fingerprintDataConName :: Name
 fingerprintDataConName =
     dcQual gHC_FINGERPRINT_TYPE (fsLit "Fingerprint") fingerprintDataConKey
 
+-- Daml Classes
+daHasInterfaceViewClassName :: Name
+daHasInterfaceViewClassName = clsQual dA_INTERNAL_INTERFACE (fsLit "HasInterfaceView") daHasInterfaceViewClassKey
+
+daHasExerciseClassName :: Name
+daHasExerciseClassName = clsQual dA_INTERNAL_TEMPLATE_FUNCTIONS (fsLit "HasExercise") daHasExerciseClassKey
+
+daHasMethodClassName :: Name
+daHasMethodClassName = clsQual dA_INTERNAL_DESUGAR (fsLit "HasMethod") daHasMethodClassKey
+
 {-
 ************************************************************************
 *                                                                      *
@@ -2432,6 +2467,12 @@ timesNaturalIdKey       = mkPreludeMiscIdUnique 566
 mkNaturalIdKey          = mkPreludeMiscIdUnique 567
 naturalSDataConKey      = mkPreludeMiscIdUnique 568
 wordToNaturalIdKey      = mkPreludeMiscIdUnique 569
+
+-- Daml
+daHasInterfaceViewClassKey, daHasExerciseClassKey, daHasMethodClassKey :: Unique
+daHasInterfaceViewClassKey = mkDamlStdlibClassUnique 0
+daHasExerciseClassKey = mkDamlStdlibClassUnique 1
+daHasMethodClassKey = mkDamlStdlibClassUnique 2
 
 {-
 ************************************************************************

@@ -50,6 +50,7 @@ module Unique (
         mkPreludeMiscIdUnique, mkPreludeDataConUnique,
         mkPreludeTyConUnique, mkPreludeClassUnique,
         mkCoVarUnique,
+        mkDamlStdlibClassUnique,
 
         mkVarOccUnique, mkDataOccUnique, mkTvOccUnique, mkTcOccUnique,
         mkRegSingleUnique, mkRegPairUnique, mkRegClassUnique, mkRegSubUnique,
@@ -443,3 +444,6 @@ mkTcOccUnique   fs = mkUnique 'c' (uniqueOfFS fs)
 
 initExitJoinUnique :: Unique
 initExitJoinUnique = mkUnique 's' 0
+
+mkDamlStdlibClassUnique :: Int -> Unique
+mkDamlStdlibClassUnique = mkUnique 'Y'

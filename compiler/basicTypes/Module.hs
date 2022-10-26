@@ -84,6 +84,9 @@ module Module
         isHoleModule,
         interactiveUnitId, isInteractiveModule,
         wiredInUnitIds,
+#ifdef DAML_PRIM
+        damlStdlibUnitId,
+#endif
 
         -- * The Module type
         Module(Module),
@@ -1093,6 +1096,8 @@ integerUnitId, primUnitId,
 primUnitId        = fsToUnitId (fsLit "daml-prim")
 integerUnitId     = primUnitId
 baseUnitId        = primUnitId
+damlStdlibUnitId :: UnitId
+damlStdlibUnitId  = fsToUnitId (fsLit "daml-stdlib")
 #else
 primUnitId        = fsToUnitId (fsLit "ghc-prim")
 integerUnitId     = fsToUnitId (fsLit "integer-wired-in")
@@ -1143,12 +1148,18 @@ isHoleModule :: Module -> Bool
 isHoleModule mod = moduleUnitId mod == holeUnitId
 
 wiredInUnitIds :: [UnitId]
-wiredInUnitIds = [ primUnitId,
-                       integerUnitId,
-                       baseUnitId,
-                       rtsUnitId,
-                       thUnitId,
-                       thisGhcUnitId ]
+wiredInUnitIds =
+  nub
+    [ primUnitId
+    , integerUnitId
+    , baseUnitId
+    , rtsUnitId
+    , thUnitId
+    , thisGhcUnitId
+#ifdef DAML_PRIM
+    , damlStdlibUnitId
+#endif
+    ]
 
 {-
 ************************************************************************

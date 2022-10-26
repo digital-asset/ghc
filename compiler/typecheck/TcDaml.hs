@@ -10,38 +10,33 @@ import TyCoRep
 import TyCon
 import OccName
 import Name
-import Module
+-- import Module
 import PrelNames
-import RdrHsSyn
-import RdrName
-import SrcLoc
-import HsTypes
-import HsDecls
-import HsExtension
+-- import RdrHsSyn
+-- import RdrName
+-- import SrcLoc
+-- import HsTypes
+-- import HsDecls
+-- import HsExtension
 import Type
 import FastString
 import TcRnMonad
-import IfaceSyn
+-- import IfaceSyn
 import HscTypes
-import Var
-import UniqFM
+-- import Var
+-- import UniqFM
 import Util
 import qualified Data.Map as M
 
 import Data.Maybe
-import Data.List
+-- import Data.List
 import qualified Prelude as P ((<>))
 import Control.Monad
 import Data.Foldable (fold)
 
-check :: NamedThing a => [String] -> String -> a -> Bool
-check modules name namedThing
-  | Just mod <- moduleNameString . moduleName <$> nameModule_maybe (getName namedThing)
-  , mod `elem` modules
-  , name == occNameString (getOccName namedThing)
-  = True
-  | otherwise
-  = False
+check :: NamedThing a => Name -> a -> Bool
+check name namedThing =
+  getName namedThing == name
 
 customDamlErrors :: Ct -> TcM (Maybe SDoc)
 customDamlErrors ct = do
@@ -56,13 +51,13 @@ data DamlError
 customDamlError :: Ct -> Maybe DamlError
 customDamlError ct
   | TyConApp con [TyConApp target [], viewType] <- ctev_pred (ctEvidence ct)
-  , check ["DA.Internal.Desugar", "DA.Internal.Interface"] "HasInterfaceView" con
+  , check daHasInterfaceViewClassName con
   = Just $ TriedView { target = tyConName target, result = viewType }
   | TyConApp con [TyConApp target [], TyConApp choice [], result] <- ctev_pred (ctEvidence ct)
-  , check ["DA.Internal.Desugar", "DA.Internal.Template.Functions"] "HasExercise" con
+  , check daHasExerciseClassName con
   = Just $ TriedExercise { target = tyConName target, choice = tyConName choice, result }
   | TyConApp con [TyConApp target [], LitTy (StrTyLit methodName), result] <- ctev_pred (ctEvidence ct)
-  , check ["DA.Internal.Desugar"] "HasMethod" con
+  , check daHasMethodClassName con
   = Just $ TriedImplementMethod { target = tyConName target, method = methodName, result }
   | otherwise
   = Nothing
@@ -92,7 +87,7 @@ displayError info TriedView { target, result }
   | otherwise
   = pure
   $ text "Tried to get an interface view of type" <+> pprq result <+> text "from type" <+> pprq target <+> text "which is neither an interface nor a template"
-displayError info TriedExercise { target, result, choice }
+displayError info TriedExercise { target, result = _, choice }
   | [implementor] <- choiceImplementor info choice
   , isInterface info implementor
   , implements info target implementor
@@ -134,7 +129,7 @@ dedupe (DamlInfo x0 x1 x2 x3 x4 x5) =
     (nubSort x0)
     (nubSort x1)
     (nubSort x2)
-    (nubSortBy (\(mName, (cName, type_)) -> (mName, cName)) x3)
+    (nubSortBy (\(mName, (cName, _type)) -> (mName, cName)) x3)
     (nubSort x4)
     (nubSortBy fst x5)
   where
@@ -251,7 +246,7 @@ extractDamlInfoFromClsInst inst =
   where
     matchChoice :: ClsInst -> Maybe (Name, Name)
     matchChoice clsInst = do
-      [contractType, choiceType, returnType] <-
+      [contractType, choiceType, _returnType] <-
           clsInstMatch "HasExercise" clsInst
       (contractTyCon, []) <- splitTyConApp_maybe contractType
       (choiceTyCon, []) <- splitTyConApp_maybe choiceType
