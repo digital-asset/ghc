@@ -16,8 +16,8 @@
 -- appear in other modules in the `digital-asset/daml` repository, e.g.
 -- `GHC.Types.{primitive, primitiveInterface}`.
 
-module DA.Internal.Desugar
-  ( module DA.Internal.Desugar
+module GHC.Daml.Minimal
+  ( module GHC.Daml.Minimal
   , concat
   , Bool(..)
   , Eq(..)

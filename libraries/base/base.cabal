@@ -131,7 +131,6 @@ Library
         Control.Monad.ST.Strict
         Control.Monad.ST.Unsafe
         Control.Monad.Zip
-        DA.Internal.Desugar
         Data.Bifoldable
         Data.Bifunctor
         Data.Bitraversable
@@ -319,6 +318,7 @@ Library
         Type.Reflection
         Type.Reflection.Unsafe
         Unsafe.Coerce
+        GHC.Daml.Minimal
 
     other-modules:
         Control.Monad.ST.Imp

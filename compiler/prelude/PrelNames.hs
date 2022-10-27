@@ -649,9 +649,9 @@ mkDamlPrimModule_ m = mkModule primUnitId m
 mkDamlStdlibModule_ m = mkModule damlStdlibUnitId m
 #else
 -- When running from the digital-asset/ghc repo, all the Daml-specific
--- definitions live in DA.Internal.Desugar.
+-- definitions live in base:GHC.Daml.Minimal.
 mkDamlPrimModule_ = mkDamlStdlibModule_
-mkDamlStdlibModule_ _ = mkModule baseUnitId (mkModuleName "DA.Internal.Desugar")
+mkDamlStdlibModule_ _ = mkModule baseUnitId (mkModuleName "GHC.Daml.Minimal")
 #endif
 
 mkThisGhcModule :: FastString -> Module
