@@ -12,6 +12,9 @@
 
 -- This file contains a minimal setup to allow the compilation of a desugared
 -- DAML template and interface.
+-- This file includes definitions from `daml-prim` and `daml-stdlib` that would
+-- appear in other modules in the `digital-asset/daml` repository, e.g.
+-- `GHC.Types.{primitive, primitiveInterface}`.
 
 module DA.Internal.Desugar
   ( module DA.Internal.Desugar
@@ -23,8 +26,24 @@ module DA.Internal.Desugar
 where
 
 import GHC.TypeLits (Symbol)
-import GHC.Types (primitive)
 import Data.String (IsString(..))
+
+primitive : forall (f : Symbol) b. b
+primitive = primitive
+
+primitiveInterface : forall (f : Symbol) b. b
+primitiveInterface = primitiveInterface
+
+data Opaque = Opaque
+
+data Decimal = Decimal
+  deriving (Eq, Show)
+
+class DamlInterface
+instance DamlInterface
+
+class DamlTemplate
+instance DamlTemplate
 
 data Any
 data ContractId a

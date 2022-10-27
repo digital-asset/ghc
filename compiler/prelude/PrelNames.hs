@@ -637,14 +637,20 @@ mkBaseModule m = mkModule baseUnitId (mkModuleNameFS m)
 mkBaseModule_ :: ModuleName -> Module
 mkBaseModule_ m = mkModule baseUnitId m
 
-mkDamlStdlibModule :: FastString -> Module
-mkDamlStdlibModule_ :: ModuleName -> Module
+mkDamlPrimModule :: FastString -> Module
+mkDamlPrimModule = mkDamlPrimModule_ . mkModuleNameFS
 
+mkDamlStdlibModule :: FastString -> Module
+mkDamlStdlibModule = mkDamlStdlibModule_ . mkModuleNameFS
+
+mkDamlPrimModule_, mkDamlStdlibModule_ :: ModuleName -> Module
 #ifdef DAML_PRIM
-mkDamlStdlibModule m = mkModule damlStdlibUnitId (mkModuleNameFS m)
+mkDamlPrimModule_ m = mkModule primUnitId m
 mkDamlStdlibModule_ m = mkModule damlStdlibUnitId m
 #else
-mkDamlStdlibModule _ = mkModule baseUnitId (mkModuleName "DA.Internal.Desugar")
+-- When running from the digital-asset/ghc repo, all the Daml-specific
+-- definitions live in DA.Internal.Desugar.
+mkDamlPrimModule_ = mkDamlStdlibModule_
 mkDamlStdlibModule_ _ = mkModule baseUnitId (mkModuleName "DA.Internal.Desugar")
 #endif
 
