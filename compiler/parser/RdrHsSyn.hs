@@ -1155,8 +1155,8 @@ checkLPat msg e@(dL->L l _) = checkPat msg l e []
 checkPat :: SDoc -> SrcSpan -> LHsExpr GhcPs -> [LPat GhcPs]
          -> P (LPat GhcPs)
 checkPat msg span expr args
-  | HsApp _ (unLoc -> HsVar _ (unLoc -> funcVar)) subpat <- unLoc expr
-  , funcVar == userWrittenTupleName
+  | HsApp _ (unLoc -> HsAppType _ (unLoc -> HsVar _ (unLoc -> funcVar)) _) subpat <- unLoc expr
+  , funcVar == magicName
   = checkPat msg span subpat args
 checkPat _ loc (dL->L l e@(HsVar _ (dL->L _ c))) args
   | isRdrDataCon c = return (cL loc (ConPatIn (cL l c) (PrefixCon args)))
@@ -2488,8 +2488,18 @@ argPatOfChoice choiceConName _ = asPatRecWild "arg" choiceConName
 userWrittenTupleName :: RdrName
 userWrittenTupleName = qualifyDesugar $ mkVarOcc "userWrittenTuple"
 
+magicName :: RdrName
+magicName = mkRdrQual (mkModuleName "GHC.Magic") $ mkVarOcc "magic"
+
 userWrittenTuple :: LHsExpr GhcPs
-userWrittenTuple = noLoc $ HsVar noExt $ noLoc userWrittenTupleName
+userWrittenTuple =
+  let mkTyStr :: String -> HsType GhcPs
+      mkTyStr lit = HsTyLit noExt (HsStrTy NoSourceText (fsLit lit))
+  in
+  noLoc $ HsAppType
+    noExt
+    (noLoc (HsVar noExt (noLoc magicName)))
+    (HsWC noExt (noLoc (mkTyStr "userWrittenTuple")))
 
 mkTupleExp :: [LHsExpr GhcPs] -> LHsExpr GhcPs
 mkTupleExp [e] = e
