@@ -2489,7 +2489,7 @@ userWrittenTupleName :: RdrName
 userWrittenTupleName = qualifyDesugar $ mkVarOcc "userWrittenTuple"
 
 magicName :: RdrName
-magicName = mkRdrQual (mkModuleName "GHC.Magic") $ mkVarOcc "magic"
+magicName = mkRdrQual (mkModuleName "GHC.Types") $ mkVarOcc "magic"
 
 userWrittenTuple :: LHsExpr GhcPs
 userWrittenTuple =
