@@ -2494,11 +2494,24 @@ userWrittenTuple :: LHsExpr GhcPs
 userWrittenTuple =
   let mkTyStr :: String -> HsType GhcPs
       mkTyStr lit = HsTyLit noExt (HsStrTy NoSourceText (fsLit lit))
+
+      freeIdentity :: HsType GhcPs
+      freeIdentity =
+        let xVar = mkRdrUnqual (mkTyVarOcc "x")
+            xTyVar = HsTyVar noExt NotPromoted (noLoc xVar)
+        in
+        HsForAllTy
+          noExt
+          [noLoc $ UserTyVar noExt (noLoc xVar)]
+          (noLoc $ HsFunTy noExt (noLoc xTyVar) (noLoc xTyVar))
+
+      appType :: HsExpr GhcPs -> HsType GhcPs -> HsExpr GhcPs
+      appType e t = HsAppType noExt (noLoc e) (HsWC noExt (noLoc t))
   in
-  noLoc $ HsAppType
-    noExt
-    (noLoc (HsVar noExt (noLoc magicName)))
-    (HsWC noExt (noLoc (mkTyStr "userWrittenTuple")))
+  noLoc $
+    (HsVar noExt (noLoc magicName)) `appType`
+    (mkTyStr "userWrittenTuple") `appType`
+    freeIdentity
 
 mkTupleExp :: [LHsExpr GhcPs] -> LHsExpr GhcPs
 mkTupleExp [e] = e
@@ -4394,15 +4407,15 @@ mkWrittenSumOrTuple boxity span sumOrTuple = do
               [noLoc (GRHS noExt [] (noLoc (HsVar noExt (noLoc idVar))))]
               (noLoc emptyLocalBinds))))
   case sumOrTuple of
-    Tuple _ | isDaml -> pure $ HsApp noExt (noLoc (HsApp noExt userWrittenTuple (noLoc idLam))) (noLoc result)
+    Tuple _ | isDaml -> pure $ HsApp noExt userWrittenTuple (noLoc result)
     _ -> pure result
 
 unwrapWrittenSumOrTuple :: LHsExpr GhcPs -> Maybe (LHsExpr GhcPs)
 unwrapWrittenSumOrTuple expr
-  | HsApp _ possibleMagicWithArg subpat <- unLoc expr
-  , HsApp _ possibleMagic idFunc <- unLoc possibleMagicWithArg
-  , HsAppType _ (unLoc -> HsVar _ (unLoc -> funcVar)) type_ <- unLoc possibleMagic
-  , HsWC _ (unLoc -> HsTyLit _ (HsStrTy _ (unpackFS -> "userWrittenTuple"))) <- type_
+  | HsApp _ possibleMagic subpat <- unLoc expr
+  , HsAppType _ possibleMagic' (HsWC _ tyArg2) <- unLoc possibleMagic
+  , HsAppType _ (unLoc -> HsVar _ (unLoc -> funcVar)) (HsWC _ tyArg1) <- unLoc possibleMagic'
+  , HsTyLit _ (HsStrTy _ (unpackFS -> "userWrittenTuple")) <- unLoc tyArg1
   , funcVar == magicName
   = Just subpat
   | otherwise
