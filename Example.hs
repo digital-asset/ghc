@@ -48,3 +48,6 @@ interface AnotherInterface where
   interface instance AnotherInterface for TheTemplate where
     someBool = False
     view = if someBool (toInterface @AnotherInterface this) then GT else LT
+
+f : (a,b,c,d,e,f) -> (f,a,b,c,d,e)
+f (a,b,c,d,e,f) = (f,a,b,c,d,e)

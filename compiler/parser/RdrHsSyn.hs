@@ -2509,9 +2509,10 @@ userWrittenTuple =
       appType e t = HsAppType noExt (noLoc e) (HsWC noExt (noLoc t))
   in
   noLoc $
-    (HsVar noExt (noLoc magicName)) `appType`
-    (mkTyStr "userWrittenTuple") `appType`
-    freeIdentity
+    ExprWithTySig
+      noExt
+      (noLoc (appType (HsVar noExt (noLoc magicName)) (mkTyStr "userWrittenTuple")))
+      (HsWC noExt (HsIB noExt (noLoc freeIdentity)))
 
 mkTupleExp :: [LHsExpr GhcPs] -> LHsExpr GhcPs
 mkTupleExp [e] = e
@@ -4413,7 +4414,7 @@ mkWrittenSumOrTuple boxity span sumOrTuple = do
 unwrapWrittenSumOrTuple :: LHsExpr GhcPs -> Maybe (LHsExpr GhcPs)
 unwrapWrittenSumOrTuple expr
   | HsApp _ possibleMagic subpat <- unLoc expr
-  , HsAppType _ possibleMagic' (HsWC _ tyArg2) <- unLoc possibleMagic
+  , ExprWithTySig _ possibleMagic' _ <- unLoc possibleMagic
   , HsAppType _ (unLoc -> HsVar _ (unLoc -> funcVar)) (HsWC _ tyArg1) <- unLoc possibleMagic'
   , HsTyLit _ (HsStrTy _ (unpackFS -> "userWrittenTuple")) <- unLoc tyArg1
   , funcVar == magicName
