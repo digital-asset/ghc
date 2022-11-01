@@ -1155,8 +1155,7 @@ checkLPat msg e@(dL->L l _) = checkPat msg l e []
 checkPat :: SDoc -> SrcSpan -> LHsExpr GhcPs -> [LPat GhcPs]
          -> P (LPat GhcPs)
 checkPat msg span expr args
-  | HsApp _ (unLoc -> HsAppType _ (unLoc -> HsVar _ (unLoc -> funcVar)) _) subpat <- unLoc expr
-  , funcVar == magicName
+  | Just subpat <- unwrapWrittenSumOrTuple expr
   = checkPat msg span subpat args
 checkPat _ loc (dL->L l e@(HsVar _ (dL->L _ c))) args
   | isRdrDataCon c = return (cL loc (ConPatIn (cL l c) (PrefixCon args)))
@@ -4382,9 +4381,32 @@ mkWrittenSumOrTuple :: Boxity -> SrcSpan -> SumOrTuple -> P (HsExpr GhcPs)
 mkWrittenSumOrTuple boxity span sumOrTuple = do
   isDaml <- getBit DamlSyntaxBit
   result <- mkSumOrTuple boxity span sumOrTuple
+  let idVar = mkRdrUnqual (mkVarOcc "x")
+      idLam =
+        HsLam noExt
+          (matchGroup noSrcSpan (Match
+            noExt
+            LambdaExpr
+            [VarPat noExt (noLoc idVar)]
+            Nothing
+            (GRHSs
+              noExt
+              [noLoc (GRHS noExt [] (noLoc (HsVar noExt (noLoc idVar))))]
+              (noLoc emptyLocalBinds))))
   case sumOrTuple of
-    Tuple _ | isDaml -> pure $ HsApp noExt userWrittenTuple (noLoc result)
+    Tuple _ | isDaml -> pure $ HsApp noExt (noLoc (HsApp noExt userWrittenTuple (noLoc idLam))) (noLoc result)
     _ -> pure result
+
+unwrapWrittenSumOrTuple :: LHsExpr GhcPs -> Maybe (LHsExpr GhcPs)
+unwrapWrittenSumOrTuple expr
+  | HsApp _ possibleMagicWithArg subpat <- unLoc expr
+  , HsApp _ possibleMagic idFunc <- unLoc possibleMagicWithArg
+  , HsAppType _ (unLoc -> HsVar _ (unLoc -> funcVar)) type_ <- unLoc possibleMagic
+  , HsWC _ (unLoc -> HsTyLit _ (HsStrTy _ (unpackFS -> "userWrittenTuple"))) <- type_
+  , funcVar == magicName
+  = Just subpat
+  | otherwise
+  = Nothing
 
 mkSumOrTuple :: Boxity -> SrcSpan -> SumOrTuple -> P (HsExpr GhcPs)
 
