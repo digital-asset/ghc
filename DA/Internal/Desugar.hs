@@ -229,6 +229,3 @@ newtype InterfaceView p i t = InterfaceView ()
 
 mkInterfaceView : forall p i t v. (Implements t i, HasInterfaceView i v) => (t -> v) -> InterfaceView p i t
 mkInterfaceView _ = InterfaceView ()
-
-userWrittenTuple : forall a. a -> a
-userWrittenTuple = id
