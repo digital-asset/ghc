@@ -4395,18 +4395,6 @@ mkWrittenSumOrTuple :: Boxity -> SrcSpan -> SumOrTuple -> P (HsExpr GhcPs)
 mkWrittenSumOrTuple boxity span sumOrTuple = do
   isDaml <- getBit DamlSyntaxBit
   result <- mkSumOrTuple boxity span sumOrTuple
-  let idVar = mkRdrUnqual (mkVarOcc "x")
-      idLam =
-        HsLam noExt
-          (matchGroup noSrcSpan (Match
-            noExt
-            LambdaExpr
-            [VarPat noExt (noLoc idVar)]
-            Nothing
-            (GRHSs
-              noExt
-              [noLoc (GRHS noExt [] (noLoc (HsVar noExt (noLoc idVar))))]
-              (noLoc emptyLocalBinds))))
   case sumOrTuple of
     Tuple _ | isDaml -> pure $ HsApp noExt userWrittenTuple (noLoc result)
     _ -> pure result
