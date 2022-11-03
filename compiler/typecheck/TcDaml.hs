@@ -53,6 +53,7 @@ data DamlError
   | TriedExercise { target :: Name, choice :: Name, result :: Type }
   | TriedImplementMethod { target :: Name, method :: FastString, result :: Type }
   | TriedImplementView { target :: Name, triedReturnType :: Type, expectedReturnType :: Type }
+  | TriedImplementNonInterface { triedIface :: Name }
 
 customDamlError :: Ct -> Maybe DamlError
 customDamlError ct
@@ -73,6 +74,9 @@ customDamlError ct
   | TyConApp con [TyConApp target [], LitTy (StrTyLit methodName), result] <- ctev_pred (ctEvidence ct)
   , check ["DA.Internal.Desugar"] "HasMethod" con
   = Just $ TriedImplementMethod { target = tyConName target, method = methodName, result }
+  | TyConApp con [TyConApp target []] <- ctev_pred (ctEvidence ct)
+  , check ["DA.Internal.Desugar", "DA.Internal.Template.Functions"] "HasInterfaceTypeRep" con
+  = Just $ TriedImplementNonInterface { triedIface = tyConName target }
   | otherwise
   = Nothing
 
@@ -139,6 +143,16 @@ displayError info TriedImplementMethod { target, method, result } =
 displayError info TriedImplementView { target, triedReturnType, expectedReturnType } =
   pure $ text "Tried to implement a view of type" <+> pprq triedReturnType <+> text "on interface" <+> pprq target
       <> text ", but the definition of interface" <+> pprq target <+> text "requires a view of type" <+> pprq expectedReturnType
+displayError info TriedImplementNonInterface { triedIface }
+  | isTemplate info triedIface
+  = pure $ text "Tried to make an interface implementation of" <+> pprq triedIface <>
+           text ", but" <+> pprq triedIface <+> text "is a template, not an interface."
+  | isInterface info triedIface
+  = pure $ text "Tried to make an interface implementation of" <+> pprq triedIface <>
+           text ", but" <+> pprq triedIface <+> text "does not have an instance of HasInterfaceTypeRep. This should not happen, please contact support."
+  | otherwise
+  = pure $ text "Tried to make an interface implementation of" <+> pprq triedIface <>
+           text ", but" <+> pprq triedIface <+> text "is not an interface."
 
 dedupe :: DamlInfo -> DamlInfo
 dedupe (DamlInfo x0 x1 x2 x3 x4 x5) =
