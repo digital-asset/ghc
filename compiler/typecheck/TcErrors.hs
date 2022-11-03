@@ -528,19 +528,18 @@ reportWanteds ctxt tc_lvl (WC { wc_simple = simples, wc_impl = implics })
 
          -- First deal with daml errors
        ; let ctxt_for_insols = ctxt { cec_suppress = False }
-       ; (ctxt0, cts0) <- tryReporters ctxt_for_insols report0 tidy_cts
+       ; (_, cts0) <- tryReporters ctxt_for_insols report0 tidy_cts
 
          -- Then deal with things that are utterly wrong
          -- Like Int ~ Bool (incl nullary TyCons)
          -- or  Int ~ t a   (AppTy on one side)
          -- These /ones/ are not suppressed by the incoming context
-       ; let ctxt0' = ctxt { cec_suppress = cec_suppress ctxt || cec_suppress ctxt0 }
-       ; (ctxt1, cts1) <- tryReporters ctxt0' report1 cts0
+       ; (ctxt1, cts1) <- tryReporters ctxt_for_insols report1 cts0
 
          -- Now all the other constraints.  We suppress errors here if
          -- any of the first batch failed, or if the enclosing context
          -- says to suppress
-       ; let ctxt2 = ctxt { cec_suppress = cec_suppress ctxt || cec_suppress ctxt0 || cec_suppress ctxt1 }
+       ; let ctxt2 = ctxt { cec_suppress = cec_suppress ctxt || cec_suppress ctxt1 }
        ; (_, leftovers) <- tryReporters ctxt2 report2 cts1
        ; MASSERT2( null leftovers, ppr leftovers )
 
