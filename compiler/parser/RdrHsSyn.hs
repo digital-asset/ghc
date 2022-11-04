@@ -116,7 +116,10 @@ module   RdrHsSyn (
         warnStarIsType,
         failOpFewArgs,
 
-        SumOrTuple (..), mkSumOrTuple
+        SumOrTuple (..),
+        mkSumOrTuple,
+        userWrittenTuple,
+        mkWrittenSumOrTuple
 
     ) where
 
@@ -1151,6 +1154,9 @@ checkLPat msg e@(dL->L l _) = checkPat msg l e []
 
 checkPat :: SDoc -> SrcSpan -> LHsExpr GhcPs -> [LPat GhcPs]
          -> P (LPat GhcPs)
+checkPat msg span expr args
+  | Just subpat <- unwrapWrittenSumOrTuple expr
+  = checkPat msg span subpat args
 checkPat _ loc (dL->L l e@(HsVar _ (dL->L _ c))) args
   | isRdrDataCon c = return (cL loc (ConPatIn (cL l c) (PrefixCon args)))
   | not (null args) && patIsRec c =
@@ -2478,13 +2484,33 @@ argPatOfChoice choiceConName _ = asPatRecWild "arg" choiceConName
 --------------------------------------------------------------------------------
 -- Utilities for constructing types and values
 
+userWrittenTupleName :: RdrName
+userWrittenTupleName = qualifyDesugar $ mkVarOcc "userWrittenTuple"
+
+magicName :: RdrName
+magicName = mkRdrQual (mkModuleName "GHC.Types") $ mkVarOcc "magic"
+
+userWrittenTuple :: LHsExpr GhcPs
+userWrittenTuple =
+  let freeIdentity :: HsType GhcPs
+      freeIdentity =
+        let xVar = mkRdrUnqual (mkTyVarOcc "x")
+            xTyVar = HsTyVar noExt NotPromoted (noLoc xVar)
+        in
+        HsForAllTy
+          noExt
+          [noLoc $ UserTyVar noExt (noLoc xVar)]
+          (noLoc $ HsFunTy noExt (noLoc xTyVar) (noLoc xTyVar))
+  in
+  noLoc $
+    ExprWithTySig
+      noExt
+      (mkAppType (noLoc (HsVar noExt (noLoc magicName))) (mkSymbol "userWrittenTuple"))
+      (HsWC noExt (HsIB noExt (noLoc freeIdentity)))
+
 mkTupleExp :: [LHsExpr GhcPs] -> LHsExpr GhcPs
 mkTupleExp [e] = e
-mkTupleExp es =
-  let allowLargeTuples = mkQualVar $ mkVarOcc "codeGenAllowLargeTuples"
-      tupleExp = noLoc $ ExplicitTuple noExt (map (noLoc . Present noExt) es) Boxed
-  in
-  if length es > 5 then mkApp allowLargeTuples tupleExp else tupleExp
+mkTupleExp es = noLoc $ ExplicitTuple noExt (map (noLoc . Present noExt) es) Boxed
 
 mkRdrExp :: RdrName -> LHsExpr GhcPs
 mkRdrExp = noLoc . HsVar noExt . noLoc
@@ -4358,6 +4384,25 @@ hintBangPat span e = do
 data SumOrTuple
   = Sum ConTag Arity (LHsExpr GhcPs)
   | Tuple [LHsTupArg GhcPs]
+
+mkWrittenSumOrTuple :: Boxity -> SrcSpan -> SumOrTuple -> P (HsExpr GhcPs)
+mkWrittenSumOrTuple boxity span sumOrTuple = do
+  isDaml <- getBit DamlSyntaxBit
+  result <- mkSumOrTuple boxity span sumOrTuple
+  case sumOrTuple of
+    Tuple _ | isDaml -> pure $ HsApp noExt userWrittenTuple (noLoc result)
+    _ -> pure result
+
+unwrapWrittenSumOrTuple :: LHsExpr GhcPs -> Maybe (LHsExpr GhcPs)
+unwrapWrittenSumOrTuple expr
+  | HsApp _ possibleMagic subpat <- unLoc expr
+  , ExprWithTySig _ possibleMagic' _ <- unLoc possibleMagic
+  , HsAppType _ (unLoc -> HsVar _ (unLoc -> funcVar)) (HsWC _ tyArg1) <- unLoc possibleMagic'
+  , HsTyLit _ (HsStrTy _ (unpackFS -> "userWrittenTuple")) <- unLoc tyArg1
+  , funcVar == magicName
+  = Just subpat
+  | otherwise
+  = Nothing
 
 mkSumOrTuple :: Boxity -> SrcSpan -> SumOrTuple -> P (HsExpr GhcPs)
 

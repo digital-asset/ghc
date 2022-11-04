@@ -7,7 +7,7 @@
 
 -- This file provides a definition required by a desugared DAML template.
 
-module GHC.Types (DamlInterface, DamlTemplate, Decimal, Opaque, primitive, primitiveInterface) where
+module GHC.Types (DamlInterface, DamlTemplate, Decimal, Opaque, primitive, primitiveInterface, magic) where
 
 import "ghc-prim" GHC.Types
 
@@ -16,6 +16,9 @@ primitive = primitive
 
 primitiveInterface : forall (f : Symbol) b. b
 primitiveInterface = primitiveInterface
+
+magic : forall (f : Symbol) b. b
+magic = magic -- deleted by the compiler
 
 data Opaque = Opaque
 
