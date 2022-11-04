@@ -1441,6 +1441,8 @@ isFunLhs :: LHsExpr GhcPs
 isFunLhs e = go e [] []
  where
    go (dL->L loc (HsVar _ (dL->L _ f))) es ann
+       | f == userWrittenTupleName = pure Nothing
+   go (dL->L loc (HsVar _ (dL->L _ f))) es ann
        | not (isRdrDataCon f)        = return (Just (cL loc f, Prefix, es, ann))
    go (dL->L _ (HsApp _ f e)) es       ann = go f (e:es) ann
    go (dL->L l (HsPar _ e))   es@(_:_) ann = go e es (ann ++ mkParensApiAnn l)
