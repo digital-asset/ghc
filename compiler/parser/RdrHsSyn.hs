@@ -2492,10 +2492,7 @@ magicName = mkRdrQual (mkModuleName "GHC.Types") $ mkVarOcc "magic"
 
 userWrittenTuple :: LHsExpr GhcPs
 userWrittenTuple =
-  let mkTyStr :: String -> HsType GhcPs
-      mkTyStr lit = HsTyLit noExt (HsStrTy NoSourceText (fsLit lit))
-
-      freeIdentity :: HsType GhcPs
+  let freeIdentity :: HsType GhcPs
       freeIdentity =
         let xVar = mkRdrUnqual (mkTyVarOcc "x")
             xTyVar = HsTyVar noExt NotPromoted (noLoc xVar)
@@ -2504,14 +2501,11 @@ userWrittenTuple =
           noExt
           [noLoc $ UserTyVar noExt (noLoc xVar)]
           (noLoc $ HsFunTy noExt (noLoc xTyVar) (noLoc xTyVar))
-
-      appType :: HsExpr GhcPs -> HsType GhcPs -> HsExpr GhcPs
-      appType e t = HsAppType noExt (noLoc e) (HsWC noExt (noLoc t))
   in
   noLoc $
     ExprWithTySig
       noExt
-      (noLoc (appType (HsVar noExt (noLoc magicName)) (mkTyStr "userWrittenTuple")))
+      (mkAppType (noLoc (HsVar noExt (noLoc magicName))) (mkSymbol "userWrittenTuple"))
       (HsWC noExt (HsIB noExt (noLoc freeIdentity)))
 
 mkTupleExp :: [LHsExpr GhcPs] -> LHsExpr GhcPs
