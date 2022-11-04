@@ -2485,28 +2485,10 @@ argPatOfChoice choiceConName _ = asPatRecWild "arg" choiceConName
 -- Utilities for constructing types and values
 
 userWrittenTupleName :: RdrName
-userWrittenTupleName = qualifyDesugar $ mkVarOcc "userWrittenTuple"
-
-magicName :: RdrName
-magicName = mkRdrQual (mkModuleName "GHC.Types") $ mkVarOcc "magic"
+userWrittenTupleName = mkRdrQual (mkModuleName "GHC.Tuple.Check") $ mkVarOcc "userWrittenTuple"
 
 userWrittenTuple :: LHsExpr GhcPs
-userWrittenTuple =
-  let freeIdentity :: HsType GhcPs
-      freeIdentity =
-        let xVar = mkRdrUnqual (mkTyVarOcc "x")
-            xTyVar = HsTyVar noExt NotPromoted (noLoc xVar)
-        in
-        HsForAllTy
-          noExt
-          [noLoc $ UserTyVar noExt (noLoc xVar)]
-          (noLoc $ HsFunTy noExt (noLoc xTyVar) (noLoc xTyVar))
-  in
-  noLoc $
-    ExprWithTySig
-      noExt
-      (mkAppType (noLoc (HsVar noExt (noLoc magicName))) (mkSymbol "userWrittenTuple"))
-      (HsWC noExt (HsIB noExt (noLoc freeIdentity)))
+userWrittenTuple = mkRdrExp userWrittenTupleName
 
 mkTupleExp :: [LHsExpr GhcPs] -> LHsExpr GhcPs
 mkTupleExp [e] = e
@@ -4395,11 +4377,8 @@ mkWrittenSumOrTuple boxity span sumOrTuple = do
 
 unwrapWrittenSumOrTuple :: LHsExpr GhcPs -> Maybe (LHsExpr GhcPs)
 unwrapWrittenSumOrTuple expr
-  | HsApp _ possibleMagic subpat <- unLoc expr
-  , ExprWithTySig _ possibleMagic' _ <- unLoc possibleMagic
-  , HsAppType _ (unLoc -> HsVar _ (unLoc -> funcVar)) (HsWC _ tyArg1) <- unLoc possibleMagic'
-  , HsTyLit _ (HsStrTy _ (unpackFS -> "userWrittenTuple")) <- unLoc tyArg1
-  , funcVar == magicName
+  | HsApp _ (unLoc -> HsVar _ (unLoc -> funcName)) subpat <- unLoc expr
+  , userWrittenTupleName == funcName
   = Just subpat
   | otherwise
   = Nothing
