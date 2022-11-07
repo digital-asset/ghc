@@ -556,7 +556,7 @@ reportWanteds ctxt tc_lvl (WC { wc_simple = simples, wc_impl = implics })
     env = cec_tidy ctxt
     tidy_cts = bagToList (mapBag (tidyCt env) simples)
 
-    report0 = [ ("Daml error", is_daml_error,    False, mkGroupReporter mkDamlErr) ]
+    report0 = [ ("Daml error", is_daml_error,    True, mkGroupReporter mkDamlErr) ]
     is_daml_error ct _ = isJust $ customDamlError ct
 
     -- report1: ones that should *not* be suppresed by
