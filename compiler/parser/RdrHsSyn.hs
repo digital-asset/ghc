@@ -141,7 +141,7 @@ import TysWiredIn       ( cTupleTyConName, tupleTyCon, tupleDataCon,
                           listTyConName, listTyConKey, eqTyCon_RDR,
                           tupleTyConName, cTupleTyConNameArity_maybe )
 import ForeignCall
-import PrelNames        ( allNameStrings )
+import PrelNames        ( allNameStrings, mkPrimModule )
 import SrcLoc
 import Unique           ( hasKey )
 import OrdList          ( OrdList, fromOL, toOL )
@@ -2487,7 +2487,10 @@ argPatOfChoice choiceConName _ = asPatRecWild "arg" choiceConName
 -- Utilities for constructing types and values
 
 userWrittenTupleName :: RdrName
-userWrittenTupleName = mkRdrQual (mkModuleName "GHC.Tuple.Check") $ mkVarOcc "userWrittenTuple"
+userWrittenTupleName =
+  mkOrig
+    (mkPrimModule (fsLit "GHC.Tuple.Check"))
+    (mkVarOcc "userWrittenTuple")
 
 userWrittenTuple :: LHsExpr GhcPs
 userWrittenTuple = mkRdrExp userWrittenTupleName
