@@ -526,17 +526,21 @@ reportWanteds ctxt tc_lvl (WC { wc_simple = simples, wc_impl = implics })
                                        , text "Suppress =" <+> ppr (cec_suppress ctxt)])
        ; traceTc "rw2" (ppr tidy_cts)
 
-         -- First deal with things that are utterly wrong
+         -- First deal with daml errors
+       ; let ctxt_for_insols = ctxt { cec_suppress = False }
+       ; (post_daml_ctxt, cts0) <- tryReporters ctxt_for_insols report0 tidy_cts
+
+         -- Then deal with things that are utterly wrong
          -- Like Int ~ Bool (incl nullary TyCons)
          -- or  Int ~ t a   (AppTy on one side)
-         -- These /ones/ are not suppressed by the incoming context
-       ; let ctxt_for_insols = ctxt { cec_suppress = False }
-       ; (ctxt1, cts1) <- tryReporters ctxt_for_insols report1 tidy_cts
+         -- These /ones/ are not suppressed by the incoming context, only by the post_daml_ctxt
+       ; let ctxt0 = ctxt { cec_suppress = cec_suppress post_daml_ctxt }
+       ; (ctxt1, cts1) <- tryReporters ctxt0 report1 cts0
 
          -- Now all the other constraints.  We suppress errors here if
-         -- any of the first batch failed, or if the enclosing context
-         -- says to suppress
-       ; let ctxt2 = ctxt { cec_suppress = cec_suppress ctxt || cec_suppress ctxt1 }
+         -- any of the zeroth or first batch failed, or if the enclosing
+         -- context says to suppress
+       ; let ctxt2 = ctxt { cec_suppress = cec_suppress ctxt || cec_suppress ctxt1 || cec_suppress post_daml_ctxt }
        ; (_, leftovers) <- tryReporters ctxt2 report2 cts1
        ; MASSERT2( null leftovers, ppr leftovers )
 
@@ -552,6 +556,9 @@ reportWanteds ctxt tc_lvl (WC { wc_simple = simples, wc_impl = implics })
  where
     env = cec_tidy ctxt
     tidy_cts = bagToList (mapBag (tidyCt env) simples)
+
+    report0 = [ ("Daml error", is_daml_error,    True, mkGroupReporter mkDamlErr) ]
+    is_daml_error ct _ = isJust $ customDamlError ct
 
     -- report1: ones that should *not* be suppresed by
     --          an insoluble somewhere else in the tree
@@ -2369,6 +2376,15 @@ Warn of loopy local equalities that were dropped.
 ************************************************************************
 -}
 
+mkDamlErr :: ReportErrCtxt -> [Ct] -> TcM ErrMsg
+mkDamlErr ctxt cts
+  = ASSERT( not (null cts) )
+    do
+      let ct = head cts
+      mbErrMsg <- customDamlErrors ct
+      let errMsg = maybe (error "mk_daml_err: shouldn't happen") id mbErrMsg
+      mkErrorMsgFromCt ctxt ct (important errMsg)
+
 mkDictErr :: ReportErrCtxt -> [Ct] -> TcM ErrMsg
 mkDictErr ctxt cts
   = ASSERT( not (null cts) )
@@ -2412,13 +2428,8 @@ mk_dict_err :: ReportErrCtxt -> (Ct, ClsInstLookupResult)
 mk_dict_err ctxt@(CEC {cec_encl = implics}) (ct, (matches, unifiers, unsafe_overlapped))
   | null matches  -- No matches but perhaps several unifiers
   = do { (ctxt, binds_msg, ct) <- relevantBindings True ctxt ct
-       ; mb_daml_error <- customDamlErrors ct
-       ; case mb_daml_error of
-           Just msg -> pure (ctxt, msg)
-           Nothing -> do
-             { candidate_insts <- get_candidate_instances
-             ; pure (ctxt, cannot_resolve_msg ct candidate_insts binds_msg)
-             }
+       ; candidate_insts <- get_candidate_instances
+       ; pure (ctxt, cannot_resolve_msg ct candidate_insts binds_msg)
        }
 
   | null unsafe_overlapped   -- Some matches => overlap errors

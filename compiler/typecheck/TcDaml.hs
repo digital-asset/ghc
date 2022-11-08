@@ -52,9 +52,18 @@ data DamlError
   = TriedView { target :: Name, result :: Type }
   | TriedExercise { target :: Name, choice :: Name, result :: Type }
   | TriedImplementMethod { target :: Name, method :: FastString, result :: Type }
+  | TriedImplementView { target :: Name, triedReturnType :: Type, expectedReturnType :: Type }
 
 customDamlError :: Ct -> Maybe DamlError
 customDamlError ct
+  | FunDepOrigin2 targetPred _ instancePred _ <- ctOrigin ct
+  , TyConApp targetCon [TyConApp iface1 [], targetRetType] <- targetPred
+  , TyConApp instanceCon [TyConApp iface2 [], instanceRetType] <- instancePred
+  , check ["DA.Internal.Desugar", "DA.Internal.Interface"] "HasInterfaceView" targetCon
+  , check ["DA.Internal.Desugar", "DA.Internal.Interface"] "HasInterfaceView" instanceCon
+  , iface1 == iface2
+  , not (eqType targetRetType instanceRetType)
+  = Just $ TriedImplementView { target = tyConName iface1, triedReturnType = targetRetType, expectedReturnType = instanceRetType }
   | TyConApp con [TyConApp target [], viewType] <- ctev_pred (ctEvidence ct)
   , check ["DA.Internal.Desugar", "DA.Internal.Interface"] "HasInterfaceView" con
   = Just $ TriedView { target = tyConName target, result = viewType }
@@ -127,6 +136,9 @@ displayError info TriedImplementMethod { target, method, result } =
                (text "Method" <+> pprq method <+> text "is only a method on the following interfaces:")
                (map (pprq . fst) ifaces)
            ]
+displayError info TriedImplementView { target, triedReturnType, expectedReturnType } =
+  pure $ text "Tried to implement a view of type" <+> pprq triedReturnType <+> text "on interface" <+> pprq target
+      <> text ", but the definition of interface" <+> pprq target <+> text "requires a view of type" <+> pprq expectedReturnType
 
 dedupe :: DamlInfo -> DamlInfo
 dedupe (DamlInfo x0 x1 x2 x3 x4 x5) =
