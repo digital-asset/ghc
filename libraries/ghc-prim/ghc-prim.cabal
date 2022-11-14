@@ -47,6 +47,7 @@ Library
         GHC.Magic
         GHC.PrimopWrappers
         GHC.Tuple
+        GHC.Tuple.Check
         GHC.Types
 
     virtual-modules:
