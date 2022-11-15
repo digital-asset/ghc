@@ -53,9 +53,13 @@ data DamlError
   | TriedExercise { target :: Name, choice :: Name, result :: Type }
   | TriedImplementMethod { target :: Name, method :: FastString, result :: Type }
   | TriedImplementView { target :: Name, triedReturnType :: Type, expectedReturnType :: Type }
+  | TriedFieldAccess { recordType :: Type, expectedReturnType :: Type, fieldName :: FastString }
 
 customDamlError :: Ct -> Maybe DamlError
 customDamlError ct
+  | TyConApp con [LitTy (StrTyLit fieldName), recordType, resultType] <- ctev_pred (ctEvidence ct)
+  , check ["DA.Internal.Record"] "HasField" con
+  = Just $ TriedFieldAccess { fieldName, recordType, expectedReturnType = resultType }
   | FunDepOrigin2 targetPred _ instancePred _ <- ctOrigin ct
   , TyConApp targetCon [TyConApp iface1 [], targetRetType] <- targetPred
   , TyConApp instanceCon [TyConApp iface2 [], instanceRetType] <- instancePred
@@ -139,6 +143,8 @@ displayError info TriedImplementMethod { target, method, result } =
 displayError info TriedImplementView { target, triedReturnType, expectedReturnType } =
   pure $ text "Tried to implement a view of type" <+> pprq triedReturnType <+> text "on interface" <+> pprq target
       <> text ", but the definition of interface" <+> pprq target <+> text "requires a view of type" <+> pprq expectedReturnType
+displayError info TriedFieldAccess {} =
+  pure $ text "TriedFieldAccess error"
 
 dedupe :: DamlInfo -> DamlInfo
 dedupe (DamlInfo x0 x1 x2 x3 x4 x5) =
