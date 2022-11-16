@@ -54,12 +54,24 @@ data DamlError
   | TriedImplementMethod { target :: Name, method :: FastString, result :: Type }
   | TriedImplementView { target :: Name, triedReturnType :: Type, expectedReturnType :: Type }
   | NonExistentFieldAccess { recordType :: Type, expectedReturnType :: Type, fieldName :: FastString }
+  | FieldAccessWrongReturnType { fieldName :: FastString, recordType :: Type, triedReturnType :: Type, expectedReturnType :: Type }
 
 customDamlError :: Ct -> Maybe DamlError
 customDamlError ct
   | TyConApp con [LitTy (StrTyLit fieldName), recordType, resultType] <- ctev_pred (ctEvidence ct)
   , check ["DA.Internal.Record"] "HasField" con
   = Just $ NonExistentFieldAccess { fieldName, recordType, expectedReturnType = resultType }
+  | FunDepOrigin2 targetPred _ instancePred _ <- ctOrigin ct
+  , TyConApp targetCon [TyConApp iface1 [], targetRetType] <- targetPred
+  , TyConApp instanceCon [TyConApp iface2 [], instanceRetType] <- instancePred
+  , TyConApp con [LitTy (StrTyLit fieldName1), recordType1, targetRetType] <- targetPred
+  , TyConApp con [LitTy (StrTyLit fieldName2), recordType2, instanceRetType] <- instancePred
+  , check ["DA.Internal.Record"] "HasField" targetCon
+  , check ["DA.Internal.Record"] "HasField" instanceCon
+  , fieldName1 == fieldName2
+  , eqType recordType1 recordType2
+  , not (eqType targetRetType instanceRetType)
+  = Just $ FieldAccessWrongReturnType { fieldName = fieldName1, recordType = recordType1, triedReturnType = targetRetType, expectedReturnType = instanceRetType }
   | FunDepOrigin2 targetPred _ instancePred _ <- ctOrigin ct
   , TyConApp targetCon [TyConApp iface1 [], targetRetType] <- targetPred
   , TyConApp instanceCon [TyConApp iface2 [], instanceRetType] <- instancePred
