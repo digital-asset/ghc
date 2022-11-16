@@ -59,15 +59,13 @@ data DamlError
 customDamlError :: Ct -> Maybe DamlError
 customDamlError ct
   | TyConApp con [LitTy (StrTyLit fieldName), recordType, resultType] <- ctev_pred (ctEvidence ct)
-  , check ["DA.Internal.Record"] "HasField" con
+  , check ["DA.Internal.Desugar", "DA.Internal.Record"] "HasField" con
   = Just $ NonExistentFieldAccess { fieldName, recordType, expectedReturnType = resultType }
   | FunDepOrigin2 targetPred _ instancePred _ <- ctOrigin ct
-  , TyConApp targetCon [TyConApp iface1 [], targetRetType] <- targetPred
-  , TyConApp instanceCon [TyConApp iface2 [], instanceRetType] <- instancePred
-  , TyConApp con [LitTy (StrTyLit fieldName1), recordType1, targetRetType] <- targetPred
-  , TyConApp con [LitTy (StrTyLit fieldName2), recordType2, instanceRetType] <- instancePred
-  , check ["DA.Internal.Record"] "HasField" targetCon
-  , check ["DA.Internal.Record"] "HasField" instanceCon
+  , TyConApp targetCon [LitTy (StrTyLit fieldName1), recordType1, targetRetType] <- targetPred
+  , TyConApp instanceCon [LitTy (StrTyLit fieldName2), recordType2, instanceRetType] <- instancePred
+  , check ["DA.Internal.Desugar", "DA.Internal.Record"] "HasField" targetCon
+  , check ["DA.Internal.Desugar", "DA.Internal.Record"] "HasField" instanceCon
   , fieldName1 == fieldName2
   , eqType recordType1 recordType2
   , not (eqType targetRetType instanceRetType)
@@ -157,8 +155,13 @@ displayError info TriedImplementView { target, triedReturnType, expectedReturnTy
       <> text ", but the definition of interface" <+> pprq target <+> text "requires a view of type" <+> pprq expectedReturnType
 displayError info NonExistentFieldAccess { recordType, expectedReturnType, fieldName } =
   pure $ text "Tried to access nonexistent field" <+> pprq fieldName
-     <+> text "with return type" <+> pprq expectedReturnType
+     <+> text "with type" <+> pprq expectedReturnType
      <+> text "on value of type" <+> pprq recordType
+displayError info FieldAccessWrongReturnType { recordType, triedReturnType, expectedReturnType, fieldName } =
+  pure $ text "Tried to get field" <+> pprq fieldName
+     <+> text "with type" <+> pprq triedReturnType
+     <+> text "on value of type" <+> pprq recordType
+      <> text ", but that field has type" <+> pprq expectedReturnType
 
 dedupe :: DamlInfo -> DamlInfo
 dedupe (DamlInfo x0 x1 x2 x3 x4 x5) =
