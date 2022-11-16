@@ -143,8 +143,9 @@ displayError info TriedImplementMethod { target, method, result } =
 displayError info TriedImplementView { target, triedReturnType, expectedReturnType } =
   pure $ text "Tried to implement a view of type" <+> pprq triedReturnType <+> text "on interface" <+> pprq target
       <> text ", but the definition of interface" <+> pprq target <+> text "requires a view of type" <+> pprq expectedReturnType
-displayError info TriedFieldAccess {} =
-  pure $ text "TriedFieldAccess error"
+displayError info TriedFieldAccess { recordType, expectedReturnType, fieldName } =
+  pure $ text "Tried to access nonexistent field" <+> pprq fieldName
+     <+> "with return type" <+> pprq expectedReturnType <+> "on value of type" <+> pprq recordType
 
 dedupe :: DamlInfo -> DamlInfo
 dedupe (DamlInfo x0 x1 x2 x3 x4 x5) =
