@@ -1440,7 +1440,7 @@ isFunLhs :: LHsExpr GhcPs
 
 isFunLhs e = go e [] []
  where
-   go (dL->L loc (HsVar _ (dL->L _ f))) es ann
+   go (dL->L _loc (HsVar _ (dL->L _ f))) _es _ann
        | f == userWrittenTupleName = pure Nothing
    go (dL->L loc (HsVar _ (dL->L _ f))) es ann
        | not (isRdrDataCon f)        = return (Just (cL loc f, Prefix, es, ann))
