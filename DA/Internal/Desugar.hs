@@ -1,4 +1,5 @@
 {-# LANGUAGE DamlSyntax #-}
+{-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE RankNTypes #-}
@@ -9,6 +10,7 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE AllowAmbiguousTypes #-} -- setField doesn't mention x, because we pass it as a type application
 
 -- This file contains a minimal setup to allow the compilation of a desugared
 -- DAML template and interface.
@@ -229,3 +231,7 @@ newtype InterfaceView p i t = InterfaceView ()
 
 mkInterfaceView : forall p i t v. (Implements t i, HasInterfaceView i v) => (t -> v) -> InterfaceView p i t
 mkInterfaceView _ = InterfaceView ()
+
+class HasField (x : Symbol) r a | x r -> a where
+    getField : r -> a
+    setField : a -> r -> r

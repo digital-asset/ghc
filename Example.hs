@@ -51,3 +51,14 @@ interface AnotherInterface where
 
 f : (a,b,c,d,e,f) -> (f,a,b,c,d,e)
 f (a,b,c,d,e,f) = (f,a,b,c,d,e)
+
+data Zero = Zero
+instance HasField "val" Zero Int where
+  getField _ = 0
+  setField _ r = r
+
+g0 : Int
+g0 = getField @"noval" Zero
+
+g1 : Char
+g1 = getField @"val" Zero
