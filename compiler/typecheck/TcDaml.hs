@@ -53,13 +53,13 @@ data DamlError
   | TriedExercise { target :: Name, choice :: Name, result :: Type }
   | TriedImplementMethod { target :: Name, method :: FastString, result :: Type }
   | TriedImplementView { target :: Name, triedReturnType :: Type, expectedReturnType :: Type }
-  | TriedFieldAccess { recordType :: Type, expectedReturnType :: Type, fieldName :: FastString }
+  | NonExistentFieldAccess { recordType :: Type, expectedReturnType :: Type, fieldName :: FastString }
 
 customDamlError :: Ct -> Maybe DamlError
 customDamlError ct
   | TyConApp con [LitTy (StrTyLit fieldName), recordType, resultType] <- ctev_pred (ctEvidence ct)
   , check ["DA.Internal.Record"] "HasField" con
-  = Just $ TriedFieldAccess { fieldName, recordType, expectedReturnType = resultType }
+  = Just $ NonExistentFieldAccess { fieldName, recordType, expectedReturnType = resultType }
   | FunDepOrigin2 targetPred _ instancePred _ <- ctOrigin ct
   , TyConApp targetCon [TyConApp iface1 [], targetRetType] <- targetPred
   , TyConApp instanceCon [TyConApp iface2 [], instanceRetType] <- instancePred
@@ -143,7 +143,7 @@ displayError info TriedImplementMethod { target, method, result } =
 displayError info TriedImplementView { target, triedReturnType, expectedReturnType } =
   pure $ text "Tried to implement a view of type" <+> pprq triedReturnType <+> text "on interface" <+> pprq target
       <> text ", but the definition of interface" <+> pprq target <+> text "requires a view of type" <+> pprq expectedReturnType
-displayError info TriedFieldAccess { recordType, expectedReturnType, fieldName } =
+displayError info NonExistentFieldAccess { recordType, expectedReturnType, fieldName } =
   pure $ text "Tried to access nonexistent field" <+> pprq fieldName
      <+> "with return type" <+> pprq expectedReturnType <+> "on value of type" <+> pprq recordType
 
