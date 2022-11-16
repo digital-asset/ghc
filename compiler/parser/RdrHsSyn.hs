@@ -3656,7 +3656,7 @@ mkInterfaceInstanceDecls parentName sharedBinds (L loc interfaceInstance) = do
       let L loc (ValidInterfaceInstanceMethodDecl _ viimdMatches) = viiView
 
           fullViewName = mkInterfaceInstanceDesugarName loc ["view"] []
-          shortViewName = noLoc $ mkRdrUnqual $ mkVarOcc "view"
+          internalViewName = noLoc $ mkRdrUnqual $ mkVarOcc "$view"
           signature = TypeSig noExt [fullViewName] $
             mkHsWildCardBndrs $ mkHsImplicitBndrs $
               interfaceViewType
@@ -3671,9 +3671,12 @@ mkInterfaceInstanceDecls parentName sharedBinds (L loc interfaceInstance) = do
                     (ValBinds noExt
                       (unitBag
                         (noLoc
-                          (FunBind noExt shortViewName viimdMatches WpHole [])))
+                          (FunBind noExt internalViewName
+                            (renameMatchGroup internalViewName viimdMatches)
+                            WpHole
+                            [])))
                       [])))
-                (noLoc (HsVar noExt shortViewName)))
+                (noLoc (HsVar noExt internalViewName)))
           body =
             mkInterfaceViewExpr
             `mkAppType` parentType
@@ -3690,10 +3693,12 @@ mkInterfaceInstanceDecls parentName sharedBinds (L loc interfaceInstance) = do
       ]
 
     mkInterfaceInstanceMethodDecls :: Located ValidInterfaceInstanceMethodDecl -> [LHsDecl GhcPs]
-    mkInterfaceInstanceMethodDecls (L loc ValidInterfaceInstanceMethodDecl { viimdId = name, viimdMatches }) =
+    mkInterfaceInstanceMethodDecls (L loc ValidInterfaceInstanceMethodDecl { viimdId, viimdMatches }) =
       let
-        fullMethodName = mkInterfaceInstanceDesugarName loc ["method"] [rdrNameToString name]
-        methodNameSymbol = mkSymbol (occNameString $ rdrNameOcc $ unLoc name)
+        methodNameStr = rdrNameToString viimdId
+        fullMethodName = mkInterfaceInstanceDesugarName loc ["method"] [methodNameStr]
+        methodNameSymbol = mkSymbol methodNameStr
+        internalMethodName = noLoc $ mkRdrUnqual $ mkVarOcc ("$" ++ methodNameStr)
         sig =
           TypeSig noExt [fullMethodName] $
             mkHsWildCardBndrs $ mkHsImplicitBndrs $
@@ -3710,9 +3715,12 @@ mkInterfaceInstanceDecls parentName sharedBinds (L loc interfaceInstance) = do
                   (ValBinds noExt
                     (unitBag
                       (noLoc
-                        (FunBind noExt name viimdMatches WpHole [])))
+                        (FunBind noExt internalMethodName
+                          (renameMatchGroup internalMethodName viimdMatches)
+                          WpHole
+                          [])))
                     [])))
-              (noLoc (HsVar noExt name)))
+              (noLoc (HsVar noExt internalMethodName)))
         body =
           mkMethodExpr
           `mkAppType` parentType
@@ -3728,6 +3736,30 @@ mkInterfaceInstanceDecls parentName sharedBinds (L loc interfaceInstance) = do
         [ noLoc (SigD noExt sig)
         , noLoc (ValD noExt val)
         ]
+
+renameMatchGroup ::
+     Located RdrName
+  -> MatchGroup GhcPs (LHsExpr GhcPs)
+  -> MatchGroup GhcPs (LHsExpr GhcPs)
+renameMatchGroup newName = \case
+  MG { mg_alts, .. } -> MG
+    { mg_alts = fmap (fmap (fmap renameMatch)) mg_alts
+    , ..
+    }
+  x -> x
+  where
+    renameMatch = \case
+      Match { m_ctxt, .. } -> Match
+        { m_ctxt = renameMatchContext m_ctxt
+        , ..
+        }
+      x -> x
+    renameMatchContext = \case
+      FunRhs { .. } -> FunRhs
+        { mc_fun = newName
+        , ..
+        }
+      x -> x
 
 mkHasInterfaceTypeRepInstance :: LHsType GhcPs -> LHsDecl GhcPs
 mkHasInterfaceTypeRepInstance ifaceTy =
