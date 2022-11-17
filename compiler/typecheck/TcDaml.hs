@@ -55,9 +55,14 @@ data DamlError
   | TriedImplementView { target :: Name, triedReturnType :: Type, expectedReturnType :: Type }
   | NonExistentFieldAccess { recordType :: Type, expectedReturnType :: Type, fieldName :: FastString }
   | FieldAccessWrongReturnType { fieldName :: FastString, recordType :: Type, triedReturnType :: Type, expectedReturnType :: Type }
+  | NumericScaleOutOfBounds { attemptedScale :: Integer }
 
 customDamlError :: Ct -> Maybe DamlError
 customDamlError ct
+  | TyConApp con [LitTy (NumTyLit attemptedScale)] <- ctev_pred (ctEvidence ct)
+  , check ["DA.Internal.Desugar", "GHC.Classes"] "NumericScale" con
+  , attemptedScale > 37 || attemptedScale < 0
+  = Just $ NumericScaleOutOfBounds { attemptedScale }
   | TyConApp con [LitTy (StrTyLit fieldName), recordType, resultType] <- ctev_pred (ctEvidence ct)
   , check ["DA.Internal.Desugar", "DA.Internal.Record"] "HasField" con
   = Just $ NonExistentFieldAccess { fieldName, recordType, expectedReturnType = resultType }
@@ -162,6 +167,11 @@ displayError info FieldAccessWrongReturnType { recordType, triedReturnType, expe
      <+> text "with type" <+> pprq triedReturnType
      <+> text "on value of type" <+> pprq recordType
       <> text ", but that field has type" <+> pprq expectedReturnType
+displayError info NumericScaleOutOfBounds { attemptedScale }
+  | attemptedScale > 37
+  = pure $ text "Tried to create a Numeric with a scale of" <+> ppr attemptedScale <> ", but only scales up to 37 are supported."
+  | attemptedScale < 0
+  = pure $ text "Tried to create a Numeric with a negative scale, but Numerics must have a positive scale."
 
 dedupe :: DamlInfo -> DamlInfo
 dedupe (DamlInfo x0 x1 x2 x3 x4 x5) =
