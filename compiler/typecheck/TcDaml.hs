@@ -167,11 +167,8 @@ displayError info FieldAccessWrongReturnType { recordType, triedReturnType, expe
      <+> text "with type" <+> pprq triedReturnType
      <+> text "on value of type" <+> pprq recordType
       <> text ", but that field has type" <+> pprq expectedReturnType
-displayError info NumericScaleOutOfBounds { attemptedScale }
-  | attemptedScale > 37
-  = pure $ text "Tried to create a Numeric with a scale of" <+> ppr attemptedScale <> text ", but only scales up to 37 are supported."
-  | attemptedScale < 0
-  = pure $ text "Tried to create a Numeric with a negative scale, but Numerics must have a positive scale."
+displayError info NumericScaleOutOfBounds { attemptedScale } =
+  pure $ text "Tried to define a Numeric with a scale of" <+> ppr attemptedScale <> text ", but only scales between 0 and 37 are supported."
 
 dedupe :: DamlInfo -> DamlInfo
 dedupe (DamlInfo x0 x1 x2 x3 x4 x5) =
