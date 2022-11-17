@@ -169,7 +169,7 @@ displayError info FieldAccessWrongReturnType { recordType, triedReturnType, expe
       <> text ", but that field has type" <+> pprq expectedReturnType
 displayError info NumericScaleOutOfBounds { attemptedScale }
   | attemptedScale > 37
-  = pure $ text "Tried to create a Numeric with a scale of" <+> ppr attemptedScale <> ", but only scales up to 37 are supported."
+  = pure $ text "Tried to create a Numeric with a scale of" <+> ppr attemptedScale <> text ", but only scales up to 37 are supported."
   | attemptedScale < 0
   = pure $ text "Tried to create a Numeric with a negative scale, but Numerics must have a positive scale."
 
