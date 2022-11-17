@@ -58,7 +58,7 @@ data DamlError
 customDamlError :: Ct -> Maybe DamlError
 customDamlError ct
   | TyConApp con [TyConApp target []] <- ctev_pred (ctEvidence ct)
-  , check ["DA.Internal.Desugar", "DA.Internal.Template.Functions"] "HasInterfaceTypeRep" con
+  , check ["DA.Internal.Desugar", "DA.Internal.Interface"] "HasInterfaceTypeRep" con
   = Just $ TriedImplementNonInterface { triedIface = tyConName target }
   | FunDepOrigin2 targetPred _ instancePred _ <- ctOrigin ct
   , TyConApp targetCon [TyConApp iface1 [], targetRetType] <- targetPred
