@@ -53,10 +53,29 @@ data DamlError
   | TriedExercise { target :: Name, choice :: Name, result :: Type }
   | TriedImplementMethod { target :: Name, method :: FastString, result :: Type }
   | TriedImplementView { target :: Name, triedReturnType :: Type, expectedReturnType :: Type }
+  | NonExistentFieldAccess { recordType :: Type, expectedReturnType :: Type, fieldName :: FastString }
+  | FieldAccessWrongReturnType { fieldName :: FastString, recordType :: Type, triedReturnType :: Type, expectedReturnType :: Type }
+  | NumericScaleOutOfBounds { attemptedScale :: Integer }
   | TriedImplementNonInterface { triedIface :: Name }
 
 customDamlError :: Ct -> Maybe DamlError
 customDamlError ct
+  | TyConApp con [LitTy (NumTyLit attemptedScale)] <- ctev_pred (ctEvidence ct)
+  , check ["DA.Internal.Desugar", "GHC.Classes"] "NumericScale" con
+  , attemptedScale > 37 || attemptedScale < 0
+  = Just $ NumericScaleOutOfBounds { attemptedScale }
+  | TyConApp con [LitTy (StrTyLit fieldName), recordType, resultType] <- ctev_pred (ctEvidence ct)
+  , check ["DA.Internal.Desugar", "DA.Internal.Record"] "HasField" con
+  = Just $ NonExistentFieldAccess { fieldName, recordType, expectedReturnType = resultType }
+  | FunDepOrigin2 targetPred _ instancePred _ <- ctOrigin ct
+  , TyConApp targetCon [LitTy (StrTyLit fieldName1), recordType1, targetRetType] <- targetPred
+  , TyConApp instanceCon [LitTy (StrTyLit fieldName2), recordType2, instanceRetType] <- instancePred
+  , check ["DA.Internal.Desugar", "DA.Internal.Record"] "HasField" targetCon
+  , check ["DA.Internal.Desugar", "DA.Internal.Record"] "HasField" instanceCon
+  , fieldName1 == fieldName2
+  , eqType recordType1 recordType2
+  , not (eqType targetRetType instanceRetType)
+  = Just $ FieldAccessWrongReturnType { fieldName = fieldName1, recordType = recordType1, triedReturnType = targetRetType, expectedReturnType = instanceRetType }
   | TyConApp con [TyConApp target []] <- ctev_pred (ctEvidence ct)
   , check ["DA.Internal.Desugar", "DA.Internal.Interface"] "HasInterfaceTypeRep" con
   = Just $ TriedImplementNonInterface { triedIface = tyConName target }
@@ -143,6 +162,17 @@ displayError info TriedImplementMethod { target, method, result } =
 displayError info TriedImplementView { target, triedReturnType, expectedReturnType } =
   pure $ text "Tried to implement a view of type" <+> pprq triedReturnType <+> text "on interface" <+> pprq target
       <> text ", but the definition of interface" <+> pprq target <+> text "requires a view of type" <+> pprq expectedReturnType
+displayError info NonExistentFieldAccess { recordType, expectedReturnType, fieldName } =
+  pure $ text "Tried to access nonexistent field" <+> pprq fieldName
+     <+> text "with type" <+> pprq expectedReturnType
+     <+> text "on value of type" <+> pprq recordType
+displayError info FieldAccessWrongReturnType { recordType, triedReturnType, expectedReturnType, fieldName } =
+  pure $ text "Tried to get field" <+> pprq fieldName
+     <+> text "with type" <+> pprq triedReturnType
+     <+> text "on value of type" <+> pprq recordType
+      <> text ", but that field has type" <+> pprq expectedReturnType
+displayError info NumericScaleOutOfBounds { attemptedScale } =
+  pure $ text "Tried to define a Numeric with a scale of" <+> ppr attemptedScale <> text ", but only scales between 0 and 37 are supported."
 displayError info TriedImplementNonInterface { triedIface }
   | isTemplate info triedIface
   = pure $ text "Tried to make an interface implementation of" <+> pprq triedIface <>
