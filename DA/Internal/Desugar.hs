@@ -159,6 +159,9 @@ class HasFromInterface t i where
 class HasInterfaceView i v | i -> v where
   _view : i -> v
 
+view : forall i v. HasInterfaceView i v => i -> v
+view = _view
+
 class HasFromAnyView i v | i -> v where
   _fromAnyView : proxy i -> Any -> Optional v
 

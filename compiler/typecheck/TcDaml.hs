@@ -56,6 +56,7 @@ data DamlError
   | NonExistentFieldAccess { recordType :: Type, expectedReturnType :: Type, fieldName :: FastString }
   | FieldAccessWrongReturnType { fieldName :: FastString, recordType :: Type, triedReturnType :: Type, expectedReturnType :: Type }
   | NumericScaleOutOfBounds { attemptedScale :: Integer }
+  | TriedImplementNonInterface { triedIface :: Name }
 
 customDamlError :: Ct -> Maybe DamlError
 customDamlError ct
@@ -75,6 +76,9 @@ customDamlError ct
   , eqType recordType1 recordType2
   , not (eqType targetRetType instanceRetType)
   = Just $ FieldAccessWrongReturnType { fieldName = fieldName1, recordType = recordType1, triedReturnType = targetRetType, expectedReturnType = instanceRetType }
+  | TyConApp con [TyConApp target []] <- ctev_pred (ctEvidence ct)
+  , check ["DA.Internal.Desugar", "DA.Internal.Interface"] "HasInterfaceTypeRep" con
+  = Just $ TriedImplementNonInterface { triedIface = tyConName target }
   | FunDepOrigin2 targetPred _ instancePred _ <- ctOrigin ct
   , TyConApp targetCon [TyConApp iface1 [], targetRetType] <- targetPred
   , TyConApp instanceCon [TyConApp iface2 [], instanceRetType] <- instancePred
@@ -169,6 +173,16 @@ displayError info FieldAccessWrongReturnType { recordType, triedReturnType, expe
       <> text ", but that field has type" <+> pprq expectedReturnType
 displayError info NumericScaleOutOfBounds { attemptedScale } =
   pure $ text "Tried to define a Numeric with a scale of" <+> ppr attemptedScale <> text ", but only scales between 0 and 37 are supported."
+displayError info TriedImplementNonInterface { triedIface }
+  | isTemplate info triedIface
+  = pure $ text "Tried to make an interface implementation of" <+> pprq triedIface <>
+           text ", but" <+> pprq triedIface <+> text "is a template, not an interface."
+  | isInterface info triedIface
+  = pure $ text "Tried to make an interface implementation of" <+> pprq triedIface <>
+           text ", but" <+> pprq triedIface <+> text "does not have an instance of HasInterfaceTypeRep. This should not happen, please contact support."
+  | otherwise
+  = pure $ text "Tried to make an interface implementation of" <+> pprq triedIface <>
+           text ", but" <+> pprq triedIface <+> text "is not an interface."
 
 dedupe :: DamlInfo -> DamlInfo
 dedupe (DamlInfo x0 x1 x2 x3 x4 x5) =
