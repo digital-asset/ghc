@@ -3997,7 +3997,7 @@ shareTemplateLetBindings :: Located RdrName -> LHsLocalBinds GhcPs -> ([LHsDecl 
 shareTemplateLetBindings conName vtLetBindings =
   case vars of
     [] -> ([],noLoc emptyLocalBinds)
-    _ -> ([letDecl],sharedBinds)
+    _ -> (letDecls,sharedBinds)
   where
     letFnName :: RdrName
     letFnName = mkRdrUnqual $ mkVarOcc ("_templateLet_" ++ rdrNameToString conName)
@@ -4005,12 +4005,19 @@ shareTemplateLetBindings conName vtLetBindings =
     vars :: [RdrName]
     vars = collectLocalBinders (unLoc vtLetBindings)
 
-    letDecl :: LHsDecl GhcPs
-    letDecl = functionBindDecl letFnName defArgs (noLoc $ HsLet noExt binds body)
+    letDecls :: [LHsDecl GhcPs]
+    letDecls =
+      [ noLoc (SigD noExt sig)
+      , functionBindDecl letFnName defArgs (noLoc $ HsLet noExt binds body)
+      ]
       where
         defArgs = [this]
         this = asPatRecWild "this" conName
         binds = extendLetBindings vtLetBindings (dummyBinds defArgs)
+        sig =
+          TypeSig noExt [noLoc letFnName] $
+            mkHsWildCardBndrs $ mkHsImplicitBndrs $
+              noLoc $ HsWildCardTy noExt
 
         body :: LHsExpr GhcPs
         body = mkTupleExp (map mkRdrExp vars)
