@@ -4007,17 +4007,17 @@ shareTemplateLetBindings conName vtLetBindings =
 
     letDecls :: [LHsDecl GhcPs]
     letDecls =
-      [ noLoc (SigD noExt sig)
-      , functionBindDecl letFnName defArgs (noLoc $ HsLet noExt binds body)
+      [ {-noLoc (SigD noExt sig)
+      , -}functionBindDecl letFnName defArgs (noLoc $ HsLet noExt binds body)
       ]
       where
         defArgs = [this]
         this = asPatRecWild "this" conName
         binds = extendLetBindings vtLetBindings (dummyBinds defArgs)
-        sig =
-          TypeSig noExt [noLoc letFnName] $
-            mkHsWildCardBndrs $ mkHsImplicitBndrs $
-              noLoc $ HsWildCardTy noExt
+        --sig =
+        --  TypeSig noExt [noLoc letFnName] $
+        --    mkHsWildCardBndrs $ mkHsImplicitBndrs $
+        --      noLoc $ HsWildCardTy noExt
 
         body :: LHsExpr GhcPs
         body = mkTupleExp (map mkRdrExp vars)
