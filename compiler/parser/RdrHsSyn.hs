@@ -4000,7 +4000,7 @@ shareTemplateLetBindings conName vtLetBindings =
     _ -> (letDecls,sharedBinds)
   where
     letFnName :: RdrName
-    letFnName = mkRdrUnqual $ mkVarOcc ("_templateLet_" ++ rdrNameToString conName)
+    letFnName = mkRdrUnqual $ mkVarOcc ("_templateLet_" ++ mangle (rdrNameToString conName))
 
     vars :: [RdrName]
     vars = collectLocalBinders (unLoc vtLetBindings)
