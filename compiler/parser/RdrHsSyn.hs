@@ -170,8 +170,8 @@ isDamlGenerated namedThing =
   let nameStr = occNameString $ occName namedThing
   in
   or
-    [ "$_templateLet$_" `isInfixOf` nameStr
-    , "_requires_" `isInfixOf` nameStr && '$' `elem` nameStr
+    [ "_templateLet$_" `isPrefixOf` nameStr
+    , "_requires$_" `isPrefixOf` nameStr && '$' `elem` nameStr
     ]
 
 {- **********************************************************************
@@ -3913,7 +3913,7 @@ mkInterfaceDecl tycon (L requiresLoc requires) decls = do
         requiresMarker requiredTycon =
           let name =
                 mkRdrUnqual $ mkVarOcc $
-                  ("_requires_" ++) $ intercalate "_" $ mangle <$>
+                  ("_requires$_" ++) $ intercalate "_" $ mangle <$>
                     [ rdrNameToString viInterfaceName
                     , rdrNameToQualString requiredTycon
                     ]
@@ -4009,7 +4009,7 @@ shareTemplateLetBindings conName vtLetBindings =
     _ -> (letDecls,sharedBinds)
   where
     letFnName :: RdrName
-    letFnName = mkRdrUnqual $ mkVarOcc (mangle $ "_templateLet_" ++  rdrNameToString conName)
+    letFnName = mkRdrUnqual $ mkVarOcc ("_templateLet$_" ++  rdrNameToString conName)
 
     vars :: [RdrName]
     vars = collectLocalBinders (unLoc vtLetBindings)
