@@ -170,7 +170,7 @@ isDamlGenerated namedThing =
   let nameStr = occNameString $ occName $ getName namedThing
   in
   or
-    [ "_templateLet_" `isInfixOf` nameStr && '$' `elem` nameStr
+    [ "$_templateLet$_" `isInfixOf` nameStr
     ]
 
 {- **********************************************************************
