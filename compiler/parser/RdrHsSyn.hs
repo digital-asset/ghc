@@ -165,9 +165,9 @@ import Module
 
 #include "HsVersions.h"
 
-isDamlGenerated :: NamedThing a => a -> Bool
+isDamlGenerated :: HasOccName a => a -> Bool
 isDamlGenerated namedThing =
-  let nameStr = occNameString $ occName $ getName namedThing
+  let nameStr = occNameString $ occName namedThing
   in
   or
     [ "$_templateLet$_" `isInfixOf` nameStr
