@@ -67,6 +67,7 @@ module   RdrHsSyn (
 
         -- DAML name utilities
         qualifyDesugar,
+        isDamlGenerated,
 
         -- Stuff to do with Foreign declarations
         mkImport,
@@ -164,6 +165,13 @@ import Module
 
 #include "HsVersions.h"
 
+isDamlGenerated :: NamedThing a => a -> Bool
+isDamlGenerated namedThing =
+  let nameStr = occNameString $ occName $ getName namedThing
+  in
+  or
+    [ "_templateLet_" `isInfixOf` nameStr && '$' `elem` nameStr
+    ]
 
 {- **********************************************************************
 
