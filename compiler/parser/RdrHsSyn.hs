@@ -171,6 +171,7 @@ isDamlGenerated namedThing =
   in
   or
     [ "$_templateLet$_" `isInfixOf` nameStr
+    , "_requires_" `isInfixOf` nameStr && '$' `elem` nameStr
     ]
 
 {- **********************************************************************
