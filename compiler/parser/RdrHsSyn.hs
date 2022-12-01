@@ -2128,7 +2128,7 @@ mkRecConstrOrUpdate _ (dL->L l (HsVar _ (dL->L _ c))) _lrec (fbinds,dd)
         then addFatalError (getLoc (head ps)) $ text "Use of OverloadedRecordDot '.' not valid ('.' isn't allowed when constructing records or in record patterns)"
         else return (mkRdrRecordCon (cL l c) (mk_rec_fields fs dd))
 mkRecConstrOrUpdate overloaded_update exp l (fs,dd)
-  | dd        = parseErrorSDoc l (text "You cannot use `..' in a record update")
+  | dd        = parseErrorSDoc l (text "The syntax `..' can only be used with a record constructor.")
   | otherwise = mkRdrRecordUpd overloaded_update exp fs
 
 mkRdrRecordUpd :: Bool -> LHsExpr GhcPs -> [Fbind (HsExpr GhcPs)] -> P (HsExpr GhcPs)
