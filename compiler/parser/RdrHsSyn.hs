@@ -170,7 +170,7 @@ isDamlGenerated namedThing =
   let nameStr = occNameString $ occName namedThing
   in
   or
-    [ "_templateLet$_" `isPrefixOf` nameStr
+    [ "_templateLet_" `isPrefixOf` nameStr
     , "_requires$_" `isPrefixOf` nameStr
     , "_view$_" `isPrefixOf` nameStr
     , "_interface_instance$_" `isPrefixOf` nameStr
@@ -4012,7 +4012,7 @@ shareTemplateLetBindings conName vtLetBindings =
     _ -> (letDecls,sharedBinds)
   where
     letFnName :: RdrName
-    letFnName = mkRdrUnqual $ mkVarOcc ("_templateLet$_" ++  rdrNameToString conName)
+    letFnName = mkRdrUnqual $ mkVarOcc ("_templateLet_" ++  rdrNameToString conName)
 
     vars :: [RdrName]
     vars = collectLocalBinders (unLoc vtLetBindings)
