@@ -175,6 +175,7 @@ isDamlGenerated namedThing =
     , "_view$_" `isPrefixOf` nameStr
     , "_interface_instance$_" `isPrefixOf` nameStr
     , "_method$_" `isPrefixOf` nameStr
+    , "_choice$_" `isPrefixOf` nameStr
     ]
 
 {- **********************************************************************
