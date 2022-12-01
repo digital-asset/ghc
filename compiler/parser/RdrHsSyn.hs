@@ -171,7 +171,10 @@ isDamlGenerated namedThing =
   in
   or
     [ "_templateLet$_" `isPrefixOf` nameStr
-    , "_requires$_" `isPrefixOf` nameStr && '$' `elem` nameStr
+    , "_requires$_" `isPrefixOf` nameStr
+    , "_view$_" `isPrefixOf` nameStr
+    , "_interface_instance$_" `isPrefixOf` nameStr
+    , "_method$_" `isPrefixOf` nameStr
     ]
 
 {- **********************************************************************
@@ -3616,15 +3619,14 @@ mkInterfaceInstanceDecls parentName sharedBinds (L loc interfaceInstance) = do
       cL loc
       $ mkRdrUnqual
       $ mkVarOcc
-      $ concatMap (('_':) . mangle)
-      $ concat
-      $ [ prefix
-        , [ rdrNameToString parentName
+      $ concatMap ('_':)
+      $ prefix ++
+        map mangle
+          [ rdrNameToString parentName
           , rdrNameToQualString viiInterface
           , rdrNameToQualString viiTemplate
-          ]
-        , suffix
-        ]
+          ] ++
+        suffix
 
     implementsInstances = mkImplementsInstances templateType interfaceType
 
@@ -3632,7 +3634,7 @@ mkInterfaceInstanceDecls parentName sharedBinds (L loc interfaceInstance) = do
 
     interfaceInstanceMarkerDecls =
       let
-          name = mkInterfaceInstanceDesugarName loc ["interface","instance"] []
+          name = mkInterfaceInstanceDesugarName loc ["interface","instance$"] []
           sig =
             TypeSig noExt [name] $
               mkHsWildCardBndrs $ mkHsImplicitBndrs $
@@ -3664,7 +3666,7 @@ mkInterfaceInstanceDecls parentName sharedBinds (L loc interfaceInstance) = do
     interfaceInstanceViewDecls =
       let L loc (ValidInterfaceInstanceMethodDecl _ viimdMatches) = viiView
 
-          fullViewName = mkInterfaceInstanceDesugarName loc ["view"] []
+          fullViewName = mkInterfaceInstanceDesugarName loc ["view$"] []
           internalViewName = noLoc $ mkRdrUnqual $ mkVarOcc "$view"
           signature = TypeSig noExt [fullViewName] $
             mkHsWildCardBndrs $ mkHsImplicitBndrs $
@@ -3705,7 +3707,7 @@ mkInterfaceInstanceDecls parentName sharedBinds (L loc interfaceInstance) = do
     mkInterfaceInstanceMethodDecls (L loc ValidInterfaceInstanceMethodDecl { viimdId, viimdMatches }) =
       let
         methodNameStr = rdrNameToString viimdId
-        fullMethodName = mkInterfaceInstanceDesugarName loc ["method"] [methodNameStr]
+        fullMethodName = mkInterfaceInstanceDesugarName loc ["method$"] [methodNameStr]
         methodNameSymbol = mkSymbol methodNameStr
         internalMethodName = noLoc $ mkRdrUnqual $ mkVarOcc ("$" ++ methodNameStr)
         sig =
