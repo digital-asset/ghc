@@ -77,7 +77,7 @@ htmlhelp_basename = 'GHCUsersGuide'
 latex_elements = {
     'inputenc': '',
     'utf8extra': '',
-    'preamble': '''
+    'preamble': r'''
 \usepackage{fontspec}
 \usepackage{makeidx}
 \setsansfont{DejaVu Sans}
