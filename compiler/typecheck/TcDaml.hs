@@ -46,7 +46,10 @@ check modules name namedThing
 customDamlErrors :: Ct -> TcM (Maybe SDoc)
 customDamlErrors ct = do
   info <- getEnvDaml
-  pure $ displayError info =<< customDamlError ct
+  pure $ do
+    e <- customDamlError ct
+    d <- displayError info e
+    pure $ vcat [d, ppr ct, ppr (ctOrigin ct)]
 
 data DamlError
   = TriedView { target :: Name, result :: Type }
