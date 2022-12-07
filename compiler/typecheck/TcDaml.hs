@@ -138,12 +138,8 @@ displayError info TriedExercise { target, result, choice }
   , [expectedReturnType] <- choiceType info choice
   , not (result `eqType` expectedReturnType)
   = pure
-  $ vcat [ text "Tried to exercise a choice" <+> pprq choice <+> text "on" <+> variantName info target <> text "to get an result of type" <+> pprq result
-           <> text ", but exercising choice" <+> pprq choice <+> text "on" <+> variantName info target <+> text "gives result type" <+> pprq result <+> text "instead."
-         , printListWithHeader
-              empty
-              (text "Choice" <+> pprq choice <+> text "belongs only to the following types:")
-              (map (variantName info) (choiceImplementor info choice))
+  $ vcat [ text "Tried to to get a result of type" <+> pprq result <+> text "by exercise choice" <+> pprq choice <+> text "on" <+> variantName info target
+           <+> text "but exercising choice" <+> pprq choice <+> text "on" <+> variantName info target <+> text "would gives result type" <+> pprq result <+> text "instead."
          ]
   | otherwise
   = pure
