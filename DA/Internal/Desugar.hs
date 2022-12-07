@@ -171,6 +171,19 @@ type Implements t i =
   , HasFromInterface t i
   )
 
+type Template t =
+  ( HasTemplateTypeRep t
+  , HasToAnyTemplate t
+  , HasFromAnyTemplate t
+  )
+
+type Choice t c r =
+  ( Template t
+  , HasExercise t c r
+  , HasToAnyChoice t c r
+  , HasFromAnyChoice t c r
+  )
+
 coerceContractId : ContractId t -> ContractId i
 coerceContractId = primitive @"BECoerceContractId"
 
