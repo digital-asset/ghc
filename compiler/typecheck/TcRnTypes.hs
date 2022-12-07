@@ -303,7 +303,7 @@ instance ContainsModule gbl => ContainsModule (Env gbl lcl) where
 data DamlInfo = DamlInfo
   { templates :: [Name]
   , interfaces :: [Name]
-  , choices :: [(Name, Name)]
+  , choices :: [(Name, Name, Type)]
   , methods :: [(FastString, (Name, Type))]
   , implementations :: [(Name, Name)]
   , views :: [(Name, Type)]
