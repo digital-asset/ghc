@@ -140,10 +140,7 @@ displayError info TriedExercise { target, result, choice }
   | [implementor] <- choiceImplementor info choice
   , [expectedReturnType] <- choiceType info choice
   , not (result `eqType` expectedReturnType)
-  = pure
-  $ vcat [ text "Tried to to get a result of type" <+> pprq result <+> text "by exercise choice" <+> pprq choice <+> text "on" <+> variantName info target
-           <+> text "but exercising choice" <+> pprq choice <+> text "on" <+> variantName info target <+> text "would gives result type" <+> pprq result <+> text "instead."
-         ]
+  = Nothing
   | otherwise
   = pure
   $ vcat [ text "Tried to exercise a choice" <+> pprq choice <+> text "on" <+> variantName info target <+> text "but no choice of that name exists on" <+> variantName info target
