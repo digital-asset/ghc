@@ -48,8 +48,7 @@ customDamlErrors ct = do
   info <- getEnvDaml
   pure $ do
     e <- customDamlError ct
-    d <- displayError info e
-    pure $ vcat [d, ppr ct, ppr (ctOrigin ct)]
+    displayError info e
 
 data DamlError
   = TriedView { target :: Name, result :: Type }
@@ -140,7 +139,9 @@ displayError info TriedExercise { target, result, choice }
   | [implementor] <- choiceImplementor info choice
   , [expectedReturnType] <- choiceType info choice
   , not (result `eqType` expectedReturnType)
-  = Nothing
+  = pure
+  $ text "Tried to get a result of type" <+> pprq result <+> text "by exercising choice" <+> pprq choice <+> text "on" <+> variantName info target
+   <+> text "but exercising choice" <+> pprq choice <+> text "should return type" <+> pprq expectedReturnType <+> text "instead."
   | otherwise
   = pure
   $ vcat [ text "Tried to exercise a choice" <+> pprq choice <+> text "on" <+> variantName info target <+> text "but no choice of that name exists on" <+> variantName info target
