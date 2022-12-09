@@ -170,7 +170,7 @@ isDamlGenerated namedThing =
   let nameStr = occNameString $ occName namedThing
   in
   or
-    [ "_templateLet_" `isPrefixOf` nameStr
+    [ "_templateLet$_" `isPrefixOf` nameStr
     , "_requires$_" `isPrefixOf` nameStr
     , "_view$_" `isPrefixOf` nameStr
     , "_interface_instance$_" `isPrefixOf` nameStr
@@ -4012,24 +4012,19 @@ shareTemplateLetBindings conName vtLetBindings =
     _ -> (letDecls,sharedBinds)
   where
     letFnName :: RdrName
-    letFnName = mkRdrUnqual $ mkVarOcc ("_templateLet_" ++  rdrNameToString conName)
+    letFnName = mkRdrUnqual $ mkVarOcc ("_templateLet$_" ++  rdrNameToString conName)
 
     vars :: [RdrName]
     vars = collectLocalBinders (unLoc vtLetBindings)
 
     letDecls :: [LHsDecl GhcPs]
     letDecls =
-      [ {-noLoc (SigD noExt sig)
-      , -}functionBindDecl letFnName defArgs (noLoc $ HsLet noExt binds body)
+      [ functionBindDecl letFnName defArgs (noLoc $ HsLet noExt binds body)
       ]
       where
         defArgs = [this]
         this = asPatRecWild "this" conName
         binds = extendLetBindings vtLetBindings (dummyBinds defArgs)
-        --sig =
-        --  TypeSig noExt [noLoc letFnName] $
-        --    mkHsWildCardBndrs $ mkHsImplicitBndrs $
-        --      noLoc $ HsWildCardTy noExt
 
         body :: LHsExpr GhcPs
         body = mkTupleExp (map mkRdrExp vars)
