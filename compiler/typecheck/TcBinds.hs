@@ -67,6 +67,7 @@ import qualified GHC.LanguageExtensions as LangExt
 import ConLike
 
 import Control.Monad
+import RdrHsSyn (isDamlGenerated)
 
 #include "HsVersions.h"
 
@@ -1067,6 +1068,7 @@ localSigWarn :: WarningFlag -> Id -> Maybe TcIdSigInst -> TcM ()
 localSigWarn flag id mb_sig
   | Just _ <- mb_sig               = return ()
   | not (isSigmaTy (idType id))    = return ()
+  | isDamlGenerated id             = return ()
   | otherwise                      = warnMissingSignatures flag msg id
   where
     msg = text "Polymorphic local binding with no type signature:"

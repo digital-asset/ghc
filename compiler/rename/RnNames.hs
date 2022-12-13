@@ -72,6 +72,7 @@ import qualified Data.Set as S
 import System.FilePath  ((</>))
 
 import System.IO
+import RdrHsSyn (isDamlGenerated)
 
 {-
 ************************************************************************
@@ -1273,7 +1274,7 @@ warnMissingSignatures gbl_env
                               2 (pprPrefixName name <+> of_type <+> ty_msg) }
 
                   add_warn name msg
-                    = when (name `elemNameSet` sig_ns && export_check name)
+                    = when (name `elemNameSet` sig_ns && export_check name && not (isDamlGenerated name))
                            (addWarnAt (Reason flag) (getSrcSpan name) msg)
 
                   export_check name
