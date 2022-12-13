@@ -31,6 +31,7 @@ import FastString
 import Data.List
 import Data.Function ( on )
 import UniqDFM (udfmToList)
+import RdrHsSyn (isDamlGenerated)
 
 {-
 ************************************************************************
@@ -119,7 +120,8 @@ similarNameSuggestions where_look dflags global_env
   where
     all_possibilities :: [(String, (RdrName, HowInScope))]
     all_possibilities
-       =  [ (showPpr dflags r, (r, Left loc))
+       = filter (isDamlGenerated . fst . snd)
+       $  [ (showPpr dflags r, (r, Left loc))
           | (r,loc) <- local_possibilities local_env ]
        ++ [ (showPpr dflags r, rp) | (r, rp) <- global_possibilities global_env ]
 

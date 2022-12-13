@@ -67,6 +67,7 @@ module   RdrHsSyn (
 
         -- DAML name utilities
         qualifyDesugar,
+        isDamlGenerated,
 
         -- Stuff to do with Foreign declarations
         mkImport,
@@ -164,6 +165,18 @@ import Module
 
 #include "HsVersions.h"
 
+isDamlGenerated :: HasOccName a => a -> Bool
+isDamlGenerated namedThing =
+  let nameStr = occNameString $ occName namedThing
+  in
+  or
+    [ "_templateLet_" `isPrefixOf` nameStr
+    , "_requires$_" `isPrefixOf` nameStr
+    , "_view$_" `isPrefixOf` nameStr
+    , "_interface_instance$_" `isPrefixOf` nameStr
+    , "_method$_" `isPrefixOf` nameStr
+    , "_choice$_" `isPrefixOf` nameStr
+    ]
 
 {- **********************************************************************
 
@@ -2861,7 +2874,7 @@ mkChoiceDecls templateLoc conName binds (CombinedChoiceData controllers observer
     , noLoc (ValD noExt (FunBind noExt (noLoc name) (matchGroup noSrcSpan $ matchWithBinds (matchContext $ noLoc name) [] noSrcSpan (noLoc $ ExplicitTuple noExt (map (noLoc . Present noExt) [controllerDef, actionDef, consumingDef, observersDef]) Boxed) (noLoc emptyLocalBinds)) WpHole []))
     ]
     where
-        name = mkRdrUnqual $ mkVarOcc ("_choice_" ++ rdrNameToString conName ++ rdrNameToString cdChoiceName)
+        name = mkRdrUnqual $ mkVarOcc ("_choice$_" ++ rdrNameToString conName ++ rdrNameToString cdChoiceName)
         consumingSig = (unLoc . mkQualType . show . fromMaybe Consuming <$> cdChoiceConsuming) `mkAppTy` templateType
         consumingDef = unLoc . mkQualVar . mkDataOcc . show . fromMaybe Consuming <$> cdChoiceConsuming
         controllerSig = mkFunTy templateType (mkFunTy choiceType partiesType)
@@ -3607,15 +3620,14 @@ mkInterfaceInstanceDecls parentName sharedBinds (L loc interfaceInstance) = do
       cL loc
       $ mkRdrUnqual
       $ mkVarOcc
-      $ concatMap (('_':) . mangle)
-      $ concat
-      $ [ prefix
-        , [ rdrNameToString parentName
+      $ concatMap ('_':)
+      $ prefix ++
+        map mangle
+          [ rdrNameToString parentName
           , rdrNameToQualString viiInterface
           , rdrNameToQualString viiTemplate
-          ]
-        , suffix
-        ]
+          ] ++
+        suffix
 
     implementsInstances = mkImplementsInstances templateType interfaceType
 
@@ -3623,7 +3635,7 @@ mkInterfaceInstanceDecls parentName sharedBinds (L loc interfaceInstance) = do
 
     interfaceInstanceMarkerDecls =
       let
-          name = mkInterfaceInstanceDesugarName loc ["interface","instance"] []
+          name = mkInterfaceInstanceDesugarName loc ["interface","instance$"] []
           sig =
             TypeSig noExt [name] $
               mkHsWildCardBndrs $ mkHsImplicitBndrs $
@@ -3655,7 +3667,7 @@ mkInterfaceInstanceDecls parentName sharedBinds (L loc interfaceInstance) = do
     interfaceInstanceViewDecls =
       let L loc (ValidInterfaceInstanceMethodDecl _ viimdMatches) = viiView
 
-          fullViewName = mkInterfaceInstanceDesugarName loc ["view"] []
+          fullViewName = mkInterfaceInstanceDesugarName loc ["view$"] []
           internalViewName = noLoc $ mkRdrUnqual $ mkVarOcc "$view"
           signature = TypeSig noExt [fullViewName] $
             mkHsWildCardBndrs $ mkHsImplicitBndrs $
@@ -3696,7 +3708,7 @@ mkInterfaceInstanceDecls parentName sharedBinds (L loc interfaceInstance) = do
     mkInterfaceInstanceMethodDecls (L loc ValidInterfaceInstanceMethodDecl { viimdId, viimdMatches }) =
       let
         methodNameStr = rdrNameToString viimdId
-        fullMethodName = mkInterfaceInstanceDesugarName loc ["method"] [methodNameStr]
+        fullMethodName = mkInterfaceInstanceDesugarName loc ["method$"] [methodNameStr]
         methodNameSymbol = mkSymbol methodNameStr
         internalMethodName = noLoc $ mkRdrUnqual $ mkVarOcc ("$" ++ methodNameStr)
         sig =
@@ -3904,7 +3916,7 @@ mkInterfaceDecl tycon (L requiresLoc requires) decls = do
         requiresMarker requiredTycon =
           let name =
                 mkRdrUnqual $ mkVarOcc $
-                  ("_requires_" ++) $ intercalate "_" $ mangle <$>
+                  ("_requires$_" ++) $ intercalate "_" $ mangle <$>
                     [ rdrNameToString viInterfaceName
                     , rdrNameToQualString requiredTycon
                     ]
@@ -3997,16 +4009,18 @@ shareTemplateLetBindings :: Located RdrName -> LHsLocalBinds GhcPs -> ([LHsDecl 
 shareTemplateLetBindings conName vtLetBindings =
   case vars of
     [] -> ([],noLoc emptyLocalBinds)
-    _ -> ([letDecl],sharedBinds)
+    _ -> (letDecls,sharedBinds)
   where
     letFnName :: RdrName
-    letFnName = mkRdrUnqual $ mkVarOcc ("_templateLet_" ++ rdrNameToString conName)
+    letFnName = mkRdrUnqual $ mkVarOcc ("_templateLet_" ++  rdrNameToString conName)
 
     vars :: [RdrName]
     vars = collectLocalBinders (unLoc vtLetBindings)
 
-    letDecl :: LHsDecl GhcPs
-    letDecl = functionBindDecl letFnName defArgs (noLoc $ HsLet noExt binds body)
+    letDecls :: [LHsDecl GhcPs]
+    letDecls =
+      [ functionBindDecl letFnName defArgs (noLoc $ HsLet noExt binds body)
+      ]
       where
         defArgs = [this]
         this = asPatRecWild "this" conName
