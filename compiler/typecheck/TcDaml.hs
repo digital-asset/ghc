@@ -46,7 +46,9 @@ check modules name namedThing
 customDamlErrors :: Ct -> TcM (Maybe SDoc)
 customDamlErrors ct = do
   info <- getEnvDaml
-  pure $ displayError info =<< customDamlError ct
+  pure $ do
+    e <- customDamlError ct
+    displayError info e
 
 data DamlError
   = TriedView { target :: Name, result :: Type }
@@ -134,6 +136,12 @@ displayError info TriedExercise { target, result, choice }
          , text "The choice" <+> pprq choice <+> text "belongs to" <+> variantName info implementor <+> text "which" <+> pprq target <+> text "implements."
          , text "Cast" <+> variantName info target <+> text "to" <+> variantName info implementor <+> text "before exercising the choice."
          ]
+  | [implementor] <- choiceImplementor info choice
+  , [expectedReturnType] <- choiceType info choice
+  , not (result `eqType` expectedReturnType)
+  = pure
+  $ text "Tried to get a result of type" <+> pprq result <+> text "by exercising choice" <+> pprq choice <+> text "on" <+> variantName info target
+   <+> text "but exercising choice" <+> pprq choice <+> text "should return type" <+> pprq expectedReturnType <+> text "instead."
   | otherwise
   = pure
   $ vcat [ text "Tried to exercise a choice" <+> pprq choice <+> text "on" <+> variantName info target <+> text "but no choice of that name exists on" <+> variantName info target
@@ -189,7 +197,7 @@ dedupe (DamlInfo x0 x1 x2 x3 x4 x5) =
   DamlInfo
     (nubSort x0)
     (nubSort x1)
-    (nubSort x2)
+    (nubSortBy (\(ifaceOrTpl, choice, type_) -> (ifaceOrTpl, choice)) x2)
     (nubSortBy (\(mName, (cName, type_)) -> (mName, cName)) x3)
     (nubSort x4)
     (nubSortBy fst x5)
@@ -218,7 +226,10 @@ implements :: DamlInfo -> Name -> Name -> Bool
 implements info tpl iface = (tpl, iface) `elem` implementations info
 
 choiceImplementor :: DamlInfo -> Name -> [Name]
-choiceImplementor info name = [tplOrIface | (tplOrIface, choice) <- choices info, name == choice]
+choiceImplementor info name = [tplOrIface | (tplOrIface, choice, returnType) <- choices info, name == choice]
+
+choiceType :: DamlInfo -> Name -> [Type]
+choiceType info name = [returnType | (tplOrIface, choice, returnType) <- choices info, name == choice]
 
 interfaceView :: DamlInfo -> Name -> Maybe Type
 interfaceView info name = lookup name (views info)
@@ -305,13 +316,13 @@ extractDamlInfoFromClsInst inst =
     , views = mapMaybe matchView [inst]
     }
   where
-    matchChoice :: ClsInst -> Maybe (Name, Name)
+    matchChoice :: ClsInst -> Maybe (Name, Name, Type)
     matchChoice clsInst = do
       [contractType, choiceType, returnType] <-
           clsInstMatch "HasExercise" clsInst
       (contractTyCon, []) <- splitTyConApp_maybe contractType
       (choiceTyCon, []) <- splitTyConApp_maybe choiceType
-      pure (tyConName contractTyCon, tyConName choiceTyCon)
+      pure (tyConName contractTyCon, tyConName choiceTyCon, returnType)
 
     matchMethod :: ClsInst -> Maybe (FastString, (Name, Type))
     matchMethod clsInst = do
