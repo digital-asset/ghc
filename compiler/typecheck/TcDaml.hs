@@ -1,4 +1,5 @@
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE ViewPatterns #-}
 module TcDaml where
 
 import GhcPrelude
@@ -152,23 +153,20 @@ displayError info TriedExercise { target, result, choice }
               (text "Choice" <+> pprq choice <+> text "belongs only to the following types:")
               (map (variantName info) (maybeToList (choiceImplementor info choice)))
          ]
-displayError info TriedImplementMethod { target, method, result } =
-  let ifaces = definesMethod info method
-  in
-  case target `lookup` ifaces of
-    Just expectedResult
-      | not (eqType expectedResult result)
-      -> pure $ text "Implementation of method" <+> pprq method <+> text "on interface" <+> pprq target <+> text "should return" <+> pprq expectedResult <+> text "but instead returns " <+> pprq result
-      | otherwise
-      -> Nothing
-    Nothing ->
-      pure $
-      vcat [ text "Tried to implement method" <+> pprq method <> text ", but interface" <+> pprq target <+> text "does not have a method with that name."
-           , printListWithHeader
-               empty
-               (text "Method" <+> pprq method <+> text "is only a method on the following interfaces:")
-               (map (pprq . fst) ifaces)
-           ]
+displayError info TriedImplementMethod { target, method, result }
+  | [(_, expectedResult)] <- methodOn info method target
+  , not (eqType expectedResult result)
+  = pure $ text "Implementation of method" <+> pprq method <+> text "on interface" <+> pprq target <+> text "should return" <+> pprq expectedResult <+> text "but instead returns " <+> pprq result
+  | [] <- methodOn info method target
+  = pure
+  $ vcat [ text "Tried to implement method" <+> pprq method <> text ", but interface" <+> pprq target <+> text "does not have a method with that name."
+         , printListWithHeader
+             empty
+             (text "Method" <+> pprq method <+> text "is only a method on the following interfaces:")
+             (map (pprq . fst) (methodsNamed info method))
+         ]
+  | otherwise
+  = Nothing
 displayError info TriedImplementView { target, triedReturnType, expectedReturnType } =
   pure $ text "Tried to implement a view of type" <+> pprq triedReturnType <+> text "on interface" <+> pprq target
       <> text ", but the definition of interface" <+> pprq target <+> text "requires a view of type" <+> pprq expectedReturnType
@@ -211,9 +209,13 @@ dedupe (DamlInfo x0 x1 x2 x3 x4 x5 x6) =
 pprq :: Outputable a => a -> SDoc
 pprq = quotes . ppr
 
-isTemplate, isInterface :: DamlInfo -> Name -> Bool
-isTemplate info name = name `S.member` templates info
-isInterface info name = name `S.member` interfaces info
+synEq :: DamlInfo -> Name -> Name -> Bool
+synEq info n1 n2 = resolveSynonym info n1 == resolveSynonym info n2
+
+isTemplate, isInterface, isSynonym :: DamlInfo -> Name -> Bool
+isTemplate info name = resolveSynonym info name `S.member` templates info
+isInterface info name = resolveSynonym info name `S.member` interfaces info
+isSynonym info name = resolveSynonym info name `M.member` synonyms info
 
 variantName :: DamlInfo -> Name -> SDoc
 variantName info name
@@ -222,23 +224,33 @@ variantName info name
   | otherwise = text "type" <+> pprq name
 
 allImplementedInterfaces, allImplementingTemplates :: DamlInfo -> Name -> [Name]
-allImplementedInterfaces info name = [iface | (tpl, iface) <- implementations info, name == tpl]
-allImplementingTemplates info name = [tpl | (tpl, iface) <- implementations info, name == iface]
+allImplementedInterfaces info name = [iface | (tpl, iface) <- implementations info, synEq info name tpl]
+allImplementingTemplates info name = [tpl | (tpl, iface) <- implementations info, synEq info name iface]
 
 implements :: DamlInfo -> Name -> Name -> Bool
-implements info tpl iface = (tpl, iface) `elem` implementations info
+implements info tpl iface = any (\(t, i) -> synEq info tpl t && synEq info iface i) (implementations info)
 
 choiceImplementor :: DamlInfo -> Name -> Maybe Name
-choiceImplementor info name = fst <$> M.lookup name (choices info)
+choiceImplementor info name = fst <$> M.lookup (resolveSynonym info name) (choices info)
 
 choiceType :: DamlInfo -> Name -> Maybe Type
-choiceType info name = snd <$> M.lookup name (choices info)
+choiceType info name = snd <$> M.lookup (resolveSynonym info name) (choices info)
 
 interfaceView :: DamlInfo -> Name -> Maybe Type
-interfaceView info name = M.lookup name (views info)
+interfaceView info name = M.lookup (resolveSynonym info name) (views info)
 
-definesMethod :: DamlInfo -> FastString -> [(Name, Type)]
-definesMethod info method = [nameAndType | (m, nameAndType) <- methods info, m == method]
+methodsNamed :: DamlInfo -> FastString -> [(Name, Type)]
+methodsNamed info method = [(name, type_) | (m, (name, type_)) <- methods info, m == method]
+
+methodOn :: DamlInfo -> FastString -> Name -> [(Name, Type)]
+methodOn info method target =
+  [(name, type_) | (m, (name, type_)) <- methods info, m == method, synEq info target name]
+
+resolveSynonym :: DamlInfo -> Name -> Name
+resolveSynonym info name =
+  case name `M.lookup` synonyms info of
+    Just (resolvedName, _) -> resolvedName
+    Nothing -> name
 
 instance Monoid DamlInfo where
   mempty = DamlInfo S.empty S.empty M.empty [] [] M.empty M.empty
