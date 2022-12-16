@@ -30,6 +30,7 @@ import Util
 import qualified Data.Map as M
 
 import Data.Maybe
+import Data.Either (partitionEithers)
 import Data.List
 import qualified Prelude as P ((<>))
 import Control.Monad
@@ -194,7 +195,7 @@ displayError info TriedImplementNonInterface { triedIface }
            text ", but" <+> pprq triedIface <+> text "is not an interface."
 
 dedupe :: DamlInfo -> DamlInfo
-dedupe (DamlInfo x0 x1 x2 x3 x4 x5) =
+dedupe (DamlInfo x0 x1 x2 x3 x4 x5 x6) =
   DamlInfo
     x0
     x1
@@ -202,6 +203,7 @@ dedupe (DamlInfo x0 x1 x2 x3 x4 x5) =
     (nubSortBy (\(mName, (cName, type_)) -> (mName, cName)) x3)
     (nubSort x4)
     x5
+    x6
   where
     nubSortBy :: Ord b => (a -> b) -> [a] -> [a]
     nubSortBy f xs = M.elems $ M.fromList $ map (\x -> (f x, x)) xs
@@ -239,11 +241,11 @@ definesMethod :: DamlInfo -> FastString -> [(Name, Type)]
 definesMethod info method = [nameAndType | (m, nameAndType) <- methods info, m == method]
 
 instance Monoid DamlInfo where
-  mempty = DamlInfo S.empty S.empty M.empty [] [] M.empty
+  mempty = DamlInfo S.empty S.empty M.empty [] [] M.empty M.empty
 
 instance Semigroup DamlInfo where
-  (<>) (DamlInfo a0 a1 a2 a3 a4 a5) (DamlInfo b0 b1 b2 b3 b4 b5) =
-    DamlInfo (a0 P.<> b0) (a1 P.<> b1) (a2 P.<> b2) (a3 P.<> b3) (a4 P.<> b4) (a5 P.<> b5)
+  (<>) (DamlInfo a0 a1 a2 a3 a4 a5 a6) (DamlInfo b0 b1 b2 b3 b4 b5 b6) =
+    DamlInfo (a0 P.<> b0) (a1 P.<> b1) (a2 P.<> b2) (a3 P.<> b3) (a4 P.<> b4) (a5 P.<> b5) (a6 P.<> b6)
 
 instance Outputable DamlInfo where
   ppr info =
@@ -254,6 +256,7 @@ instance Outputable DamlInfo where
          , text "methods =" <+> ppr (methods info)
          , text "implementations =" <+> ppr (implementations info)
          , text "views =" <+> ppr (views info)
+         , text "synonyms =" <+> ppr (synonyms info)
          , text "}"
          ]
 
@@ -276,9 +279,12 @@ getEnvDaml = do
 
       let new_info = dedupe (fold [tcg_tythings, tcg_insts, eps_tythings, eps_insts])
       traceTc "DamlInfo new_info" $ ppr new_info
+      let all_tythings = typeEnvElts (tcg_type_env (env_gbl env)) ++ typeEnvElts (eps_PTE eps)
+      let new_info_with_synonyms = extractSynonymsFromTyThings new_info all_tythings
+      traceTc "DamlInfo new_info_with_synonyms" $ ppr new_info_with_synonyms
 
-      writeMutVar (env_daml env) (Just new_info)
-      pure new_info
+      writeMutVar (env_daml env) (Just new_info_with_synonyms)
+      pure new_info_with_synonyms
     Just info -> pure info
 
 extractDamlInfoFromTyThing :: TyThing -> DamlInfo
@@ -307,6 +313,36 @@ extractDamlInfoFromTyThing tything =
       = Just $ tyConName tycon
       | otherwise
       = Nothing
+
+extractSynonymsFromTyThings :: DamlInfo -> [TyThing] -> DamlInfo
+extractSynonymsFromTyThings existing tythings = go existing (mapMaybe getSynonym tythings)
+  where
+    synonymsToInfo :: [(Name, (Name, DamlSynonym))] -> DamlInfo
+    synonymsToInfo syn = mempty { synonyms = M.fromList syn }
+
+    getSynonym :: TyThing -> Maybe (Name, Name)
+    getSynonym tything = do
+      ATyCon msynonym <- pure tything
+      TyConApp out [] <- synTyConRhs_maybe msynonym
+      let outName = tyConName out
+      pure (tyConName msynonym, outName)
+
+    targetsToSynonyms :: [(Name, Name)]
+    targetsToSynonyms = mapMaybe getSynonym tythings
+
+    go :: DamlInfo -> [(Name, Name)] -> DamlInfo
+    go info unusedSynonyms =
+      let (matching, nonmatching) = partitionEithers $ map categorise unusedSynonyms
+          categorise link@(synonym, value)
+            | value `S.member` templates info = Left (synonym, (value, TemplateSyn))
+            | value `S.member` interfaces info = Left (synonym, (value, InterfaceSyn))
+            | value `M.member` choices info = Left (synonym, (value, ChoiceSyn))
+            | Just result <- value `M.lookup` synonyms info = Left (synonym, result)
+            | otherwise = Right (synonym, value)
+      in
+      if null matching
+         then info
+         else go (info P.<> synonymsToInfo matching) nonmatching
 
 extractDamlInfoFromClsInst :: ClsInst -> DamlInfo
 extractDamlInfoFromClsInst inst =
