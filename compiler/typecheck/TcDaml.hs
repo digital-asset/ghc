@@ -3,6 +3,7 @@ module TcDaml where
 
 import GhcPrelude
 
+import qualified Data.Set as S
 import InstEnv
 import Outputable
 import TcRnTypes
@@ -127,7 +128,7 @@ displayError info TriedView { target, result }
   = pure
   $ text "Tried to get an interface view of type" <+> pprq result <+> text "from type" <+> pprq target <+> text "which is neither an interface nor a template"
 displayError info TriedExercise { target, result, choice }
-  | [implementor] <- choiceImplementor info choice
+  | Just implementor <- choiceImplementor info choice
   , isInterface info implementor
   , implements info target implementor
   , target /= implementor -- since interfaces implement themselves, we ignore if the target is itself
@@ -136,8 +137,8 @@ displayError info TriedExercise { target, result, choice }
          , text "The choice" <+> pprq choice <+> text "belongs to" <+> variantName info implementor <+> text "which" <+> pprq target <+> text "implements."
          , text "Cast" <+> variantName info target <+> text "to" <+> variantName info implementor <+> text "before exercising the choice."
          ]
-  | [implementor] <- choiceImplementor info choice
-  , [expectedReturnType] <- choiceType info choice
+  | Just implementor <- choiceImplementor info choice
+  , Just expectedReturnType <- choiceType info choice
   , not (result `eqType` expectedReturnType)
   = pure
   $ text "Tried to get a result of type" <+> pprq result <+> text "by exercising choice" <+> pprq choice <+> text "on" <+> variantName info target
@@ -148,7 +149,7 @@ displayError info TriedExercise { target, result, choice }
          , printListWithHeader
               empty
               (text "Choice" <+> pprq choice <+> text "belongs only to the following types:")
-              (map (variantName info) (choiceImplementor info choice))
+              (map (variantName info) (maybeToList (choiceImplementor info choice)))
          ]
 displayError info TriedImplementMethod { target, method, result } =
   let ifaces = definesMethod info method
@@ -195,12 +196,12 @@ displayError info TriedImplementNonInterface { triedIface }
 dedupe :: DamlInfo -> DamlInfo
 dedupe (DamlInfo x0 x1 x2 x3 x4 x5) =
   DamlInfo
-    (nubSort x0)
-    (nubSort x1)
-    (nubSortBy (\(ifaceOrTpl, choice, type_) -> (ifaceOrTpl, choice)) x2)
+    x0
+    x1
+    x2
     (nubSortBy (\(mName, (cName, type_)) -> (mName, cName)) x3)
     (nubSort x4)
-    (nubSortBy fst x5)
+    x5
   where
     nubSortBy :: Ord b => (a -> b) -> [a] -> [a]
     nubSortBy f xs = M.elems $ M.fromList $ map (\x -> (f x, x)) xs
@@ -225,20 +226,20 @@ allImplementingTemplates info name = [tpl | (tpl, iface) <- implementations info
 implements :: DamlInfo -> Name -> Name -> Bool
 implements info tpl iface = (tpl, iface) `elem` implementations info
 
-choiceImplementor :: DamlInfo -> Name -> [Name]
-choiceImplementor info name = [tplOrIface | (tplOrIface, choice, returnType) <- choices info, name == choice]
+choiceImplementor :: DamlInfo -> Name -> Maybe Name
+choiceImplementor info name = fst <$> M.lookup name (choices info)
 
-choiceType :: DamlInfo -> Name -> [Type]
-choiceType info name = [returnType | (tplOrIface, choice, returnType) <- choices info, name == choice]
+choiceType :: DamlInfo -> Name -> Maybe Type
+choiceType info name = snd <$> M.lookup name (choices info)
 
 interfaceView :: DamlInfo -> Name -> Maybe Type
-interfaceView info name = lookup name (views info)
+interfaceView info name = M.lookup name (views info)
 
 definesMethod :: DamlInfo -> FastString -> [(Name, Type)]
 definesMethod info method = [nameAndType | (m, nameAndType) <- methods info, m == method]
 
 instance Monoid DamlInfo where
-  mempty = DamlInfo [] [] [] [] [] []
+  mempty = DamlInfo S.empty S.empty M.empty [] [] M.empty
 
 instance Semigroup DamlInfo where
   (<>) (DamlInfo a0 a1 a2 a3 a4 a5) (DamlInfo b0 b1 b2 b3 b4 b5) =
@@ -285,8 +286,8 @@ extractDamlInfoFromTyThing tything =
   case tything of
     ATyCon tycon ->
       mempty
-        { templates = mapMaybe matchTemplate [tycon]
-        , interfaces = mapMaybe matchInterface [tycon]
+        { templates = S.fromList $ mapMaybe matchTemplate [tycon]
+        , interfaces = S.fromList $ mapMaybe matchInterface [tycon]
         }
     _ -> mempty
   where
@@ -310,19 +311,19 @@ extractDamlInfoFromTyThing tything =
 extractDamlInfoFromClsInst :: ClsInst -> DamlInfo
 extractDamlInfoFromClsInst inst =
   mempty
-    { choices = mapMaybe matchChoice [inst]
+    { choices = M.fromList $ mapMaybe matchChoice [inst]
     , methods = mapMaybe matchMethod [inst]
     , implementations = mapMaybe matchImplements [inst]
-    , views = mapMaybe matchView [inst]
+    , views = M.fromList $ mapMaybe matchView [inst]
     }
   where
-    matchChoice :: ClsInst -> Maybe (Name, Name, Type)
+    matchChoice :: ClsInst -> Maybe (Name, (Name, Type))
     matchChoice clsInst = do
       [contractType, choiceType, returnType] <-
           clsInstMatch "HasExercise" clsInst
       (contractTyCon, []) <- splitTyConApp_maybe contractType
       (choiceTyCon, []) <- splitTyConApp_maybe choiceType
-      pure (tyConName contractTyCon, tyConName choiceTyCon, returnType)
+      pure (tyConName choiceTyCon, (tyConName contractTyCon, returnType))
 
     matchMethod :: ClsInst -> Maybe (FastString, (Name, Type))
     matchMethod clsInst = do

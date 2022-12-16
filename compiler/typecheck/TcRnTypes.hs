@@ -301,12 +301,12 @@ instance ContainsModule gbl => ContainsModule (Env gbl lcl) where
     extractModule env = extractModule (env_gbl env)
 
 data DamlInfo = DamlInfo
-  { templates :: [Name]
-  , interfaces :: [Name]
-  , choices :: [(Name, Name, Type)]
+  { templates :: Set Name
+  , interfaces :: Set Name
+  , choices :: Map Name (Name, Type)
   , methods :: [(FastString, (Name, Type))]
   , implementations :: [(Name, Name)]
-  , views :: [(Name, Type)]
+  , views :: Map Name Type
   }
 
 {-
