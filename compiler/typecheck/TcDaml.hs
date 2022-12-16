@@ -212,8 +212,8 @@ pprq :: Outputable a => a -> SDoc
 pprq = quotes . ppr
 
 isTemplate, isInterface :: DamlInfo -> Name -> Bool
-isTemplate info name = name `elem` templates info
-isInterface info name = name `elem` interfaces info
+isTemplate info name = name `S.member` templates info
+isInterface info name = name `S.member` interfaces info
 
 variantName :: DamlInfo -> Name -> SDoc
 variantName info name
