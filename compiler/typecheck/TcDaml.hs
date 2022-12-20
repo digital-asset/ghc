@@ -1,4 +1,5 @@
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ViewPatterns #-}
 module TcDaml where
 
@@ -30,6 +31,7 @@ import UniqFM
 import Util
 import qualified Data.Map as M
 
+import Data.Bifunctor
 import Data.Maybe
 import Data.Either (partitionEithers)
 import Data.List
@@ -51,7 +53,8 @@ customDamlErrors ct = do
   info <- getEnvDaml
   pure $ do
     e <- customDamlError ct
-    displayError info e
+    m <- displayError info e
+    pure (vcat [m, ppr info])
 
 data DamlError
   = TriedView { target :: Name, result :: Type }
@@ -272,6 +275,18 @@ instance Outputable DamlInfo where
          , text "}"
          ]
 
+resolveAllSynonyms :: DamlInfo -> DamlInfo
+resolveAllSynonyms info@DamlInfo {..} =
+  DamlInfo
+    { templates = S.map (resolveSynonym info) templates
+    , interfaces = S.map (resolveSynonym info) interfaces
+    , choices = (fmap . first) (resolveSynonym info) $ M.mapKeys (resolveSynonym info) choices
+    , methods = (fmap . second . first) (resolveSynonym info) methods
+    , implementations = (fmap . (\f -> bimap f f)) (resolveSynonym info) implementations
+    , views = M.mapKeys (resolveSynonym info) views
+    , synonyms = synonyms
+    }
+
 getEnvDaml :: TcM DamlInfo
 getEnvDaml = do
   env <- getEnv
@@ -295,8 +310,10 @@ getEnvDaml = do
       let new_info_with_synonyms = extractSynonymsFromTyThings new_info all_tythings
       traceTc "DamlInfo new_info_with_synonyms" $ ppr new_info_with_synonyms
 
-      writeMutVar (env_daml env) (Just new_info_with_synonyms)
-      pure new_info_with_synonyms
+      let finalDamlInfo = resolveAllSynonyms new_info_with_synonyms
+
+      writeMutVar (env_daml env) (Just finalDamlInfo)
+      pure finalDamlInfo
     Just info -> pure info
 
 extractDamlInfoFromTyThing :: TyThing -> DamlInfo
