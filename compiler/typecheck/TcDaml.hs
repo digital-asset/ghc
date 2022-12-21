@@ -55,7 +55,7 @@ customDamlErrors ct = do
   pure $ do
     e <- customDamlError ct
     m <- displayError info e
-    pure (vcat [m, ppr info])
+    pure m
 
 data DamlError
   = TriedView { target :: Name, result :: Type }
