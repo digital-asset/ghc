@@ -49,13 +49,11 @@ check modules name namedThing
   | otherwise
   = False
 
-customDamlErrors :: Ct -> TcM (Maybe SDoc)
-customDamlErrors ct = do
-  info <- getEnvDaml
-  pure $ do
-    e <- customDamlError ct
-    m <- displayError info e
-    pure m
+customDamlError :: DamlInfo -> Ct -> Maybe SDoc
+customDamlError info ct = do
+  e <- detectError ct
+  m <- displayError info e
+  pure (vcat [text "Possible Daml-specific reason for the following type error:", m, ppr info])
 
 data DamlError
   = TriedView { target :: Name, result :: Type }
@@ -67,8 +65,8 @@ data DamlError
   | NumericScaleOutOfBounds { attemptedScale :: Integer }
   | TriedImplementNonInterface { triedIface :: Name }
 
-customDamlError :: Ct -> Maybe DamlError
-customDamlError ct
+detectError :: Ct -> Maybe DamlError
+detectError ct
   | TyConApp con [LitTy (NumTyLit attemptedScale)] <- ctev_pred (ctEvidence ct)
   , check ["DA.Internal.Desugar", "GHC.Classes"] "NumericScale" con
   , attemptedScale > 37 || attemptedScale < 0

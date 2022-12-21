@@ -465,13 +465,13 @@ warnRedundantConstraints ctxt env info ev_vars
                     -- to the error context, which is a bit tiresome
    addErrCtxt (text "In" <+> ppr info) $
    do { env <- getLclEnv
-      ; msg <- mkErrorReport ctxt env (important doc)
+      ; msg <- mkErrorReport ctxt env Nothing (important doc)
       ; reportWarning (Reason Opt_WarnRedundantConstraints) msg }
 
  | otherwise  -- But for InstSkol there already *is* a surrounding
               -- "In the instance declaration for Eq [a]" context
               -- and we don't want to say it twice. Seems a bit ad-hoc
- = do { msg <- mkErrorReport ctxt env (important doc)
+ = do { msg <- mkErrorReport ctxt env Nothing (important doc)
       ; reportWarning (Reason Opt_WarnRedundantConstraints) msg }
  where
    doc = text "Redundant constraint" <> plural redundant_evs <> colon
@@ -491,7 +491,7 @@ warnRedundantConstraints ctxt env info ev_vars
 
 reportBadTelescope :: ReportErrCtxt -> TcLclEnv -> Maybe SDoc -> [TcTyVar] -> TcM ()
 reportBadTelescope ctxt env (Just telescope) skols
-  = do { msg <- mkErrorReport ctxt env (important doc)
+  = do { msg <- mkErrorReport ctxt env Nothing (important doc)
        ; reportError msg }
   where
     doc = hang (text "These kind and type variables:" <+> telescope $$
@@ -526,22 +526,23 @@ reportWanteds ctxt tc_lvl (WC { wc_simple = simples, wc_impl = implics })
                                        , text "Suppress =" <+> ppr (cec_suppress ctxt)])
        ; traceTc "rw2" (ppr tidy_cts)
 
-         -- First deal with daml errors
        ; _ <- getEnvDaml -- populate global DamlInfo, also committing it to the trace
-       ; let ctxt_for_insols = ctxt { cec_suppress = False }
-       ; (post_daml_ctxt, cts0) <- tryReporters ctxt_for_insols report0 tidy_cts
+       --  -- First deal with daml errors
+       --; let ctxt_for_insols = ctxt { cec_suppress = False }
+       --; (post_daml_ctxt, cts0) <- tryReporters ctxt_for_insols report0 tidy_cts
+       ; let cts0 = tidy_cts
 
          -- Then deal with things that are utterly wrong
          -- Like Int ~ Bool (incl nullary TyCons)
          -- or  Int ~ t a   (AppTy on one side)
          -- These /ones/ are not suppressed by the incoming context, only by the post_daml_ctxt
-       ; let ctxt0 = ctxt { cec_suppress = cec_suppress post_daml_ctxt }
+       ; let ctxt0 = ctxt { cec_suppress = False }
        ; (ctxt1, cts1) <- tryReporters ctxt0 report1 cts0
 
          -- Now all the other constraints.  We suppress errors here if
          -- any of the zeroth or first batch failed, or if the enclosing
          -- context says to suppress
-       ; let ctxt2 = ctxt { cec_suppress = cec_suppress ctxt || cec_suppress ctxt1 || cec_suppress post_daml_ctxt }
+       ; let ctxt2 = ctxt { cec_suppress = cec_suppress ctxt || cec_suppress ctxt1 {-|| cec_suppress post_daml_ctxt-} }
        ; (_, leftovers) <- tryReporters ctxt2 report2 cts1
        ; MASSERT2( null leftovers, ppr leftovers )
 
@@ -558,8 +559,7 @@ reportWanteds ctxt tc_lvl (WC { wc_simple = simples, wc_impl = implics })
     env = cec_tidy ctxt
     tidy_cts = bagToList (mapBag (tidyCt env) simples)
 
-    report0 = [ ("Daml error", is_daml_error,    True, mkGroupReporter mkDamlErr) ]
-    is_daml_error ct _ = isJust $ customDamlError ct
+    -- report0 = [ ("Daml error", const . isDamlError,    True, mkGroupReporter mkDamlErr) ]
 
     -- report1: ones that should *not* be suppresed by
     --          an insoluble somewhere else in the tree
@@ -801,6 +801,11 @@ mkGroupReporter :: (ReportErrCtxt -> [Ct] -> TcM ErrMsg)
 mkGroupReporter mk_err ctxt cts
   = mapM_ (reportGroup mk_err ctxt . toList) (equivClasses cmp_loc cts)
 
+  {-
+prioritizeDamlErrors :: [Ct] -> [Ct]
+prioritizeDamlErrors cts = uncurry (++) $ partition isDamlError cts
+  -}
+
 eq_lhs_type :: Ct -> Ct -> Bool
 eq_lhs_type ct1 ct2
   = case (classifyPredType (ctPred ct1), classifyPredType (ctPred ct2)) of
@@ -821,15 +826,20 @@ reportGroup mk_err ctxt cts =
             do { err <- mk_err ctxt monadFailCts
                ; reportWarning (Reason Opt_WarnMissingMonadFailInstances) err }
 
-        (_, cts') -> do { err <- mk_err ctxt cts'
+        (_, cts') -> do { damlInfo <- getEnvDaml
+                        ; let cts'' = uncurry (++) $ partition (isJust . customDamlError damlInfo) cts'
+                        ; err <- mk_err ctxt cts''
                         ; traceTc "About to maybeReportErr" $
-                          vcat [ text "Constraint:"             <+> ppr cts'
+                          vcat [ text "Constraint:"             <+> ppr cts''
                                , text "cec_suppress ="          <+> ppr (cec_suppress ctxt)
-                               , text "cec_defer_type_errors =" <+> ppr (cec_defer_type_errors ctxt) ]
+                               , text "cec_defer_type_errors =" <+> ppr (cec_defer_type_errors ctxt)
+                               , text "is daml error: " <+> maybe (text "Nothing") id (customDamlError damlInfo (head cts''))
+                               , vcat (maybe (text "Nothing") id . customDamlError damlInfo <$> cts'')
+                               ]
                         ; maybeReportError ctxt err
                             -- But see Note [Always warn with -fdefer-type-errors]
-                        ; traceTc "reportGroup" (ppr cts')
-                        ; mapM_ (addDeferredBinding ctxt err) cts' }
+                        ; traceTc "reportGroup" (ppr cts'')
+                        ; mapM_ (addDeferredBinding ctxt err) cts'' }
                             -- Add deferred bindings for all
                             -- Redundant if we are going to abort compilation,
                             -- but that's hard to know for sure, and if we don't
@@ -991,14 +1001,16 @@ pprWithArising (ct:cts)
                      2 (pprCtLoc (ctLoc ct'))
 
 mkErrorMsgFromCt :: ReportErrCtxt -> Ct -> Report -> TcM ErrMsg
-mkErrorMsgFromCt ctxt ct report
-  = mkErrorReport ctxt (ctLocEnv (ctLoc ct)) report
+mkErrorMsgFromCt ctxt ct report = do
+  damlInfo <- getEnvDaml
+  let m_daml_err = customDamlError damlInfo ct
+  mkErrorReport ctxt (ctLocEnv (ctLoc ct)) m_daml_err report
 
-mkErrorReport :: ReportErrCtxt -> TcLclEnv -> Report -> TcM ErrMsg
-mkErrorReport ctxt tcl_env (Report important relevant_bindings valid_subs)
+mkErrorReport :: ReportErrCtxt -> TcLclEnv -> Maybe SDoc -> Report -> TcM ErrMsg
+mkErrorReport ctxt tcl_env maybe_daml_error (Report important relevant_bindings valid_subs)
   = do { context <- mkErrInfo (cec_tidy ctxt) (tcl_ctxt tcl_env)
        ; mkErrDocAt (RealSrcSpan (tcl_loc tcl_env))
-            (errDoc important [context] (relevant_bindings ++ valid_subs))
+            (errDoc important (maybeToList maybe_daml_error) [context] (relevant_bindings ++ valid_subs))
        }
 
 type UserGiven = Implication
@@ -1120,7 +1132,7 @@ mkHoleError _ _ ct@(CHoleCan { cc_hole = ExprHole (OutOfScope occ rdr_env0) })
        ; splice_locs <- getTopLevelSpliceLocs
        ; let match_msgs = mk_match_msgs rdr_env splice_locs
        ; mkErrDocAt (RealSrcSpan err_loc) $
-                    errDoc [out_of_scope_msg] [] (match_msgs ++ [suggs_msg]) }
+                    errDoc [out_of_scope_msg] [] [] (match_msgs ++ [suggs_msg]) }
 
   where
     rdr         = mkRdrUnqual occ
@@ -2377,6 +2389,7 @@ Warn of loopy local equalities that were dropped.
 ************************************************************************
 -}
 
+  {-
 mkDamlErr :: ReportErrCtxt -> [Ct] -> TcM ErrMsg
 mkDamlErr ctxt cts
   = ASSERT( not (null cts) )
@@ -2385,13 +2398,13 @@ mkDamlErr ctxt cts
       mbErrMsg <- customDamlErrors ct
       let errMsg = maybe (error "mk_daml_err: shouldn't happen") id mbErrMsg
       mkErrorMsgFromCt ctxt ct (important errMsg)
+  -}
 
 mkDictErr :: ReportErrCtxt -> [Ct] -> TcM ErrMsg
 mkDictErr ctxt cts
   = ASSERT( not (null cts) )
     do { inst_envs <- tcGetInstEnvs
-       ; let (ct1:_) = cts  -- ct1 just for its location
-             min_cts = elim_superclasses cts
+       ; let min_cts = elim_superclasses cts
              lookups = map (lookup_cls_inst inst_envs) min_cts
              (no_inst_cts, overlap_cts) = partition is_no_inst lookups
 
@@ -2400,8 +2413,9 @@ mkDictErr ctxt cts
        -- But we report only one of them (hence 'head') because they all
        -- have the same source-location origin, to try avoid a cascade
        -- of error from one location
-       ; (ctxt, err) <- mk_dict_err ctxt (head (no_inst_cts ++ overlap_cts))
-       ; mkErrorMsgFromCt ctxt ct1 (important err) }
+       ; let head_ct = head (no_inst_cts ++ overlap_cts)
+       ; (ctxt, err) <- mk_dict_err ctxt head_ct
+       ; mkErrorMsgFromCt ctxt (fst head_ct) (important err) }
   where
     no_givens = null (getUserGivens ctxt)
 

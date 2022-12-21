@@ -145,13 +145,15 @@ data ErrMsg = ErrMsg {
 data ErrDoc = ErrDoc {
         -- | Primary error msg.
         errDocImportant     :: [MsgDoc],
+        -- | Daml error e.g. \"Daml-specific interpretation:\".
+        errDocDamlMsg       :: [MsgDoc],
         -- | Context e.g. \"In the second argument of ...\".
         errDocContext       :: [MsgDoc],
         -- | Supplementary information, e.g. \"Relevant bindings include ...\".
         errDocSupplementary :: [MsgDoc]
         }
 
-errDoc :: [MsgDoc] -> [MsgDoc] -> [MsgDoc] -> ErrDoc
+errDoc :: [MsgDoc] -> [MsgDoc] -> [MsgDoc] -> [MsgDoc] -> ErrDoc
 errDoc = ErrDoc
 
 type WarnMsg = ErrMsg
@@ -343,12 +345,12 @@ mkErrMsg, mkWarnMsg           :: DynFlags -> SrcSpan -> PrintUnqualified -> MsgD
 mkPlainErrMsg, mkPlainWarnMsg :: DynFlags -> SrcSpan ->                     MsgDoc            -> ErrMsg
 -- ^ Variant that doesn't care about qualified/unqualified names
 
-mkLongErrMsg   dflags locn unqual msg extra = mk_err_msg dflags SevError   locn unqual        (ErrDoc [msg] [] [extra])
-mkErrMsg       dflags locn unqual msg       = mk_err_msg dflags SevError   locn unqual        (ErrDoc [msg] [] [])
-mkPlainErrMsg  dflags locn        msg       = mk_err_msg dflags SevError   locn alwaysQualify (ErrDoc [msg] [] [])
-mkLongWarnMsg  dflags locn unqual msg extra = mk_err_msg dflags SevWarning locn unqual        (ErrDoc [msg] [] [extra])
-mkWarnMsg      dflags locn unqual msg       = mk_err_msg dflags SevWarning locn unqual        (ErrDoc [msg] [] [])
-mkPlainWarnMsg dflags locn        msg       = mk_err_msg dflags SevWarning locn alwaysQualify (ErrDoc [msg] [] [])
+mkLongErrMsg   dflags locn unqual msg extra = mk_err_msg dflags SevError   locn unqual        (ErrDoc [msg] [] [] [extra])
+mkErrMsg       dflags locn unqual msg       = mk_err_msg dflags SevError   locn unqual        (ErrDoc [msg] [] [] [])
+mkPlainErrMsg  dflags locn        msg       = mk_err_msg dflags SevError   locn alwaysQualify (ErrDoc [msg] [] [] [])
+mkLongWarnMsg  dflags locn unqual msg extra = mk_err_msg dflags SevWarning locn unqual        (ErrDoc [msg] [] [] [extra])
+mkWarnMsg      dflags locn unqual msg       = mk_err_msg dflags SevWarning locn unqual        (ErrDoc [msg] [] [] [])
+mkPlainWarnMsg dflags locn        msg       = mk_err_msg dflags SevWarning locn alwaysQualify (ErrDoc [msg] [] [] [])
 
 ----------------
 emptyMessages :: Messages
@@ -372,13 +374,13 @@ printBagOfErrors dflags bag_of_errors
                                                                   bag_of_errors ]
 
 formatErrDoc :: DynFlags -> ErrDoc -> SDoc
-formatErrDoc dflags (ErrDoc important context supplementary)
+formatErrDoc dflags (ErrDoc important daml_msg context supplementary)
   = case msgs of
         [msg] -> vcat msg
         _ -> vcat $ map starred msgs
     where
     msgs = filter (not . null) $ map (filter (not . Outputable.isEmpty dflags))
-        [important, context, supplementary]
+        [daml_msg, important, context, supplementary]
     starred = (bullet<+>) . vcat
 
 pprErrMsgBagWithLoc :: Bag ErrMsg -> [SDoc]
