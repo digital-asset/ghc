@@ -526,7 +526,15 @@ reportWanteds ctxt tc_lvl (WC { wc_simple = simples, wc_impl = implics })
                                        , text "Suppress =" <+> ppr (cec_suppress ctxt)])
        ; traceTc "rw2" (ppr tidy_cts)
 
-       ; _ <- getEnvDaml -- populate global DamlInfo, also committing it to the trace
+       ; envDamlInfo <- getEnvDaml
+       ; mapM_ (\ct ->
+                  traceTc "reportWantedsCT" (vcat
+                    [ ppr ct
+                    , text (showTypeHead (ctev_pred (ctEvidence ct)))
+                    , maybe (text "Nothing") id (customDamlError envDamlInfo ct)
+                    ])
+               ) tidy_cts
+
        --  -- First deal with daml errors
        --; let ctxt_for_insols = ctxt { cec_suppress = False }
        --; (post_daml_ctxt, cts0) <- tryReporters ctxt_for_insols report0 tidy_cts

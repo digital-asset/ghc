@@ -53,7 +53,17 @@ customDamlError :: DamlInfo -> Ct -> Maybe SDoc
 customDamlError info ct = do
   e <- detectError ct
   m <- displayError info e
-  pure (vcat [text "Possible Daml-specific reason for the following type error:", m, ppr info])
+  pure (vcat [text "Possible Daml-specific reason for the following type error:", m, ppr info, text $ "ORIGIN: " ++ showOrigin (ctOrigin ct)])
+
+showTypeHead :: Type -> String
+showTypeHead TyVarTy {} = "Var"
+showTypeHead AppTy {} = "AppTy"
+showTypeHead (TyConApp tyCon args) = "TyConApp(" ++ nameStableString (tyConName tyCon) ++ ", " ++ unwords (map showTypeHead args) ++ ")"
+showTypeHead ForAllTy {} = "ForAllTy"
+showTypeHead FunTy {} = "FunTy"
+showTypeHead LitTy {} = "LitTy"
+showTypeHead CastTy {} = "CastTy"
+showTypeHead CoercionTy {} = "CoercionTy"
 
 data DamlError
   = TriedView { target :: Name, result :: Type }

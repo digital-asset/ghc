@@ -107,7 +107,7 @@ module TcRnTypes(
         CtOrigin(..), exprCtOrigin, lexprCtOrigin, matchesCtOrigin, grhssCtOrigin,
         isVisibleOrigin, toInvisibleOrigin,
         TypeOrKind(..), isTypeLevel, isKindLevel,
-        pprCtOrigin, pprCtLoc,
+        pprCtOrigin, showOrigin, pprCtLoc,
         pushErrCtxt, pushErrCtxtSameOrigin,
 
 
@@ -1916,7 +1916,7 @@ ctEqRel :: Ct -> EqRel
 ctEqRel = ctEvEqRel . ctEvidence
 
 instance Outputable Ct where
-  ppr ct = ppr (ctEvidence ct) <+> parens pp_sort
+  ppr ct = ppr (ctEvidence ct) <+> parens pp_sort <+> ppr (ctOrigin ct)
     where
       pp_sort = case ct of
          CTyEqCan {}      -> text "CTyEqCan"
@@ -3647,7 +3647,52 @@ toInvisibleOrigin orig@(TypeEqOrigin {}) = orig { uo_visible = False }
 toInvisibleOrigin orig                   = orig
 
 instance Outputable CtOrigin where
-  ppr = pprCtOrigin
+  ppr orig = vcat [pprCtOrigin orig, text (showOrigin orig)]
+
+showOrigin :: CtOrigin -> String
+showOrigin OccurrenceOf {} = "OccurrenceOf"
+showOrigin OccurrenceOfRecSel {} = "OccurrenceOfRecSel"
+showOrigin AppOrigin {} = "AppOrigin"
+showOrigin SpecPragOrigin {} = "SpecPragOrigin"
+showOrigin TypeEqOrigin {} = "TypeEqOrigin"
+showOrigin KindEqOrigin {} = "KindEqOrigin"
+showOrigin IPOccOrigin {} = "IPOccOrigin"
+showOrigin OverLabelOrigin {} = "OverLabelOrigin"
+showOrigin LiteralOrigin {} = "LiteralOrigin"
+showOrigin NegateOrigin {} = "NegateOrigin"
+showOrigin ArithSeqOrigin {} = "ArithSeqOrigin"
+showOrigin AssocFamPatOrigin {} = "AssocFamPatOrigin"
+showOrigin SectionOrigin {} = "SectionOrigin"
+showOrigin TupleOrigin {} = "TupleOrigin"
+showOrigin ExprSigOrigin {} = "ExprSigOrigin"
+showOrigin PatSigOrigin {} = "PatSigOrigin"
+showOrigin PatOrigin {} = "PatOrigin"
+showOrigin ProvCtxtOrigin {} = "ProvCtxtOrigin"
+showOrigin RecordUpdOrigin {} = "RecordUpdOrigin"
+showOrigin ViewPatOrigin {} = "ViewPatOrigin"
+showOrigin ScOrigin {} = "ScOrigin"
+showOrigin DerivClauseOrigin {} = "DerivClauseOrigin"
+showOrigin DerivOriginDC {} = "DerivOriginDC"
+showOrigin DerivOriginCoerce {} = "DerivOriginCoerce"
+showOrigin StandAloneDerivOrigin {} = "StandAloneDerivOrigin"
+showOrigin DefaultOrigin {} = "DefaultOrigin"
+showOrigin DoOrigin {} = "DoOrigin"
+showOrigin DoPatOrigin {} = "DoPatOrigin"
+showOrigin MCompOrigin {} = "MCompOrigin"
+showOrigin MCompPatOrigin {} = "MCompPatOrigin"
+showOrigin IfOrigin {} = "IfOrigin"
+showOrigin ProcOrigin {} = "ProcOrigin"
+showOrigin AnnOrigin {} = "AnnOrigin"
+showOrigin FunDepOrigin1 {} = "FunDepOrigin1"
+showOrigin FunDepOrigin2 {} = "FunDepOrigin2"
+showOrigin HoleOrigin {} = "HoleOrigin"
+showOrigin UnboundOccurrenceOf {} = "UnboundOccurrenceOf"
+showOrigin ListOrigin {} = "ListOrigin"
+showOrigin StaticOrigin {} = "StaticOrigin"
+showOrigin FailablePattern {} = "FailablePattern"
+showOrigin Shouldn'tHappenOrigin {} = "Shouldn'tHappenOrigin"
+showOrigin InstProvidedOrigin {} = "InstProvidedOrigin"
+showOrigin _ = "Other"
 
 ctoHerald :: SDoc
 ctoHerald = text "arising from"
