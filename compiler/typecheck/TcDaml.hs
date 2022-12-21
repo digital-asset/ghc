@@ -1,5 +1,6 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE ViewPatterns #-}
 module TcDaml where
 
@@ -101,11 +102,14 @@ customDamlError ct
   | TyConApp con [TyConApp target [], TyConApp choice [], result] <- ctev_pred (ctEvidence ct)
   , check ["DA.Internal.Desugar", "DA.Internal.Template.Functions"] "HasExercise" con
   = Just $ TriedExercise { target = tyConName target, choice = tyConName choice, result }
-  | TyConApp con [TyConApp target [], LitTy (StrTyLit methodName), result] <- ctev_pred (ctEvidence ct)
+  | TyConApp con (_ `Snoc` TyConApp target [] `Snoc` LitTy (StrTyLit methodName) `Snoc` result) <- ctev_pred (ctEvidence ct)
   , check ["DA.Internal.Desugar"] "HasMethod" con
   = Just $ TriedImplementMethod { target = tyConName target, method = methodName, result }
   | otherwise
   = Nothing
+
+pattern Snoc xs x <- ((\xs -> (init xs, last xs)) -> (xs, x)) where
+  Snoc xs x = xs ++ [x]
 
 printListWithHeader :: SDoc -> SDoc -> [SDoc] -> SDoc
 printListWithHeader emptyMsg _ [] = emptyMsg
