@@ -108,7 +108,10 @@ customDamlError ct
   | otherwise
   = Nothing
 
-pattern Snoc xs x <- ((\xs -> (init xs, last xs)) -> (xs, x)) where
+snoc :: [a] -> Maybe ([a], a)
+snoc [] = Nothing
+snoc xs = Just (init xs, last xs)
+pattern Snoc xs x <- (snoc -> Just (xs, x)) where
   Snoc xs x = xs ++ [x]
 
 printListWithHeader :: SDoc -> SDoc -> [SDoc] -> SDoc
