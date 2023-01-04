@@ -527,7 +527,7 @@ reportWanteds ctxt tc_lvl (WC { wc_simple = simples, wc_impl = implics })
        ; traceTc "rw2" (ppr tidy_cts)
 
          -- First deal with daml errors
-       ; envDamlInfo <- getEnvDaml
+       ; _ <- getEnvDaml -- populate global DamlInfo, also committing it to the trace
        ; let ctxt_for_insols = ctxt { cec_suppress = False }
        ; (post_daml_ctxt, cts0) <- tryReporters ctxt_for_insols report0 tidy_cts
 
