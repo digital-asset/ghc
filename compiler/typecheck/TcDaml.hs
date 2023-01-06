@@ -107,6 +107,15 @@ detectError ct
   | TyConApp con [TyConApp target [], viewType] <- ctev_pred (ctEvidence ct)
   , check ["DA.Internal.Desugar", "DA.Internal.Interface"] "HasInterfaceView" con
   = Just $ TriedView { target = tyConName target, result = viewType }
+  | FunDepOrigin2 targetPred _ instancePred _ <- ctOrigin ct
+  , TyConApp mHasExerciseCon1 (_ `Snoc` TyConApp targetCon [] `Snoc` LitTy (StrTyLit targetMethodName) `Snoc` targetResult) <- targetPred
+  , TyConApp mHasExerciseCon2 (_ `Snoc` TyConApp instanceCon [] `Snoc` LitTy (StrTyLit instanceMethodName) `Snoc` instanceResult) <- instancePred
+  , check ["DA.Internal.Desugar"] "HasMethod" mHasExerciseCon1
+  , check ["DA.Internal.Desugar"] "HasMethod" mHasExerciseCon2
+  , targetCon == instanceCon
+  , targetMethodName == instanceMethodName
+  , not (eqType targetResult instanceResult)
+  = Just $ TriedImplementMethod { target = tyConName targetCon, method = targetMethodName, result = targetResult }
   | TyConApp con [TyConApp target [], TyConApp choice [], result] <- ctev_pred (ctEvidence ct)
   , check ["DA.Internal.Desugar", "DA.Internal.Template.Functions"] "HasExercise" con
   = Just $ TriedExercise { target = tyConName target, choice = tyConName choice, result }
