@@ -114,3 +114,6 @@
 [submodule ".arc-linters/arcanist-external-json-linter"]
 	path = .arc-linters/arcanist-external-json-linter
 	url = https://gitlab.haskell.org/ghc/arcanist-external-json-linter.git
+[submodule "utils/hpc"]
+	path = utils/hpc
+	url = https://gitlab.haskell.org/hpc/hpc-bin.git
