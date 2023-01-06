@@ -407,7 +407,7 @@ extractDamlInfoFromClsInst inst =
 
     matchMethod :: ClsInst -> Maybe (FastString, (Name, Type))
     matchMethod clsInst = do
-      [contractType, methodNameType, returnType] <-
+      (_ `Snoc` contractType `Snoc` methodNameType `Snoc` returnType) <-
           clsInstMatch "HasMethod" clsInst
       (StrTyLit methodName) <- isLitTy methodNameType
       (contractTyCon, []) <- splitTyConApp_maybe contractType
