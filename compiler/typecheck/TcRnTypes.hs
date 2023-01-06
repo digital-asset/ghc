@@ -29,6 +29,7 @@ module TcRnTypes(
         IfGblEnv(..), IfLclEnv(..),
         tcVisibleOrphanMods,
         DamlInfo(..),
+        DamlSynonym(..),
 
         -- Frontend types (shouldn't really be here)
         FrontendResult(..),
@@ -300,13 +301,19 @@ instance ContainsDynFlags (Env gbl lcl) where
 instance ContainsModule gbl => ContainsModule (Env gbl lcl) where
     extractModule env = extractModule (env_gbl env)
 
+data DamlSynonym = TemplateSyn | InterfaceSyn | ChoiceSyn
+  deriving (Show, Eq, Ord)
+
+instance Outputable DamlSynonym where ppr = text . show
+
 data DamlInfo = DamlInfo
-  { templates :: [Name]
-  , interfaces :: [Name]
-  , choices :: [(Name, Name, Type)]
+  { templates :: Set Name
+  , interfaces :: Set Name
+  , choices :: Map Name (Name, Type)
   , methods :: [(FastString, (Name, Type))]
   , implementations :: [(Name, Name)]
-  , views :: [(Name, Type)]
+  , views :: Map Name Type
+  , synonyms :: Map Name (Name, DamlSynonym)
   }
 
 {-
