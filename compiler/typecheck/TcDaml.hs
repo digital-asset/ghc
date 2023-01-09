@@ -85,10 +85,10 @@ detectError ct
   , check ["DA.Internal.Desugar", "DA.Internal.Record"] "HasField" con
   = Just $ NonExistentFieldAccess { fieldName, recordType, expectedReturnType = resultType }
   | FunDepOrigin2 targetPred _ instancePred _ <- ctOrigin ct
-  , TyConApp targetCon [LitTy (StrTyLit fieldName1), recordType1, targetRetType] <- targetPred
-  , TyConApp instanceCon [LitTy (StrTyLit fieldName2), recordType2, instanceRetType] <- instancePred
-  , check ["DA.Internal.Desugar", "DA.Internal.Record"] "HasField" targetCon
-  , check ["DA.Internal.Desugar", "DA.Internal.Record"] "HasField" instanceCon
+  , TyConApp targetPredCon [LitTy (StrTyLit fieldName1), recordType1, targetRetType] <- targetPred
+  , TyConApp instancePredCon [LitTy (StrTyLit fieldName2), recordType2, instanceRetType] <- instancePred
+  , check ["DA.Internal.Desugar", "DA.Internal.Record"] "HasField" targetPredCon
+  , check ["DA.Internal.Desugar", "DA.Internal.Record"] "HasField" instancePredCon
   , fieldName1 == fieldName2
   , eqType recordType1 recordType2
   , not (eqType targetRetType instanceRetType)
@@ -97,10 +97,10 @@ detectError ct
   , check ["DA.Internal.Desugar", "DA.Internal.Interface"] "HasInterfaceTypeRep" con
   = Just $ TriedImplementNonInterface { triedIface = tyConName target }
   | FunDepOrigin2 targetPred _ instancePred _ <- ctOrigin ct
-  , TyConApp targetCon [TyConApp iface1 [], targetRetType] <- targetPred
-  , TyConApp instanceCon [TyConApp iface2 [], instanceRetType] <- instancePred
-  , check ["DA.Internal.Desugar", "DA.Internal.Interface"] "HasInterfaceView" targetCon
-  , check ["DA.Internal.Desugar", "DA.Internal.Interface"] "HasInterfaceView" instanceCon
+  , TyConApp targetPredCon [TyConApp iface1 [], targetRetType] <- targetPred
+  , TyConApp instancePredCon [TyConApp iface2 [], instanceRetType] <- instancePred
+  , check ["DA.Internal.Desugar", "DA.Internal.Interface"] "HasInterfaceView" targetPredCon
+  , check ["DA.Internal.Desugar", "DA.Internal.Interface"] "HasInterfaceView" instancePredCon
   , iface1 == iface2
   , not (eqType targetRetType instanceRetType)
   = Just $ TriedImplementView { target = tyConName iface1, triedReturnType = targetRetType, expectedReturnType = instanceRetType }
@@ -108,10 +108,10 @@ detectError ct
   , check ["DA.Internal.Desugar", "DA.Internal.Interface"] "HasInterfaceView" con
   = Just $ TriedView { target = tyConName target, result = viewType }
   | FunDepOrigin2 targetPred _ instancePred _ <- ctOrigin ct
-  , TyConApp mHasExerciseCon1 (_ `Snoc` TyConApp targetCon [] `Snoc` LitTy (StrTyLit targetMethodName) `Snoc` targetResult) <- targetPred
-  , TyConApp mHasExerciseCon2 (_ `Snoc` TyConApp instanceCon [] `Snoc` LitTy (StrTyLit instanceMethodName) `Snoc` instanceResult) <- instancePred
-  , check ["DA.Internal.Desugar"] "HasMethod" mHasExerciseCon1
-  , check ["DA.Internal.Desugar"] "HasMethod" mHasExerciseCon2
+  , TyConApp targetPredCon (_ `Snoc` TyConApp targetCon [] `Snoc` LitTy (StrTyLit targetMethodName) `Snoc` targetResult) <- targetPred
+  , TyConApp instancePredCon (_ `Snoc` TyConApp instanceCon [] `Snoc` LitTy (StrTyLit instanceMethodName) `Snoc` instanceResult) <- instancePred
+  , check ["DA.Internal.Desugar"] "HasMethod" targetPredCon
+  , check ["DA.Internal.Desugar"] "HasMethod" instancePredCon
   , targetCon == instanceCon
   , targetMethodName == instanceMethodName
   , not (eqType targetResult instanceResult)
