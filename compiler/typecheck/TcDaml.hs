@@ -116,6 +116,15 @@ detectError ct
   , targetMethodName == instanceMethodName
   , not (eqType targetResult instanceResult)
   = Just $ TriedImplementMethod { target = tyConName targetCon, method = targetMethodName, result = targetResult }
+  | FunDepOrigin2 targetPred _ instancePred _ <- ctOrigin ct
+  , TyConApp targetPredCon [TyConApp targetCon [], TyConApp targetChoice [], targetResult] <- targetPred
+  , TyConApp instancePredCon [TyConApp instanceCon [], TyConApp instanceChoice [], instanceResult] <- instancePred
+  , check ["DA.Internal.Desugar", "DA.Internal.Template.Functions"] "HasExercise" targetPredCon
+  , check ["DA.Internal.Desugar", "DA.Internal.Template.Functions"] "HasExercise" instancePredCon
+  , targetCon == instanceCon
+  , targetChoice == instanceChoice
+  , not (eqType targetResult instanceResult)
+  = Just $ TriedExercise { target = tyConName instanceCon, choice = tyConName instanceChoice, result = instanceResult }
   | TyConApp con [TyConApp target [], TyConApp choice [], result] <- ctev_pred (ctEvidence ct)
   , check ["DA.Internal.Desugar", "DA.Internal.Template.Functions"] "HasExercise" con
   = Just $ TriedExercise { target = tyConName target, choice = tyConName choice, result }
