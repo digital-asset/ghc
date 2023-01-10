@@ -55,16 +55,6 @@ customDamlError info ct = do
   m <- displayError info e
   pure (vcat [text "Possible Daml-specific reason for the following type error:", m])
 
-showTypeHead :: Type -> String
-showTypeHead TyVarTy {} = "Var"
-showTypeHead AppTy {} = "AppTy"
-showTypeHead (TyConApp tyCon args) = "TyConApp(" ++ nameStableString (tyConName tyCon) ++ ", " ++ unwords (map showTypeHead args) ++ ")"
-showTypeHead ForAllTy {} = "ForAllTy"
-showTypeHead FunTy {} = "FunTy"
-showTypeHead LitTy {} = "LitTy"
-showTypeHead CastTy {} = "CastTy"
-showTypeHead CoercionTy {} = "CoercionTy"
-
 data DamlError
   = TriedView { target :: Name, result :: Type }
   | TriedExercise { target :: Name, choice :: Name, result :: Type }
