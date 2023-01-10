@@ -539,7 +539,7 @@ reportWanteds ctxt tc_lvl (WC { wc_simple = simples, wc_impl = implics })
          -- Now all the other constraints.  We suppress errors here if
          -- any of the zeroth or first batch failed, or if the enclosing
          -- context says to suppress
-       ; let ctxt2 = ctxt { cec_suppress = cec_suppress ctxt || cec_suppress ctxt1 {-|| cec_suppress post_daml_ctxt-} }
+       ; let ctxt2 = ctxt { cec_suppress = cec_suppress ctxt || cec_suppress ctxt1 }
        ; (_, leftovers) <- tryReporters ctxt2 report2 cts1
        ; MASSERT2( null leftovers, ppr leftovers )
 
@@ -555,8 +555,6 @@ reportWanteds ctxt tc_lvl (WC { wc_simple = simples, wc_impl = implics })
  where
     env = cec_tidy ctxt
     tidy_cts = bagToList (mapBag (tidyCt env) simples)
-
-    -- report0 = [ ("Daml error", const . isDamlError,    True, mkGroupReporter mkDamlErr) ]
 
     -- report1: ones that should *not* be suppresed by
     --          an insoluble somewhere else in the tree
@@ -798,10 +796,8 @@ mkGroupReporter :: (ReportErrCtxt -> [Ct] -> TcM ErrMsg)
 mkGroupReporter mk_err ctxt cts
   = mapM_ (reportGroup mk_err ctxt . toList) (equivClasses cmp_loc cts)
 
-  {-
-prioritizeDamlErrors :: [Ct] -> [Ct]
-prioritizeDamlErrors cts = uncurry (++) $ partition isDamlError cts
-  -}
+prioritizeDamlErrors :: DamlInfo -> [Ct] -> [Ct]
+prioritizeDamlErrors info cts = uncurry (++) $ partition (isJust . customDamlError info) cts
 
 eq_lhs_type :: Ct -> Ct -> Bool
 eq_lhs_type ct1 ct2
@@ -824,7 +820,7 @@ reportGroup mk_err ctxt cts =
                ; reportWarning (Reason Opt_WarnMissingMonadFailInstances) err }
 
         (_, cts') -> do { damlInfo <- getEnvDaml
-                        ; let cts'' = uncurry (++) $ partition (isJust . customDamlError damlInfo) cts'
+                        ; let cts'' = prioritizeDamlErrors damlInfo cts'
                         ; err <- mk_err ctxt cts''
                         ; traceTc "About to maybeReportErr" $
                           vcat [ text "Constraint:"             <+> ppr cts''
@@ -2385,17 +2381,6 @@ Warn of loopy local equalities that were dropped.
 *                                                                      *
 ************************************************************************
 -}
-
-  {-
-mkDamlErr :: ReportErrCtxt -> [Ct] -> TcM ErrMsg
-mkDamlErr ctxt cts
-  = ASSERT( not (null cts) )
-    do
-      let ct = head cts
-      mbErrMsg <- customDamlErrors ct
-      let errMsg = maybe (error "mk_daml_err: shouldn't happen") id mbErrMsg
-      mkErrorMsgFromCt ctxt ct (important errMsg)
-  -}
 
 mkDictErr :: ReportErrCtxt -> [Ct] -> TcM ErrMsg
 mkDictErr ctxt cts
