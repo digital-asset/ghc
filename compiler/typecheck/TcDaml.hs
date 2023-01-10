@@ -124,7 +124,7 @@ detectError ct
   , targetCon == instanceCon
   , targetChoice == instanceChoice
   , not (eqType targetResult instanceResult)
-  = Just $ TriedExercise { target = tyConName instanceCon, choice = tyConName instanceChoice, result = instanceResult }
+  = Just $ TriedExercise { target = tyConName instanceCon, choice = tyConName instanceChoice, result = targetResult }
   | TyConApp con [TyConApp target [], TyConApp choice [], result] <- ctev_pred (ctEvidence ct)
   , check ["DA.Internal.Desugar", "DA.Internal.Template.Functions"] "HasExercise" con
   = Just $ TriedExercise { target = tyConName target, choice = tyConName choice, result }
