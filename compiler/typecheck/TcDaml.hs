@@ -51,7 +51,7 @@ check modules name namedThing
 
 customDamlError :: DamlInfo -> Ct -> Maybe SDoc
 customDamlError info ct = do
-  e <- detectError ct
+  e <- detectError info ct
   m <- displayError info e
   pure (vcat [text "Possible Daml-specific reason for the following type error:", m, ppr info, text $ "ORIGIN: " ++ showOrigin (ctOrigin ct)])
 
@@ -75,8 +75,8 @@ data DamlError
   | NumericScaleOutOfBounds { attemptedScale :: Integer }
   | TriedImplementNonInterface { triedIface :: Name }
 
-detectError :: Ct -> Maybe DamlError
-detectError ct
+detectError :: DamlInfo -> Ct -> Maybe DamlError
+detectError info ct
   | TyConApp con [LitTy (NumTyLit attemptedScale)] <- ctev_pred (ctEvidence ct)
   , check ["DA.Internal.Desugar", "GHC.Classes"] "NumericScale" con
   , attemptedScale > 37 || attemptedScale < 0
@@ -101,9 +101,11 @@ detectError ct
   , TyConApp instancePredCon [TyConApp iface2 [], instanceRetType] <- instancePred
   , check ["DA.Internal.Desugar", "DA.Internal.Interface"] "HasInterfaceView" targetPredCon
   , check ["DA.Internal.Desugar", "DA.Internal.Interface"] "HasInterfaceView" instancePredCon
-  , iface1 == iface2
+  , let iface1Name = tyConName iface1
+  , let iface2Name = tyConName iface2
+  , synEq info iface1Name iface2Name
   , not (eqType targetRetType instanceRetType)
-  = Just $ TriedImplementView { target = tyConName iface1, triedReturnType = targetRetType, expectedReturnType = instanceRetType }
+  = Just $ TriedImplementView { target = iface1Name, triedReturnType = targetRetType, expectedReturnType = instanceRetType }
   | TyConApp con [TyConApp target [], viewType] <- ctev_pred (ctEvidence ct)
   , check ["DA.Internal.Desugar", "DA.Internal.Interface"] "HasInterfaceView" con
   = Just $ TriedView { target = tyConName target, result = viewType }
@@ -112,19 +114,25 @@ detectError ct
   , TyConApp instancePredCon (_ `Snoc` TyConApp instanceCon [] `Snoc` LitTy (StrTyLit instanceMethodName) `Snoc` instanceResult) <- instancePred
   , check ["DA.Internal.Desugar"] "HasMethod" targetPredCon
   , check ["DA.Internal.Desugar"] "HasMethod" instancePredCon
-  , targetCon == instanceCon
+  , let targetConName = tyConName targetCon
+  , let instanceConName = tyConName instanceCon
+  , synEq info targetConName instanceConName
   , targetMethodName == instanceMethodName
   , not (eqType targetResult instanceResult)
-  = Just $ TriedImplementMethod { target = tyConName targetCon, method = targetMethodName, result = targetResult }
+  = Just $ TriedImplementMethod { target = targetConName, method = targetMethodName, result = targetResult }
   | FunDepOrigin2 targetPred _ instancePred _ <- ctOrigin ct
   , TyConApp targetPredCon [TyConApp targetCon [], TyConApp targetChoice [], targetResult] <- targetPred
   , TyConApp instancePredCon [TyConApp instanceCon [], TyConApp instanceChoice [], instanceResult] <- instancePred
   , check ["DA.Internal.Desugar", "DA.Internal.Template.Functions"] "HasExercise" targetPredCon
   , check ["DA.Internal.Desugar", "DA.Internal.Template.Functions"] "HasExercise" instancePredCon
-  , targetCon == instanceCon
-  , targetChoice == instanceChoice
+  , let targetConName = tyConName targetCon
+  , let instanceConName = tyConName instanceCon
+  , let targetChoiceName = tyConName targetChoice
+  , let instanceChoiceName = tyConName instanceChoice
+  , synEq info targetConName instanceConName
+  , synEq info targetChoiceName instanceChoiceName
   , not (eqType targetResult instanceResult)
-  = Just $ TriedExercise { target = tyConName instanceCon, choice = tyConName instanceChoice, result = targetResult }
+  = Just $ TriedExercise { target = instanceConName, choice = instanceChoiceName, result = targetResult }
   | TyConApp con [TyConApp target [], TyConApp choice [], result] <- ctev_pred (ctEvidence ct)
   , check ["DA.Internal.Desugar", "DA.Internal.Template.Functions"] "HasExercise" con
   = Just $ TriedExercise { target = tyConName target, choice = tyConName choice, result }
