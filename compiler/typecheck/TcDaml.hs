@@ -53,7 +53,7 @@ customDamlError :: DamlInfo -> Ct -> Maybe SDoc
 customDamlError info ct = do
   e <- detectError info ct
   m <- displayError info e
-  pure (vcat [text "Possible Daml-specific reason for the following type error:", m, ppr info, text $ "ORIGIN: " ++ showOrigin (ctOrigin ct)])
+  pure (vcat [text "Possible Daml-specific reason for the following type error:", m])
 
 showTypeHead :: Type -> String
 showTypeHead TyVarTy {} = "Var"
