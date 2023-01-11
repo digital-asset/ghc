@@ -49,13 +49,11 @@ check modules name namedThing
   | otherwise
   = False
 
-customDamlErrors :: Ct -> TcM (Maybe SDoc)
-customDamlErrors ct = do
-  info <- getEnvDaml
-  pure $ do
-    e <- customDamlError ct
-    m <- displayError info e
-    pure m
+customDamlError :: DamlInfo -> Ct -> Maybe SDoc
+customDamlError info ct = do
+  e <- detectError info ct
+  m <- displayError info e
+  pure (vcat [text "Possible Daml-specific reason for the following type error:", m])
 
 data DamlError
   = TriedView { target :: Name, result :: Type }
@@ -67,8 +65,8 @@ data DamlError
   | NumericScaleOutOfBounds { attemptedScale :: Integer }
   | TriedImplementNonInterface { triedIface :: Name }
 
-customDamlError :: Ct -> Maybe DamlError
-customDamlError ct
+detectError :: DamlInfo -> Ct -> Maybe DamlError
+detectError info ct
   | TyConApp con [LitTy (NumTyLit attemptedScale)] <- ctev_pred (ctEvidence ct)
   , check ["DA.Internal.Desugar", "GHC.Classes"] "NumericScale" con
   , attemptedScale > 37 || attemptedScale < 0
@@ -77,10 +75,10 @@ customDamlError ct
   , check ["DA.Internal.Desugar", "DA.Internal.Record"] "HasField" con
   = Just $ NonExistentFieldAccess { fieldName, recordType, expectedReturnType = resultType }
   | FunDepOrigin2 targetPred _ instancePred _ <- ctOrigin ct
-  , TyConApp targetCon [LitTy (StrTyLit fieldName1), recordType1, targetRetType] <- targetPred
-  , TyConApp instanceCon [LitTy (StrTyLit fieldName2), recordType2, instanceRetType] <- instancePred
-  , check ["DA.Internal.Desugar", "DA.Internal.Record"] "HasField" targetCon
-  , check ["DA.Internal.Desugar", "DA.Internal.Record"] "HasField" instanceCon
+  , TyConApp targetPredCon [LitTy (StrTyLit fieldName1), recordType1, targetRetType] <- targetPred
+  , TyConApp instancePredCon [LitTy (StrTyLit fieldName2), recordType2, instanceRetType] <- instancePred
+  , check ["DA.Internal.Desugar", "DA.Internal.Record"] "HasField" targetPredCon
+  , check ["DA.Internal.Desugar", "DA.Internal.Record"] "HasField" instancePredCon
   , fieldName1 == fieldName2
   , eqType recordType1 recordType2
   , not (eqType targetRetType instanceRetType)
@@ -89,16 +87,42 @@ customDamlError ct
   , check ["DA.Internal.Desugar", "DA.Internal.Interface"] "HasInterfaceTypeRep" con
   = Just $ TriedImplementNonInterface { triedIface = tyConName target }
   | FunDepOrigin2 targetPred _ instancePred _ <- ctOrigin ct
-  , TyConApp targetCon [TyConApp iface1 [], targetRetType] <- targetPred
-  , TyConApp instanceCon [TyConApp iface2 [], instanceRetType] <- instancePred
-  , check ["DA.Internal.Desugar", "DA.Internal.Interface"] "HasInterfaceView" targetCon
-  , check ["DA.Internal.Desugar", "DA.Internal.Interface"] "HasInterfaceView" instanceCon
-  , iface1 == iface2
+  , TyConApp targetPredCon [TyConApp iface1 [], targetRetType] <- targetPred
+  , TyConApp instancePredCon [TyConApp iface2 [], instanceRetType] <- instancePred
+  , check ["DA.Internal.Desugar", "DA.Internal.Interface"] "HasInterfaceView" targetPredCon
+  , check ["DA.Internal.Desugar", "DA.Internal.Interface"] "HasInterfaceView" instancePredCon
+  , let iface1Name = tyConName iface1
+  , let iface2Name = tyConName iface2
+  , synEq info iface1Name iface2Name
   , not (eqType targetRetType instanceRetType)
-  = Just $ TriedImplementView { target = tyConName iface1, triedReturnType = targetRetType, expectedReturnType = instanceRetType }
+  = Just $ TriedImplementView { target = iface1Name, triedReturnType = targetRetType, expectedReturnType = instanceRetType }
   | TyConApp con [TyConApp target [], viewType] <- ctev_pred (ctEvidence ct)
   , check ["DA.Internal.Desugar", "DA.Internal.Interface"] "HasInterfaceView" con
   = Just $ TriedView { target = tyConName target, result = viewType }
+  | FunDepOrigin2 targetPred _ instancePred _ <- ctOrigin ct
+  , TyConApp targetPredCon (_ `Snoc` TyConApp targetCon [] `Snoc` LitTy (StrTyLit targetMethodName) `Snoc` targetResult) <- targetPred
+  , TyConApp instancePredCon (_ `Snoc` TyConApp instanceCon [] `Snoc` LitTy (StrTyLit instanceMethodName) `Snoc` instanceResult) <- instancePred
+  , check ["DA.Internal.Desugar"] "HasMethod" targetPredCon
+  , check ["DA.Internal.Desugar"] "HasMethod" instancePredCon
+  , let targetConName = tyConName targetCon
+  , let instanceConName = tyConName instanceCon
+  , synEq info targetConName instanceConName
+  , targetMethodName == instanceMethodName
+  , not (eqType targetResult instanceResult)
+  = Just $ TriedImplementMethod { target = targetConName, method = targetMethodName, result = targetResult }
+  | FunDepOrigin2 targetPred _ instancePred _ <- ctOrigin ct
+  , TyConApp targetPredCon [TyConApp targetCon [], TyConApp targetChoice [], targetResult] <- targetPred
+  , TyConApp instancePredCon [TyConApp instanceCon [], TyConApp instanceChoice [], instanceResult] <- instancePred
+  , check ["DA.Internal.Desugar", "DA.Internal.Template.Functions"] "HasExercise" targetPredCon
+  , check ["DA.Internal.Desugar", "DA.Internal.Template.Functions"] "HasExercise" instancePredCon
+  , let targetConName = tyConName targetCon
+  , let instanceConName = tyConName instanceCon
+  , let targetChoiceName = tyConName targetChoice
+  , let instanceChoiceName = tyConName instanceChoice
+  , synEq info targetConName instanceConName
+  , synEq info targetChoiceName instanceChoiceName
+  , not (eqType targetResult instanceResult)
+  = Just $ TriedExercise { target = instanceConName, choice = instanceChoiceName, result = targetResult }
   | TyConApp con [TyConApp target [], TyConApp choice [], result] <- ctev_pred (ctEvidence ct)
   , check ["DA.Internal.Desugar", "DA.Internal.Template.Functions"] "HasExercise" con
   = Just $ TriedExercise { target = tyConName target, choice = tyConName choice, result }
@@ -399,7 +423,7 @@ extractDamlInfoFromClsInst inst =
 
     matchMethod :: ClsInst -> Maybe (FastString, (Name, Type))
     matchMethod clsInst = do
-      [contractType, methodNameType, returnType] <-
+      (_ `Snoc` contractType `Snoc` methodNameType `Snoc` returnType) <-
           clsInstMatch "HasMethod" clsInst
       (StrTyLit methodName) <- isLitTy methodNameType
       (contractTyCon, []) <- splitTyConApp_maybe contractType

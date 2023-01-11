@@ -1916,7 +1916,7 @@ ctEqRel :: Ct -> EqRel
 ctEqRel = ctEvEqRel . ctEvidence
 
 instance Outputable Ct where
-  ppr ct = ppr (ctEvidence ct) <+> parens pp_sort
+  ppr ct = ppr (ctEvidence ct) <+> parens pp_sort <+> ppr (ctOrigin ct)
     where
       pp_sort = case ct of
          CTyEqCan {}      -> text "CTyEqCan"
@@ -3647,7 +3647,7 @@ toInvisibleOrigin orig@(TypeEqOrigin {}) = orig { uo_visible = False }
 toInvisibleOrigin orig                   = orig
 
 instance Outputable CtOrigin where
-  ppr = pprCtOrigin
+  ppr orig = pprCtOrigin orig
 
 ctoHerald :: SDoc
 ctoHerald = text "arising from"
