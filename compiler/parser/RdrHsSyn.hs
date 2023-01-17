@@ -3028,16 +3028,23 @@ mkInterfaceInstances interfaceType =
 -- that constitute the `Choice` constraint synonym.
 mkChoiceInstanceDecl :: Located String -> CombinedChoiceData -> [LHsDecl GhcPs]
 mkChoiceInstanceDecl templateName CombinedChoiceData { ccdChoiceData = ChoiceData{..} } =
-  [ mkInstance "HasExercise" (mkPrimMethod "exercise" "UExercise")
-  , mkInstance "HasToAnyChoice" (mkPrimMethod "_toAnyChoice" "EToAnyChoice")
-  , mkInstance "HasFromAnyChoice" (mkPrimMethod "_fromAnyChoice" "EFromAnyChoice")
+  [ mkInstance "HasExercise" [templateType, choiceType, returnType]
+      (mkPrimMethod "exercise" "UExercise")
+  , mkInstance "HasToAnyChoice" [templateType, choiceType, returnType]
+      (mkPrimMethod "_toAnyChoice" "EToAnyChoice")
+  , mkInstance "HasFromAnyChoice" [templateType, choiceType, returnType]
+      (mkPrimMethod "_fromAnyChoice" "EFromAnyChoice")
+  , mkInstance "HasChoiceController" [templateType, choiceType]
+      (mkPrimMethod "_choiceController" "EChoiceController")
+  , mkInstance "HasChoiceObserver" [templateType, choiceType]
+      (mkPrimMethod "_choiceObserver" "EChoiceObserver")
   ]
   where
     templateType = mkTemplateType templateName
     choiceType = mkChoiceType cdChoiceName
     returnType = mkParenTy cdChoiceReturnTy
-    mkClass name = foldl' mkAppTy (mkQualClass name) [templateType, choiceType, returnType]
-    mkInstance name method = instDecl $ classInstDecl (mkClass name) $ unitBag method
+    mkClass name tyArgs = foldl' mkAppTy (mkQualClass name) tyArgs
+    mkInstance name tyArgs method = instDecl $ classInstDecl (mkClass name tyArgs) $ unitBag method
 
 -- | Construct the HasExerciseByKey instance.
 mkChoiceByKeyInstanceDecl :: Located String -> ValidTemplate -> CombinedChoiceData -> [LHsDecl GhcPs]
@@ -3054,11 +3061,11 @@ mkChoiceByKeyInstanceDecl templateName ValidTemplate{..} CombinedChoiceData { cc
 
 mkInterfaceFixedChoiceInstanceDecl :: Located RdrName -> InterfaceChoiceSignature -> [LHsDecl GhcPs]
 mkInterfaceFixedChoiceInstanceDecl tycon InterfaceChoiceSignature {..} =
-  [ mkInstance "HasToAnyChoice"
+  [ mkInstance "HasToAnyChoice" [ifaceType, choiceType, returnType]
       (mkTemplateClassMethod "_toAnyChoice" [] (mkPrimitive "primitive" "EToAnyChoice") Nothing)
-  , mkInstance "HasFromAnyChoice"
+  , mkInstance "HasFromAnyChoice" [ifaceType, choiceType, returnType]
       (mkTemplateClassMethod "_fromAnyChoice" [] (mkPrimitive "primitive" "EFromAnyChoice") Nothing)
-  , mkInstance "HasExerciseGuarded"
+  , mkInstance "HasExerciseGuarded" [ifaceType, choiceType, returnType]
       (mkTemplateClassMethod "exerciseGuarded" [pred, cid, arg]
         (mkPrimitive "primitive" "UExerciseInterfaceGuarded"
           `mkApp` (mkParExpr $ mkQualVar (mkVarOcc "toInterfaceContractId")
@@ -3070,7 +3077,7 @@ mkInterfaceFixedChoiceInstanceDecl tycon InterfaceChoiceSignature {..} =
                     `mkApp` mkUnqualVar (mkVarOcc "cid")
                     `mkApp` mkUnqualVar (mkVarOcc "pred")))
         Nothing)
-  , mkInstance "HasExercise"
+  , mkInstance "HasExercise" [ifaceType, choiceType, returnType]
       (mkTemplateClassMethod "exercise" [cid, arg]
         (mkPrimitive "primitive" "UExerciseInterface"
           `mkApp` (mkParExpr $ mkQualVar (mkVarOcc "toInterfaceContractId")
@@ -3078,6 +3085,10 @@ mkInterfaceFixedChoiceInstanceDecl tycon InterfaceChoiceSignature {..} =
                     `mkApp` mkUnqualVar (mkVarOcc "cid"))
           `mkApp` (mkUnqualVar (mkVarOcc "arg")))
         Nothing)
+  , mkInstance "HasChoiceController" [ifaceType, choiceType]
+      (mkPrimMethod "_choiceController" "EChoiceController")
+  , mkInstance "HasChoiceObserver" [ifaceType, choiceType]
+      (mkPrimMethod "_choiceObserver" "EChoiceObserver")
   ]
   where
     pred = mkVarPat $ mkVarOcc "pred"
@@ -3086,9 +3097,9 @@ mkInterfaceFixedChoiceInstanceDecl tycon InterfaceChoiceSignature {..} =
     ifaceType = rdrNameToType tycon
     choiceType = mkChoiceType ifChoiceName
     returnType = mkParenTy ifChoiceResultType
-    mkClass name = foldl' mkAppTy (mkQualClass name) [ifaceType, choiceType, returnType]
-    mkInstance name method =
-      instDecl $ classInstDecl (mkClass name) $ unitBag method
+    mkClass name tyArgs = foldl' mkAppTy (mkQualClass name) tyArgs
+    mkInstance name tyArgs method =
+      instDecl $ classInstDecl (mkClass name tyArgs) $ unitBag method
 
 -- | Construct instances for the split-up `TemplateKey` typeclass, i.e., instances fr all single-method typeclasses
 -- that constitute the `TemplateKey` constraint synonym.
