@@ -190,10 +190,10 @@ displayError info TriedExercise { target, result, choice }
 displayError info TriedImplementMethod { target, method, result }
   | [(_, expectedResult)] <- methodOn info method target
   , not (eqType expectedResult result)
-  = pure $ text "Implementation of method" <+> pprq method <+> text "on interface" <+> pprq target <+> text "should return" <+> pprq expectedResult <+> text "but instead returns " <+> pprq result
+  = pure $ text "Implementation of method" <+> pprq method <+> text "on interface" <+> synInterfaceName info target <+> text "should return" <+> pprq expectedResult <+> text "but instead returns " <+> pprq result
   | [] <- methodOn info method target
   = pure
-  $ vcat [ text "Tried to implement method" <+> pprq method <> text ", but interface" <+> pprq target <+> text "does not have a method with that name."
+  $ vcat [ text "Tried to implement method" <+> pprq method <> text ", but interface" <+> synInterfaceName info target <+> text "does not have a method with that name."
          , printListWithHeader
              empty
              (text "Method" <+> pprq method <+> text "is only a method on the following interfaces:")
@@ -285,6 +285,13 @@ resolveSynonym info name =
   case name `M.lookup` synonyms info of
     Just (resolvedName, _) -> resolvedName
     Nothing -> name
+
+synInterfaceName :: DamlInfo -> Name -> SDoc
+synInterfaceName info name =
+  let synName = resolveSynonym info name 
+   in if name == synName
+        then pprq name
+        else pprq name <+> parens (pprq synName)
 
 instance Monoid DamlInfo where
   mempty = DamlInfo S.empty S.empty M.empty [] [] M.empty M.empty
