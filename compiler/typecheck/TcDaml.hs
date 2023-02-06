@@ -146,7 +146,7 @@ displayError :: DamlInfo -> DamlError -> Maybe SDoc
 displayError info TriedView { target, result }
   | isTemplate info target
   = pure
-  $ vcat [ text "Tried to get an interface view of type" <+> pprSynName info result <+> text "from template" <+> pprSynName info target
+  $ vcat [ text "Tried to get an interface view of type" <+> pprSynType info result <+> text "from template" <+> pprSynName info target
          , text "Cast template" <+> pprq target <+> text "to an interface before getting its view."
          , printListWithHeader
               (text "Template" <+> pprq target <+> text "does not have any known interface implementations.")
@@ -156,13 +156,13 @@ displayError info TriedView { target, result }
   | isInterface info target
   , Just view <- interfaceView info target
   = pure
-  $ text "Tried to get an interface view of type" <+> pprSynName info result <+> text "from interface" <+> pprSynName info target <+> text "but that interface's view is of type" <+> pprSynName info view
+  $ text "Tried to get an interface view of type" <+> pprSynType info result <+> text "from interface" <+> pprSynName info target <+> text "but that interface's view is of type" <+> pprSynType info view
   | isInterface info target
   = pure
-  $ text "Tried to get an interface view of type" <+> pprSynName info result <+> text "from interface" <+> pprSynName info target <+> text "but that interface's view is not of type" <+> pprSynName info result
+  $ text "Tried to get an interface view of type" <+> pprSynType info result <+> text "from interface" <+> pprSynName info target <+> text "but that interface's view is not of type" <+> pprSynType info result
   | otherwise
   = pure
-  $ text "Tried to get an interface view of type" <+> pprSynName info result <+> text "from type" <+> pprSynName info target <+> text "which is neither an interface nor a template"
+  $ text "Tried to get an interface view of type" <+> pprSynType info result <+> text "from type" <+> pprSynName info target <+> text "which is neither an interface nor a template"
 displayError info TriedExercise { target, result, choice }
   | Just implementor <- choiceImplementor info choice
   , isInterface info implementor
@@ -177,7 +177,7 @@ displayError info TriedExercise { target, result, choice }
   , Just expectedReturnType <- choiceType info choice
   , not (result `eqType` expectedReturnType)
   = pure
-  $ text "Tried to get a result of type" <+> pprSynName info result <+> text "by exercising choice" <+> pprSynName info choice <+> text "on" <+> variantNameSyn info target
+  $ text "Tried to get a result of type" <+> pprSynType info result <+> text "by exercising choice" <+> pprSynName info choice <+> text "on" <+> variantNameSyn info target
    <+> text "but exercising choice" <+> pprq choice <+> text "should return type" <+> pprq expectedReturnType <+> text "instead."
   | otherwise
   = pure
@@ -291,6 +291,10 @@ resolveSynonym info name =
   case name `M.lookup` synonyms info of
     Just (resolvedName, _) -> resolvedName
     Nothing -> name
+
+pprSynType :: DamlInfo -> Type -> SDoc
+pprSynType info (TyConApp (getName -> name) []) = pprSynName info name
+pprSynType _ ty = pprq ty
 
 pprSynName :: DamlInfo -> Name -> SDoc
 pprSynName info name =
