@@ -156,10 +156,10 @@ displayError info TriedView { target, result }
   | isInterface info target
   , Just view <- interfaceView info target
   = pure
-  $ text "Tried to get an interface view of type" <+> pprq result <+> text "from interface" <+> pprq target <+> text "but that interface's view is of type" <+> pprq view
+  $ text "Tried to get an interface view of type" <+> pprq result <+> text "from interface" <+> synInterfaceName info target <+> text "but that interface's view is of type" <+> pprq view
   | isInterface info target
   = pure
-  $ text "Tried to get an interface view of type" <+> pprq result <+> text "from interface" <+> pprq target <+> text "but that interface's view is not of type" <+> pprq result
+  $ text "Tried to get an interface view of type" <+> pprq result <+> text "from interface" <+> synInterfaceName info target <+> text "but that interface's view is not of type" <+> pprq result
   | otherwise
   = pure
   $ text "Tried to get an interface view of type" <+> pprq result <+> text "from type" <+> pprq target <+> text "which is neither an interface nor a template"
@@ -202,7 +202,7 @@ displayError info TriedImplementMethod { target, method, result }
   | otherwise
   = Nothing
 displayError info TriedImplementView { target, triedReturnType, expectedReturnType } =
-  pure $ text "Tried to implement a view of type" <+> pprq triedReturnType <+> text "on interface" <+> pprq target
+  pure $ text "Tried to implement a view of type" <+> pprq triedReturnType <+> text "on interface" <+> synInterfaceName info target
       <> text ", but the definition of interface" <+> pprq target <+> text "requires a view of type" <+> pprq expectedReturnType
 displayError info NonExistentFieldAccess { recordType, expectedReturnType, fieldName } =
   pure $ text "Tried to access nonexistent field" <+> pprq fieldName
@@ -254,7 +254,7 @@ isSynonym info name = resolveSynonym info name `M.member` synonyms info
 variantName :: DamlInfo -> Name -> SDoc
 variantName info name
   | isTemplate info name = text "template" <+> pprq name
-  | isInterface info name = text "interface" <+> pprq name
+  | isInterface info name = text "interface" <+> synInterfaceName info name
   | otherwise = text "type" <+> pprq name
 
 allImplementedInterfaces, allImplementingTemplates :: DamlInfo -> Name -> [Name]
@@ -291,7 +291,7 @@ synInterfaceName info name =
   let synName = resolveSynonym info name 
    in if name == synName
         then pprq name
-        else pprq name <+> parens (pprq synName)
+        else pprq name <+> parens (text "Type synonym of" <+> pprq synName)
 
 instance Monoid DamlInfo where
   mempty = DamlInfo S.empty S.empty M.empty [] [] M.empty M.empty
