@@ -202,28 +202,28 @@ displayError info TriedImplementMethod { target, method, result }
   | otherwise
   = Nothing
 displayError info TriedImplementView { target, triedReturnType, expectedReturnType } =
-  pure $ text "Tried to implement a view of type" <+> pprq triedReturnType <+> text "on interface" <+> pprSynName info target
-      <> text ", but the definition of interface" <+> pprq target <+> text "requires a view of type" <+> pprq expectedReturnType
+  pure $ text "Tried to implement a view of type" <+> pprSynType info triedReturnType <+> text "on interface" <+> pprSynName info target
+      <> text ", but the definition of interface" <+> pprq target <+> text "requires a view of type" <+> pprSynType info expectedReturnType
 displayError info NonExistentFieldAccess { recordType, expectedReturnType, fieldName } =
   pure $ text "Tried to access nonexistent field" <+> pprq fieldName
-     <+> text "with type" <+> pprq expectedReturnType
-     <+> text "on value of type" <+> pprq recordType
+     <+> text "with type" <+> pprSynType info expectedReturnType
+     <+> text "on value of type" <+> pprSynType info recordType
 displayError info FieldAccessWrongReturnType { recordType, triedReturnType, expectedReturnType, fieldName } =
   pure $ text "Tried to get field" <+> pprq fieldName
-     <+> text "with type" <+> pprq triedReturnType
-     <+> text "on value of type" <+> pprq recordType
-      <> text ", but that field has type" <+> pprq expectedReturnType
+     <+> text "with type" <+> pprSynType info triedReturnType
+     <+> text "on value of type" <+> pprSynType info recordType
+      <> text ", but that field has type" <+> pprSynType info expectedReturnType
 displayError info NumericScaleOutOfBounds { attemptedScale } =
   pure $ text "Tried to define a Numeric with a scale of" <+> ppr attemptedScale <> text ", but only scales between 0 and 37 are supported."
 displayError info TriedImplementNonInterface { triedIface }
   | isTemplate info triedIface
-  = pure $ text "Tried to make an interface implementation of" <+> pprq triedIface <>
+  = pure $ text "Tried to make an interface implementation of" <+> pprSynName info triedIface <>
            text ", but" <+> pprq triedIface <+> text "is a template, not an interface."
   | isInterface info triedIface
-  = pure $ text "Tried to make an interface implementation of" <+> pprq triedIface <>
+  = pure $ text "Tried to make an interface implementation of" <+> pprSynName info triedIface <>
            text ", but" <+> pprq triedIface <+> text "does not have an instance of HasInterfaceTypeRep. This should not happen, please contact support."
   | otherwise
-  = pure $ text "Tried to make an interface implementation of" <+> pprq triedIface <>
+  = pure $ text "Tried to make an interface implementation of" <+> pprSynName info triedIface <>
            text ", but" <+> pprq triedIface <+> text "is not an interface."
 
 dedupe :: DamlInfo -> DamlInfo
