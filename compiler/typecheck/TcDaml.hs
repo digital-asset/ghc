@@ -292,13 +292,14 @@ resolveSynonym info name =
     Just (resolvedName, _) -> resolvedName
     Nothing -> name
 
+-- For unparameterised type aliases, we extract the name and print the alias
 pprSynType :: DamlInfo -> Type -> SDoc
 pprSynType info (TyConApp (getName -> name) []) = pprSynName info name
 pprSynType _ ty = pprq ty
 
 pprSynName :: DamlInfo -> Name -> SDoc
 pprSynName info name =
-  let synName = resolveSynonym info name 
+  let synName = resolveSynonym info name
    in if name == synName
         then pprq name
         else pprq name <+> parens (text "Type synonym of" <+> pprq synName)
@@ -414,6 +415,7 @@ extractSynonymsFromTyThings existing tythings = go existing (mapMaybe getSynonym
             | value `S.member` templates info = Left (synonym, (value, TemplateSyn))
             | value `S.member` interfaces info = Left (synonym, (value, InterfaceSyn))
             | value `M.member` choices info = Left (synonym, (value, ChoiceSyn))
+            | value `M.member` views info = Left (synonym, (value, ViewSyn))
             | Just result <- value `M.lookup` synonyms info = Left (synonym, result)
             | otherwise = Right (synonym, value)
       in

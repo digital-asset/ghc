@@ -301,7 +301,7 @@ instance ContainsDynFlags (Env gbl lcl) where
 instance ContainsModule gbl => ContainsModule (Env gbl lcl) where
     extractModule env = extractModule (env_gbl env)
 
-data DamlSynonym = TemplateSyn | InterfaceSyn | ChoiceSyn
+data DamlSynonym = TemplateSyn | InterfaceSyn | ChoiceSyn | ViewSyn
   deriving (Show, Eq, Ord)
 
 instance Outputable DamlSynonym where ppr = text . show
