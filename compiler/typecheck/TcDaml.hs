@@ -35,6 +35,7 @@ import qualified Data.Map as M
 import Data.Bifunctor
 import Data.Maybe
 import Data.Either (partitionEithers)
+import Data.Function (on)
 import Data.List
 import qualified Prelude as P ((<>))
 import Control.Monad
@@ -156,7 +157,7 @@ displayError info TriedView { target, result }
   | isInterface info target
   , Just view <- interfaceView info target
   = pure
-  $ text "Tried to get an interface view of type" <+> pprSynType info result <+> text "from interface" <+> pprSynName info target <+> text "but that interface's view is of type" <+> pprSynType info view
+  $ text "Tried to get an interface view of type" <+> pprSynType info result <+> text "from interface" <+> pprSynName info target <+> text "but that interface's view is of type" <+> pprSynName info view
   | isInterface info target
   = pure
   $ text "Tried to get an interface view of type" <+> pprSynType info result <+> text "from interface" <+> pprSynName info target <+> text "but that interface's view is not of type" <+> pprSynType info result
@@ -276,7 +277,7 @@ choiceImplementor info name = fst <$> M.lookup (resolveSynonym info name) (choic
 choiceType :: DamlInfo -> Name -> Maybe Type
 choiceType info name = snd <$> M.lookup (resolveSynonym info name) (choices info)
 
-interfaceView :: DamlInfo -> Name -> Maybe Type
+interfaceView :: DamlInfo -> Name -> Maybe Name
 interfaceView info name = M.lookup (resolveSynonym info name) (views info)
 
 methodsNamed :: DamlInfo -> FastString -> [(Name, Type)]
@@ -332,7 +333,7 @@ resolveAllSynonyms info@DamlInfo {..} =
     , choices = (fmap . first) (resolveSynonym info) $ M.mapKeys (resolveSynonym info) choices
     , methods = (fmap . second . first) (resolveSynonym info) methods
     , implementations = (fmap . (\f -> bimap f f)) (resolveSynonym info) implementations
-    , views = M.mapKeys (resolveSynonym info) views
+    , views = M.foldMapWithKey (M.singleton `on` resolveSynonym info) views
     , synonyms = synonyms
     }
 
@@ -415,7 +416,7 @@ extractSynonymsFromTyThings existing tythings = go existing (mapMaybe getSynonym
             | value `S.member` templates info = Left (synonym, (value, TemplateSyn))
             | value `S.member` interfaces info = Left (synonym, (value, InterfaceSyn))
             | value `M.member` choices info = Left (synonym, (value, ChoiceSyn))
-            | value `M.member` views info = Left (synonym, (value, ViewSyn))
+            | (==value) `any` views info = Left (synonym, (value, ViewSyn))
             | Just result <- value `M.lookup` synonyms info = Left (synonym, result)
             | otherwise = Right (synonym, value)
       in
@@ -456,12 +457,13 @@ extractDamlInfoFromClsInst inst =
       (interfaceTyCon, []) <- splitTyConApp_maybe interfaceType
       pure (tyConName templateTyCon, tyConName interfaceTyCon)
 
-    matchView :: ClsInst -> Maybe (Name, Type)
+    matchView :: ClsInst -> Maybe (Name, Name)
     matchView clsInst = do
       [ifaceType, viewType] <-
           clsInstMatch "HasInterfaceView" clsInst
       (ifaceTyCon, []) <- splitTyConApp_maybe ifaceType
-      pure (tyConName ifaceTyCon, viewType)
+      (viewTyCon, []) <- splitTyConApp_maybe viewType
+      pure (tyConName ifaceTyCon, tyConName viewTyCon)
 
     clsInstMatch :: String -> ClsInst -> Maybe [Type]
     clsInstMatch targetName clsInst = do

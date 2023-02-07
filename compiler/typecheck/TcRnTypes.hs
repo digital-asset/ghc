@@ -312,7 +312,7 @@ data DamlInfo = DamlInfo
   , choices :: Map Name (Name, Type)
   , methods :: [(FastString, (Name, Type))]
   , implementations :: [(Name, Name)]
-  , views :: Map Name Type
+  , views :: Map Name Name
   , synonyms :: Map Name (Name, DamlSynonym)
   }
 
