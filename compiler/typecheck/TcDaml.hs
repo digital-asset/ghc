@@ -35,6 +35,7 @@ import qualified Data.Map as M
 import Data.Bifunctor
 import Data.Maybe
 import Data.Either (partitionEithers)
+import Data.Function (on)
 import Data.List
 import qualified Prelude as P ((<>))
 import Control.Monad
@@ -146,7 +147,7 @@ displayError :: DamlInfo -> DamlError -> Maybe SDoc
 displayError info TriedView { target, result }
   | isTemplate info target
   = pure
-  $ vcat [ text "Tried to get an interface view of type" <+> pprq result <+> text "from template" <+> pprq target
+  $ vcat [ text "Tried to get an interface view of type" <+> pprSynType info result <+> text "from template" <+> pprSynName info target
          , text "Cast template" <+> pprq target <+> text "to an interface before getting its view."
          , printListWithHeader
               (text "Template" <+> pprq target <+> text "does not have any known interface implementations.")
@@ -156,44 +157,44 @@ displayError info TriedView { target, result }
   | isInterface info target
   , Just view <- interfaceView info target
   = pure
-  $ text "Tried to get an interface view of type" <+> pprq result <+> text "from interface" <+> pprq target <+> text "but that interface's view is of type" <+> pprq view
+  $ text "Tried to get an interface view of type" <+> pprSynType info result <+> text "from interface" <+> pprSynName info target <+> text "but that interface's view is of type" <+> pprSynName info view
   | isInterface info target
   = pure
-  $ text "Tried to get an interface view of type" <+> pprq result <+> text "from interface" <+> pprq target <+> text "but that interface's view is not of type" <+> pprq result
+  $ text "Tried to get an interface view of type" <+> pprSynType info result <+> text "from interface" <+> pprSynName info target <+> text "but that interface's view is not of type" <+> pprSynType info result
   | otherwise
   = pure
-  $ text "Tried to get an interface view of type" <+> pprq result <+> text "from type" <+> pprq target <+> text "which is neither an interface nor a template"
+  $ text "Tried to get an interface view of type" <+> pprSynType info result <+> text "from type" <+> pprSynName info target <+> text "which is neither an interface nor a template"
 displayError info TriedExercise { target, result, choice }
   | Just implementor <- choiceImplementor info choice
   , isInterface info implementor
   , implements info target implementor
   , target /= implementor -- since interfaces implement themselves, we ignore if the target is itself
   = pure
-  $ vcat [ text "Tried to exercise a choice" <+> pprq choice <+> text "on" <+> variantName info target
-         , text "The choice" <+> pprq choice <+> text "belongs to" <+> variantName info implementor <+> text "which" <+> pprq target <+> text "implements."
+  $ vcat [ text "Tried to exercise a choice" <+> pprSynName info choice <+> text "on" <+> variantNameSyn info target
+         , text "The choice" <+> pprq choice <+> text "belongs to" <+> variantNameSyn info implementor <+> text "which" <+> pprq target <+> text "implements."
          , text "Cast" <+> variantName info target <+> text "to" <+> variantName info implementor <+> text "before exercising the choice."
          ]
   | Just implementor <- choiceImplementor info choice
   , Just expectedReturnType <- choiceType info choice
   , not (result `eqType` expectedReturnType)
   = pure
-  $ text "Tried to get a result of type" <+> pprq result <+> text "by exercising choice" <+> pprq choice <+> text "on" <+> variantName info target
+  $ text "Tried to get a result of type" <+> pprSynType info result <+> text "by exercising choice" <+> pprSynName info choice <+> text "on" <+> variantNameSyn info target
    <+> text "but exercising choice" <+> pprq choice <+> text "should return type" <+> pprq expectedReturnType <+> text "instead."
   | otherwise
   = pure
-  $ vcat [ text "Tried to exercise a choice" <+> pprq choice <+> text "on" <+> variantName info target <+> text "but no choice of that name exists on" <+> variantName info target
+  $ vcat [ text "Tried to exercise a choice" <+> pprSynName info choice <+> text "on" <+> variantNameSyn info target <+> text "but no choice of that name exists on" <+> variantName info target
          , printListWithHeader
               empty
               (text "Choice" <+> pprq choice <+> text "belongs only to the following types:")
-              (map (variantName info) (maybeToList (choiceImplementor info choice)))
+              (map (variantNameSyn info) (maybeToList (choiceImplementor info choice)))
          ]
 displayError info TriedImplementMethod { target, method, result }
   | [(_, expectedResult)] <- methodOn info method target
   , not (eqType expectedResult result)
-  = pure $ text "Implementation of method" <+> pprq method <+> text "on interface" <+> pprq target <+> text "should return" <+> pprq expectedResult <+> text "but instead returns " <+> pprq result
+  = pure $ text "Implementation of method" <+> pprq method <+> text "on interface" <+> pprSynName info target <+> text "should return" <+> pprq expectedResult <+> text "but instead returns " <+> pprq result
   | [] <- methodOn info method target
   = pure
-  $ vcat [ text "Tried to implement method" <+> pprq method <> text ", but interface" <+> pprq target <+> text "does not have a method with that name."
+  $ vcat [ text "Tried to implement method" <+> pprq method <> text ", but interface" <+> pprSynName info target <+> text "does not have a method with that name."
          , printListWithHeader
              empty
              (text "Method" <+> pprq method <+> text "is only a method on the following interfaces:")
@@ -202,28 +203,28 @@ displayError info TriedImplementMethod { target, method, result }
   | otherwise
   = Nothing
 displayError info TriedImplementView { target, triedReturnType, expectedReturnType } =
-  pure $ text "Tried to implement a view of type" <+> pprq triedReturnType <+> text "on interface" <+> pprq target
-      <> text ", but the definition of interface" <+> pprq target <+> text "requires a view of type" <+> pprq expectedReturnType
+  pure $ text "Tried to implement a view of type" <+> pprSynType info triedReturnType <+> text "on interface" <+> pprSynName info target
+      <> text ", but the definition of interface" <+> pprq target <+> text "requires a view of type" <+> pprSynType info expectedReturnType
 displayError info NonExistentFieldAccess { recordType, expectedReturnType, fieldName } =
   pure $ text "Tried to access nonexistent field" <+> pprq fieldName
-     <+> text "with type" <+> pprq expectedReturnType
-     <+> text "on value of type" <+> pprq recordType
+     <+> text "with type" <+> pprSynType info expectedReturnType
+     <+> text "on value of type" <+> pprSynType info recordType
 displayError info FieldAccessWrongReturnType { recordType, triedReturnType, expectedReturnType, fieldName } =
   pure $ text "Tried to get field" <+> pprq fieldName
-     <+> text "with type" <+> pprq triedReturnType
-     <+> text "on value of type" <+> pprq recordType
-      <> text ", but that field has type" <+> pprq expectedReturnType
+     <+> text "with type" <+> pprSynType info triedReturnType
+     <+> text "on value of type" <+> pprSynType info recordType
+      <> text ", but that field has type" <+> pprSynType info expectedReturnType
 displayError info NumericScaleOutOfBounds { attemptedScale } =
   pure $ text "Tried to define a Numeric with a scale of" <+> ppr attemptedScale <> text ", but only scales between 0 and 37 are supported."
 displayError info TriedImplementNonInterface { triedIface }
   | isTemplate info triedIface
-  = pure $ text "Tried to make an interface implementation of" <+> pprq triedIface <>
+  = pure $ text "Tried to make an interface implementation of" <+> pprSynName info triedIface <>
            text ", but" <+> pprq triedIface <+> text "is a template, not an interface."
   | isInterface info triedIface
-  = pure $ text "Tried to make an interface implementation of" <+> pprq triedIface <>
+  = pure $ text "Tried to make an interface implementation of" <+> pprSynName info triedIface <>
            text ", but" <+> pprq triedIface <+> text "does not have an instance of HasInterfaceTypeRep. This should not happen, please contact support."
   | otherwise
-  = pure $ text "Tried to make an interface implementation of" <+> pprq triedIface <>
+  = pure $ text "Tried to make an interface implementation of" <+> pprSynName info triedIface <>
            text ", but" <+> pprq triedIface <+> text "is not an interface."
 
 dedupe :: DamlInfo -> DamlInfo
@@ -251,6 +252,12 @@ isTemplate info name = resolveSynonym info name `S.member` templates info
 isInterface info name = resolveSynonym info name `S.member` interfaces info
 isSynonym info name = resolveSynonym info name `M.member` synonyms info
 
+variantNameSyn :: DamlInfo -> Name -> SDoc
+variantNameSyn info name
+  | isTemplate info name = text "template" <+> pprSynName info name
+  | isInterface info name = text "interface" <+> pprSynName info name
+  | otherwise = text "type" <+> pprSynName info name
+
 variantName :: DamlInfo -> Name -> SDoc
 variantName info name
   | isTemplate info name = text "template" <+> pprq name
@@ -270,7 +277,7 @@ choiceImplementor info name = fst <$> M.lookup (resolveSynonym info name) (choic
 choiceType :: DamlInfo -> Name -> Maybe Type
 choiceType info name = snd <$> M.lookup (resolveSynonym info name) (choices info)
 
-interfaceView :: DamlInfo -> Name -> Maybe Type
+interfaceView :: DamlInfo -> Name -> Maybe Name
 interfaceView info name = M.lookup (resolveSynonym info name) (views info)
 
 methodsNamed :: DamlInfo -> FastString -> [(Name, Type)]
@@ -285,6 +292,18 @@ resolveSynonym info name =
   case name `M.lookup` synonyms info of
     Just (resolvedName, _) -> resolvedName
     Nothing -> name
+
+-- For unparameterised type aliases, we extract the name and print the alias
+pprSynType :: DamlInfo -> Type -> SDoc
+pprSynType info (TyConApp (getName -> name) []) = pprSynName info name
+pprSynType _ ty = pprq ty
+
+pprSynName :: DamlInfo -> Name -> SDoc
+pprSynName info name =
+  let synName = resolveSynonym info name
+   in if name == synName
+        then pprq name
+        else pprq name <+> parens (text "Type synonym of" <+> pprq synName)
 
 instance Monoid DamlInfo where
   mempty = DamlInfo S.empty S.empty M.empty [] [] M.empty M.empty
@@ -314,7 +333,7 @@ resolveAllSynonyms info@DamlInfo {..} =
     , choices = (fmap . first) (resolveSynonym info) $ M.mapKeys (resolveSynonym info) choices
     , methods = (fmap . second . first) (resolveSynonym info) methods
     , implementations = (fmap . (\f -> bimap f f)) (resolveSynonym info) implementations
-    , views = M.mapKeys (resolveSynonym info) views
+    , views = M.foldMapWithKey (M.singleton `on` resolveSynonym info) views
     , synonyms = synonyms
     }
 
@@ -397,6 +416,7 @@ extractSynonymsFromTyThings existing tythings = go existing (mapMaybe getSynonym
             | value `S.member` templates info = Left (synonym, (value, TemplateSyn))
             | value `S.member` interfaces info = Left (synonym, (value, InterfaceSyn))
             | value `M.member` choices info = Left (synonym, (value, ChoiceSyn))
+            | (==value) `any` views info = Left (synonym, (value, ViewSyn))
             | Just result <- value `M.lookup` synonyms info = Left (synonym, result)
             | otherwise = Right (synonym, value)
       in
@@ -437,12 +457,13 @@ extractDamlInfoFromClsInst inst =
       (interfaceTyCon, []) <- splitTyConApp_maybe interfaceType
       pure (tyConName templateTyCon, tyConName interfaceTyCon)
 
-    matchView :: ClsInst -> Maybe (Name, Type)
+    matchView :: ClsInst -> Maybe (Name, Name)
     matchView clsInst = do
       [ifaceType, viewType] <-
           clsInstMatch "HasInterfaceView" clsInst
       (ifaceTyCon, []) <- splitTyConApp_maybe ifaceType
-      pure (tyConName ifaceTyCon, viewType)
+      (viewTyCon, []) <- splitTyConApp_maybe viewType
+      pure (tyConName ifaceTyCon, tyConName viewTyCon)
 
     clsInstMatch :: String -> ClsInst -> Maybe [Type]
     clsInstMatch targetName clsInst = do
