@@ -435,7 +435,7 @@ pprPmExprCon (RealDataCon con) args
     pretty_list :: PmPprM SDoc
     pretty_list = case isNilPmExpr (last list) of
       True  -> brackets . fsep . punctuate comma <$> mapM pprPmExpr (init list)
-      False -> parens   . hcat . punctuate dcolon <$> mapM pprPmExpr list
+      False -> parens   . hcat . punctuate list_cons <$> mapM pprPmExpr list
 
     list = list_elements args
 
