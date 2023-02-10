@@ -25,7 +25,7 @@ module Outputable (
         int, intWithCommas, integer, word, float, double, rational, doublePrec,
         parens, cparen, brackets, braces, quotes, quote,
         doubleQuotes, angleBrackets,
-        semi, comma, colon, dcolon, of_type, space, equals, dot, vbar,
+        semi, comma, colon, dcolon, list_cons, of_type, space, equals, dot, vbar,
         arrow, larrow, darrow, arrowt, larrowt, arrowtt, larrowtt,
         lparen, rparen, lbrack, rbrack, lbrace, rbrace, underscore,
         blankLine, forAllLit, kindType, bullet,
@@ -613,7 +613,7 @@ quotes d =
              ('\'' : _, _)       -> pp_d
              _other              -> Pretty.quotes pp_d
 
-semi, comma, colon, equals, space, dcolon, of_type, underscore, dot, vbar :: SDoc
+semi, comma, colon, equals, space, dcolon, list_cons, of_type, underscore, dot, vbar :: SDoc
 arrow, larrow, darrow, arrowt, larrowt, arrowtt, larrowtt :: SDoc
 lparen, rparen, lbrack, rbrack, lbrace, rbrace, blankLine :: SDoc
 
@@ -645,6 +645,11 @@ of_type    =
                        if performNewColonConvention dflags
                        then colon
                        else dcolon
+list_cons  =
+  sdocWithDynFlags $ \dflags ->
+                       if performNewColonConvention dflags
+                       then dcolon
+                       else colon
 
 forAllLit :: SDoc
 forAllLit = unicodeSyntax (char '∀') (text "forall")
