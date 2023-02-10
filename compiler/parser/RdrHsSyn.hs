@@ -2878,19 +2878,19 @@ mkChoiceDecls templateLoc conName binds (CombinedChoiceData controllers observer
         consumingSig = (unLoc . mkQualType . show . fromMaybe Consuming <$> cdChoiceConsuming) `mkAppTy` templateType
         consumingDef = unLoc . mkQualVar . mkDataOcc . show . fromMaybe Consuming <$> cdChoiceConsuming
         controllerSig = mkFunTy templateType (mkFunTy choiceType partiesType)
-        controllerDef = mkLambda controllerDefArgs controllers (noLetBindingsIfArchive (extendLetBindings binds (dummyBinds controllerDefArgs)))
-        controllerDefArgs = [this, if flexible then arg else WildPat noExt]
+        controllerDef = if flexible
+          then mkSplitBody [this] [arg] controllers
+          else mkBody [this, wildPat] controllers
         observersSig = mkOptional (mkParenTy (mkFunTy templateType (mkFunTy choiceType partiesType)))
         observersDef = case observersM of
           Nothing -> mkNone
           Just observers ->
-            mkSome $ mkLambda observerDefArgs observers (noLetBindingsIfArchive (extendLetBindings binds (dummyBinds observerDefArgs)))
-        observerDefArgs = [this, arg]
+            mkSome $ mkSplitBody [this] [arg] observers
         actionSig = mkFunTy contractIdType (mkFunTy templateType (mkFunTy choiceType choiceReturnType))
         -- If not isArchive, split the lambda into 2 @\self this -> \arg -> ...@ to allow choice arguments to shadow template arguments
         actionDef = if isArchive
           then mkLambda [wildPat, wildPat, wildPat] cdChoiceBody Nothing
-          else mkLambda [self, this] (mkLambda [arg] cdChoiceBody (Just $ extendLetBindings binds (dummyBinds [self, this, arg]))) Nothing
+          else mkSplitBody [self, this] [arg] cdChoiceBody
         arg = argPatOfChoice (noLoc $ choiceNameToRdrName $ mkDataOcc choiceName) cdChoiceFields
         choiceName = rdrNameToString cdChoiceName
         choiceNameToRdrName = if isArchive then qualifyDesugar else mkRdrUnqual
@@ -2907,6 +2907,10 @@ mkChoiceDecls templateLoc conName binds (CombinedChoiceData controllers observer
         noLetBindingsIfArchive x = if isArchive then Nothing else Just x
         wildPat = WildPat noExt
         isArchive = choiceName == "Archive"
+        mkBodyBinds args = noLetBindingsIfArchive (extendLetBindings binds (dummyBinds args))
+        mkBody args body = mkLambda args body $ mkBodyBinds args
+        mkSplitBody args1 args2 body =
+          mkLambda args1 (mkLambda args2 body (mkBodyBinds $ args1 ++ args2)) Nothing
 
 emptyString :: LHsExpr GhcPs
 emptyString = noLoc $ HsLit noExt $ HsString NoSourceText $ fsLit ""
