@@ -2887,8 +2887,10 @@ mkChoiceDecls templateLoc conName binds (CombinedChoiceData controllers observer
             mkSome $ mkLambda observerDefArgs observers (noLetBindingsIfArchive (extendLetBindings binds (dummyBinds observerDefArgs)))
         observerDefArgs = [this, arg]
         actionSig = mkFunTy contractIdType (mkFunTy templateType (mkFunTy choiceType choiceReturnType))
-        actionDef = mkLambda actionDefArgs cdChoiceBody (noLetBindingsIfArchive (extendLetBindings binds (dummyBinds actionDefArgs)))
-        actionDefArgs = if isArchive then [wildPat, wildPat, wildPat] else [self, this, arg]
+        -- If not isArchive, split the lambda into 2 @\self this -> \arg -> ...@ to allow choice arguments to shadow template arguments
+        actionDef = if isArchive
+          then mkLambda [wildPat, wildPat, wildPat] cdChoiceBody Nothing
+          else mkLambda [self, this] (mkLambda [arg] cdChoiceBody (Just $ extendLetBindings binds (dummyBinds [self, this, arg]))) Nothing
         arg = argPatOfChoice (noLoc $ choiceNameToRdrName $ mkDataOcc choiceName) cdChoiceFields
         choiceName = rdrNameToString cdChoiceName
         choiceNameToRdrName = if isArchive then qualifyDesugar else mkRdrUnqual
