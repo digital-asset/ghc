@@ -3043,6 +3043,8 @@ mkChoiceInstanceDecl :: Located String -> CombinedChoiceData -> [LHsDecl GhcPs]
 mkChoiceInstanceDecl templateName CombinedChoiceData { ccdChoiceData = ChoiceData{..} } =
   [ mkInstance "HasExercise" [templateType, choiceType, returnType]
       (mkPrimMethod "exercise" "UExercise")
+  , mkInstance "HasDynamicExercise" [templateType, choiceType, returnType]
+      (mkPrimMethod "dynamicExercise" "UDynamicExercise")
   , mkInstance "HasToAnyChoice" [templateType, choiceType, returnType]
       (mkPrimMethod "_toAnyChoice" "EToAnyChoice")
   , mkInstance "HasFromAnyChoice" [templateType, choiceType, returnType]
