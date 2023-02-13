@@ -2910,7 +2910,7 @@ mkChoiceDecls templateLoc conName binds (CombinedChoiceData controllers observer
         mkBodyBinds args = noLetBindingsIfArchive (extendLetBindings binds (dummyBinds args))
         mkBody args body = mkLambda args body $ mkBodyBinds args
         mkSplitBody args1 args2 body =
-          mkLambda args1 (mkLambda args2 body (mkBodyBinds $ args1 ++ args2)) Nothing
+          mkLambda args1 (mkApp (mkQualVar $ mkVarOcc "bypassReduceLambda") $ mkLambda args2 body (mkBodyBinds $ args1 ++ args2)) Nothing
 
 emptyString :: LHsExpr GhcPs
 emptyString = noLoc $ HsLit noExt $ HsString NoSourceText $ fsLit ""
