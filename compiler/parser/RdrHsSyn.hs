@@ -3544,17 +3544,16 @@ mkExceptionInstanceDecls ValidException{..} =
   where
     exceptionType = rdrNameToType veExnName
     this =
-      case veFields of
-        L _ (HsRecTy _ []) ->
-          asPatPrefixCon "this" veConName
-        _ ->
-          asPatRecWild "this" veConName
+      if isEmptyRecord veFields
+        then asPatPrefixCon "this" veConName
+        else asPatRecWild "this" veConName
+
     messageMethod =
       case veMessage of
         Nothing ->
           mkMethod "message" [] (mkUnqualVar (mkVarOcc "show"))
         Just messageBody ->
-          mkMethod "message" [this] messageBody
+          mkMethod "message" [this] $ noLoc $ HsLet noExt (mkLetBindings $ dummyBinds [this]) messageBody
 
     mkInstance name method = instDecl $
       classInstDecl (mkQualClass name `mkAppTy` exceptionType) (unitBag method)
