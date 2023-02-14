@@ -25,7 +25,7 @@ module DA.Internal.Desugar
 where
 
 import GHC.TypeLits (Symbol)
-import GHC.Types (primitive)
+import GHC.Types (primitive, magic)
 import Data.String (IsString(..))
 
 data Any
@@ -238,3 +238,6 @@ mkInterfaceView _ = InterfaceView ()
 class HasField (x : Symbol) r a | x r -> a where
     getField : r -> a
     setField : a -> r -> r
+
+bypassReduceLambda : forall a. a -> a
+bypassReduceLambda = magic @"bypassReduceLambda"

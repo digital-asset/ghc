@@ -2488,13 +2488,10 @@ asPatRecWild varName conName =
     (noLoc $ ConPatIn conName $
       RecCon $ HsRecFields { rec_flds = [], rec_dotdot = Just 0 })
 
--- | Utility function for constructing patterns of the form 'arg@X'
--- where 'X' is either a record wildcard pattern or a prefix
--- constructor pattern depending on whether a non-empty record field
--- list is provided.
-argPatOfChoice :: Located RdrName -> LHsType GhcPs -> Pat GhcPs
-argPatOfChoice choiceConName (L _ (HsRecTy _ [])) = asPatPrefixCon "arg" choiceConName
-argPatOfChoice choiceConName _ = asPatRecWild "arg" choiceConName
+-- | Checks if the given type is an empty record, returns false for non-records also
+isEmptyRecord :: LHsType GhcPs -> Bool
+isEmptyRecord (L _ (HsRecTy _ [])) = True
+isEmptyRecord _ = False
 
 --------------------------------------------------------------------------------
 -- Utilities for constructing types and values
@@ -2878,25 +2875,28 @@ mkChoiceDecls templateLoc conName binds (CombinedChoiceData controllers observer
         consumingSig = (unLoc . mkQualType . show . fromMaybe Consuming <$> cdChoiceConsuming) `mkAppTy` templateType
         consumingDef = unLoc . mkQualVar . mkDataOcc . show . fromMaybe Consuming <$> cdChoiceConsuming
         controllerSig = mkFunTy templateType (mkFunTy choiceType partiesType)
-        controllerDef = mkLambda controllerDefArgs controllers (noLetBindingsIfArchive (extendLetBindings binds (dummyBinds controllerDefArgs)))
-        controllerDefArgs = [this, if flexible then arg else WildPat noExt]
+        controllerDef = mkBody [this] [argPat] controllers
+        argPat = if flexible then arg else wildPat
         observersSig = mkOptional (mkParenTy (mkFunTy templateType (mkFunTy choiceType partiesType)))
         observersDef = case observersM of
           Nothing -> mkNone
           Just observers ->
-            mkSome $ mkLambda observerDefArgs observers (noLetBindingsIfArchive (extendLetBindings binds (dummyBinds observerDefArgs)))
-        observerDefArgs = [this, arg]
+            mkSome $ mkBody [this] [arg] observers
         actionSig = mkFunTy contractIdType (mkFunTy templateType (mkFunTy choiceType choiceReturnType))
-        actionDef = mkLambda actionDefArgs cdChoiceBody (noLetBindingsIfArchive (extendLetBindings binds (dummyBinds actionDefArgs)))
-        actionDefArgs = if isArchive then [wildPat, wildPat, wildPat] else [self, this, arg]
-        arg = argPatOfChoice (noLoc $ choiceNameToRdrName $ mkDataOcc choiceName) cdChoiceFields
+        actionDef = mkBody [archiveWild self, archiveWild this] [archiveWild arg] cdChoiceBody
+        archiveWild pat = if isArchive then wildPat else pat
         choiceName = rdrNameToString cdChoiceName
         choiceNameToRdrName = if isArchive then qualifyDesugar else mkRdrUnqual
+
         self = mkVarPat $ mkVarOcc "self"
         this
-          | InterfaceFixedChoice <- source = mkVarPat $ mkVarOcc "this"
-          | isArchive = mkVarPat $ mkVarOcc "this"
-          | otherwise = asPatRecWild "this" conName
+          | shouldThisRecWild = asPatRecWild "this" conName
+          | otherwise = mkVarPat $ mkVarOcc "this"
+        argName = noLoc $ choiceNameToRdrName $ mkDataOcc choiceName
+        arg
+          | shouldArgRecWild = asPatRecWild "arg" argName
+          | otherwise = asPatPrefixCon "arg" argName
+
         templateType = mkTemplateType templateName
         templateName = L templateLoc $ rdrNameToString conName
         choiceType = mkChoiceType cdChoiceName
@@ -2904,7 +2904,20 @@ mkChoiceDecls templateLoc conName binds (CombinedChoiceData controllers observer
         contractIdType = mkContractId templateType
         noLetBindingsIfArchive x = if isArchive then Nothing else Just x
         wildPat = WildPat noExt
+
         isArchive = choiceName == "Archive"
+        isInterfaceFixedChoice
+          | InterfaceFixedChoice <- source = True
+          | otherwise = False
+        mkBodyBinds args = noLetBindingsIfArchive (extendLetBindings binds (dummyBinds args))
+        shouldThisRecWild = not (isInterfaceFixedChoice || isArchive)
+        shouldArgRecWild = not $ isEmptyRecord cdChoiceFields
+        shouldSplitBody = shouldThisRecWild && shouldArgRecWild
+        -- If not isArchive, split the lambda into 2 @\self this -> \arg -> ...@ to allow choice arguments to shadow template arguments
+        mkBody args1 args2 body = if shouldSplitBody then mkSplitBody args1 args2 body else mkMonoBody (args1 ++ args2) body
+        mkMonoBody args body = mkLambda args body $ mkBodyBinds args
+        mkSplitBody args1 args2 body =
+          mkLambda args1 (mkApp (mkQualVar $ mkVarOcc "bypassReduceLambda") $ mkLambda args2 body (mkBodyBinds $ args1 ++ args2)) Nothing
 
 emptyString :: LHsExpr GhcPs
 emptyString = noLoc $ HsLit noExt $ HsString NoSourceText $ fsLit ""
