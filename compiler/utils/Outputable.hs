@@ -516,7 +516,7 @@ showSDocDebug dflags d = renderWithStyle dflags d PprDebug
 renderWithStyle :: DynFlags -> SDoc -> PprStyle -> String
 renderWithStyle dflags sdoc sty
   = let s = Pretty.style{ Pretty.mode = PageMode,
-                          Pretty.lineLength = pprCols dflags }
+                          Pretty.lineLength = 200 }
     in Pretty.renderStyle s $ runSDoc sdoc (initSDocContext dflags sty)
 
 -- This shows an SDoc, but on one line only. It's cheaper than a full
@@ -525,7 +525,7 @@ renderWithStyle dflags sdoc sty
 showSDocOneLine :: DynFlags -> SDoc -> String
 showSDocOneLine dflags d
  = let s = Pretty.style{ Pretty.mode = OneLineMode,
-                         Pretty.lineLength = pprCols dflags } in
+                         Pretty.lineLength = 200 {-pprCols dflags-} } in
    Pretty.renderStyle s $
       runSDoc d (initSDocContext dflags (defaultUserStyle dflags))
 

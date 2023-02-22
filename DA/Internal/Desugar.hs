@@ -241,3 +241,14 @@ class HasField (x : Symbol) r a | x r -> a where
 
 bypassReduceLambda : forall a. a -> a
 bypassReduceLambda = magic @"bypassReduceLambda"
+
+-- | Exposes `choiceController` function. Part of the `Choice` constraint.
+class HasChoiceController t c where
+  -- | HIDE
+  _choiceController : t -> c -> [Party]
+
+-- | Exposes `choiceObserver` function. Part of the `Choice` constraint.
+class HasChoiceObserver t c where
+  -- | HIDE
+  _choiceObserver : t -> c -> [Party]
+
