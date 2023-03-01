@@ -2876,7 +2876,7 @@ mkChoiceDecls templateLoc conName binds (CombinedChoiceData controllers observer
         consumingDef = unLoc . mkQualVar . mkDataOcc . show . fromMaybe Consuming <$> cdChoiceConsuming
         controllerSig = mkFunTy templateType (mkFunTy choiceType partiesType)
         controllerDef = mkBody [this] [argPat] controllers
-        argPat = if flexible then arg else wildPat
+        argPat = if flexible && not isArchive then arg else wildPat
         observersSig = mkOptional (mkParenTy (mkFunTy templateType (mkFunTy choiceType partiesType)))
         observersDef = case observersM of
           Nothing -> mkNone
