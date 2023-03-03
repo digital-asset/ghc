@@ -24,7 +24,7 @@ module DA.Internal.Desugar
   )
 where
 
-import GHC.TypeLits (Symbol)
+import GHC.TypeLits (Symbol, Nat)
 import GHC.Types (primitive, magic)
 import Data.String (IsString(..))
 
@@ -137,6 +137,12 @@ class HasExerciseByKey t k c r | t -> k, t c -> r where
 class HasIsInterfaceType t where
   _isInterfaceType : proxy t -> Bool
 
+class HasChoiceController t c where
+  _choiceController : t -> c -> [Party]
+
+class HasChoiceObserver t c where
+  _choiceObserver : t -> c -> [Party]
+
 _typeRepForInterfaceExercise : (HasTemplateTypeRep t, HasIsInterfaceType t) => proxy t -> Optional TypeRep
 _typeRepForInterfaceExercise p =
   if _isInterfaceType p
@@ -241,3 +247,52 @@ class HasField (x : Symbol) r a | x r -> a where
 
 bypassReduceLambda : forall a. a -> a
 bypassReduceLambda = magic @"bypassReduceLambda"
+
+class NumericScale (n : Nat) where
+    -- | Get the scale of a `Numeric` as an integer. For example,
+    -- `numericScale (3.14159 : Numeric 5)` equals `5`.
+    numericScale : proxy n -> Int
+
+    -- | HIDE
+    numericScalePrivate : proxy n -> ()
+
+instance NumericScale 0 where numericScale _ = 0; numericScalePrivate _ = ()
+instance NumericScale 1 where numericScale _ = 1; numericScalePrivate _ = ()
+instance NumericScale 2 where numericScale _ = 2; numericScalePrivate _ = ()
+instance NumericScale 3 where numericScale _ = 3; numericScalePrivate _ = ()
+instance NumericScale 4 where numericScale _ = 4; numericScalePrivate _ = ()
+instance NumericScale 5 where numericScale _ = 5; numericScalePrivate _ = ()
+instance NumericScale 6 where numericScale _ = 6; numericScalePrivate _ = ()
+instance NumericScale 7 where numericScale _ = 7; numericScalePrivate _ = ()
+instance NumericScale 8 where numericScale _ = 8; numericScalePrivate _ = ()
+instance NumericScale 9 where numericScale _ = 9; numericScalePrivate _ = ()
+instance NumericScale 10 where numericScale _ = 10; numericScalePrivate _ = ()
+instance NumericScale 11 where numericScale _ = 11; numericScalePrivate _ = ()
+instance NumericScale 12 where numericScale _ = 12; numericScalePrivate _ = ()
+instance NumericScale 13 where numericScale _ = 13; numericScalePrivate _ = ()
+instance NumericScale 14 where numericScale _ = 14; numericScalePrivate _ = ()
+instance NumericScale 15 where numericScale _ = 15; numericScalePrivate _ = ()
+instance NumericScale 16 where numericScale _ = 16; numericScalePrivate _ = ()
+instance NumericScale 17 where numericScale _ = 17; numericScalePrivate _ = ()
+instance NumericScale 18 where numericScale _ = 18; numericScalePrivate _ = ()
+instance NumericScale 19 where numericScale _ = 19; numericScalePrivate _ = ()
+instance NumericScale 20 where numericScale _ = 20; numericScalePrivate _ = ()
+instance NumericScale 21 where numericScale _ = 21; numericScalePrivate _ = ()
+instance NumericScale 22 where numericScale _ = 22; numericScalePrivate _ = ()
+instance NumericScale 23 where numericScale _ = 23; numericScalePrivate _ = ()
+instance NumericScale 24 where numericScale _ = 24; numericScalePrivate _ = ()
+instance NumericScale 25 where numericScale _ = 25; numericScalePrivate _ = ()
+instance NumericScale 26 where numericScale _ = 26; numericScalePrivate _ = ()
+instance NumericScale 27 where numericScale _ = 27; numericScalePrivate _ = ()
+instance NumericScale 28 where numericScale _ = 28; numericScalePrivate _ = ()
+instance NumericScale 29 where numericScale _ = 29; numericScalePrivate _ = ()
+instance NumericScale 30 where numericScale _ = 30; numericScalePrivate _ = ()
+instance NumericScale 31 where numericScale _ = 31; numericScalePrivate _ = ()
+instance NumericScale 32 where numericScale _ = 32; numericScalePrivate _ = ()
+instance NumericScale 33 where numericScale _ = 33; numericScalePrivate _ = ()
+instance NumericScale 34 where numericScale _ = 34; numericScalePrivate _ = ()
+instance NumericScale 35 where numericScale _ = 35; numericScalePrivate _ = ()
+instance NumericScale 36 where numericScale _ = 36; numericScalePrivate _ = ()
+instance NumericScale 37 where numericScale _ = 37; numericScalePrivate _ = ()
+
+data Numeric (n : Nat)
