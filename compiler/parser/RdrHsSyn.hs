@@ -3149,25 +3149,26 @@ mkChoiceDataDecls CombinedChoiceData { ccdChoiceData = ChoiceData{..}}
   = do
       -- Calculate data constructor info from the choice name and record type.
       choiceConInfo@(_, choiceArgRec, _) <- splitCon [cdChoiceFields, rdrNameToType cdChoiceName]
-      validateDamlRecord choiceArgRec
+      -- Choices cannot use this, self or arg for argument names, as controller and body will name clash
+      validateDamlRecord ["this", "self", "arg"] [] choiceArgRec
       let dataLoc = combineLocs cdChoiceName cdChoiceFields
           dataDecl = mkChoiceDataDecl dataLoc cdChoiceName choiceConInfo
           -- Prepend the choice documentation, if any, as a 'DocNext'.
           mbDocDecl = fmap (fmap (DocD noExt . DocCommentNext)) cdChoiceDoc
       return $ maybeToList mbDocDecl ++ [dataDecl]
 
-invalidRecordNames :: [String]
-invalidRecordNames = ["this", "self", "arg"]
-
 -- | Validates for a given constructor, if it is a record, does not contain "self", "this" or "arg"
 validateDamlRecord
-  :: HsConDeclDetails GhcPs
+  :: [String]
+  -> [String]
+  -> HsConDeclDetails GhcPs
   -> P ()
-validateDamlRecord = \case
+validateDamlRecord fatalNames warningNames = \case
   (RecCon (L _ fs)) ->
     forM_ fs $ \(L _ (cd_fld_names -> occFieldNames)) -> do
-      forM_ occFieldNames $ \(L _ (rdrNameFieldOcc -> (L l (occNameString . rdrNameOcc -> name)))) ->
-        when (name `elem` invalidRecordNames) $ addFatalError l $ text $ "`" ++ name ++ "' is a prohibited field name, please use something else."
+      forM_ occFieldNames $ \(L _ (rdrNameFieldOcc -> (L l (occNameString . rdrNameOcc -> name)))) -> do
+        when (name `elem` fatalNames) $ addFatalError l $ text $ "`" ++ name ++ "' is a prohibited field name, please use something else."
+        when (name `elem` warningNames) $ addWarning Opt_WarnUnsupportedDamlNames l $ text $ "`" ++ name ++ "' is an unsupported field name, and may break without warning in future versions. Please use something else."
   _ -> pure ()
 
 -- | Perform preliminary checks on template header and body declarations.
@@ -3504,7 +3505,8 @@ mkExceptionDecls
   -> P (OrdList (LHsDecl GhcPs))    -- ^ Desugared declarations
 mkExceptionDecls name fields decls = do
   ci@(conName, exceptionArgsRec, _) <- splitCon [fields, rdrNameToType name]
-  validateDamlRecord exceptionArgsRec
+  -- Exceptions will not otherwise error for "arg" and "self", so we warn instead
+  validateDamlRecord ["this"] ["self", "arg"] exceptionArgsRec
   ve@ValidException{..} <- validateException name conName fields (extractExceptionBodyDecls decls)
   let exceptionDataDecl = mkExceptionDataDecl (combineLocs name fields) name ci
       exceptionInstanceDecls = mkExceptionInstanceDecls ve
@@ -3590,7 +3592,13 @@ mkTemplateDecls templateName fields decls = do
   -- Calculate 'T' data constructor info from 'T' and the record type denoted by 'fields'.
   ci@(conName, con, _) <- splitCon [fields, rdrNameToType vtTemplateName]
   -- Ensure the template parameters do not contain taken keywords
-  validateDamlRecord con
+  -- Note that templates _without any choices_ can _technically_ still support being `self' and `arg'.
+  -- This is not supported but would be a breaking change, so we warn instead of error.
+  let 
+    (fatalNames, warnNames) = if null vtChoices
+      then (["this"], ["self", "arg"])
+      else (["this", "self", "arg"], [])
+  validateDamlRecord fatalNames warnNames con
   -- Create choice data types except for Archive, which has a single definition across templates
   choiceDataDecls <- concat <$> traverse mkChoiceDataDecls vtChoices
   let templateName = occNameString . rdrNameOcc <$> vtTemplateName
