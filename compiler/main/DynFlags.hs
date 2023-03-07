@@ -4769,7 +4769,8 @@ standardWarnings -- see Note [Documenting warning flags]
         Opt_WarnStarBinder,
         Opt_WarnInaccessibleCode,
         Opt_WarnSpaceAfterBang,
-        Opt_WarnControllerCan
+        Opt_WarnControllerCan,
+        Opt_WarnUnsupportedDamlNames
       ]
 
 -- | Things you get with -W
