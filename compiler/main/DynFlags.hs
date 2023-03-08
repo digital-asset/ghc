@@ -838,7 +838,7 @@ data WarningFlag =
    | Opt_WarnSpaceAfterBang
    | Opt_WarnMissingDerivingStrategies    -- Since 8.8
    | Opt_WarnControllerCan
-   | Opt_WarnUnsupportedDamlNames
+   | Opt_WarnUnsupportedDamlFieldNames
    deriving (Eq, Show, Enum)
 
 data Language = Haskell98 | Haskell2010
@@ -4054,7 +4054,7 @@ wWarningFlagsDeps = [
   flagSpec "star-is-type"                Opt_WarnStarIsType,
   flagSpec "missing-space-after-bang"    Opt_WarnSpaceAfterBang,
   flagSpec "controller-can"              Opt_WarnControllerCan,
-  flagSpec "unsupported-daml-names"      Opt_WarnUnsupportedDamlNames,
+  flagSpec "unsupported-daml-field-names"      Opt_WarnUnsupportedDamlFieldNames,
   flagSpec "partial-fields"              Opt_WarnPartialFields ]
 
 -- | These @-\<blah\>@ flags can all be reversed with @-no-\<blah\>@
@@ -4770,7 +4770,7 @@ standardWarnings -- see Note [Documenting warning flags]
         Opt_WarnInaccessibleCode,
         Opt_WarnSpaceAfterBang,
         Opt_WarnControllerCan,
-        Opt_WarnUnsupportedDamlNames
+        Opt_WarnUnsupportedDamlFieldNames
       ]
 
 -- | Things you get with -W

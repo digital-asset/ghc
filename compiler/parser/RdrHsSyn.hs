@@ -3168,7 +3168,7 @@ validateDamlRecord fatalNames warningNames = \case
     forM_ fs $ \(L _ (cd_fld_names -> occFieldNames)) -> do
       forM_ occFieldNames $ \(L _ (rdrNameFieldOcc -> (L l (occNameString . rdrNameOcc -> name)))) -> do
         when (name `elem` fatalNames) $ addFatalError l $ text $ "`" ++ name ++ "' is a prohibited field name, please use something else."
-        when (name `elem` warningNames) $ addWarning Opt_WarnUnsupportedDamlNames l $ text $ "`" ++ name ++ "' is an unsupported field name, and may break without warning in future versions. Please use something else."
+        when (name `elem` warningNames) $ addWarning Opt_WarnUnsupportedDamlFieldNames l $ text $ "`" ++ name ++ "' is an unsupported field name, and may break without warning in future versions. Please use something else."
   _ -> pure ()
 
 -- | Perform preliminary checks on template header and body declarations.
