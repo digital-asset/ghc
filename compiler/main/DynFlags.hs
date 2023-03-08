@@ -4054,7 +4054,8 @@ wWarningFlagsDeps = [
   flagSpec "star-is-type"                Opt_WarnStarIsType,
   flagSpec "missing-space-after-bang"    Opt_WarnSpaceAfterBang,
   flagSpec "controller-can"              Opt_WarnControllerCan,
-  flagSpec "unsupported-daml-field-names"      Opt_WarnUnsupportedDamlFieldNames,
+  flagSpec "unsupported-daml-field-names"
+                                         Opt_WarnUnsupportedDamlFieldNames,
   flagSpec "partial-fields"              Opt_WarnPartialFields ]
 
 -- | These @-\<blah\>@ flags can all be reversed with @-no-\<blah\>@
