@@ -528,27 +528,27 @@ are the most common patterns, rewritten as regular expressions for clarity:
  'requires'     { L _ ITrequires }
  'viewtype'     { L _ ITviewtype }
 
- '{-# INLINE'             { L _ (ITinline_prag _ _ _) } -- INLINE or INLINABLE
- '{-# SPECIALISE'         { L _ (ITspec_prag _) }
- '{-# SPECIALISE_INLINE'  { L _ (ITspec_inline_prag _ _) }
- '{-# SOURCE'             { L _ (ITsource_prag _) }
- '{-# RULES'              { L _ (ITrules_prag _) }
- '{-# CORE'               { L _ (ITcore_prag _) }      -- hdaume: annotated core
- '{-# SCC'                { L _ (ITscc_prag _)}
- '{-# GENERATED'          { L _ (ITgenerated_prag _) }
- '{-# DEPRECATED'         { L _ (ITdeprecated_prag _) }
- '{-# WARNING'            { L _ (ITwarning_prag _) }
- '{-# UNPACK'             { L _ (ITunpack_prag _) }
- '{-# NOUNPACK'           { L _ (ITnounpack_prag _) }
- '{-# ANN'                { L _ (ITann_prag _) }
- '{-# MINIMAL'            { L _ (ITminimal_prag _) }
- '{-# CTYPE'              { L _ (ITctype _) }
- '{-# OVERLAPPING'        { L _ (IToverlapping_prag _) }
- '{-# OVERLAPPABLE'       { L _ (IToverlappable_prag _) }
- '{-# OVERLAPS'           { L _ (IToverlaps_prag _) }
- '{-# INCOHERENT'         { L _ (ITincoherent_prag _) }
- '{-# COMPLETE'           { L _ (ITcomplete_prag _)   }
- '#-}'                    { L _ ITclose_prag }
+ "{-# INLINE"             { L _ (ITinline_prag _ _ _) } -- INLINE or INLINABLE
+ "{-# SPECIALISE"         { L _ (ITspec_prag _) }
+ "{-# SPECIALISE_INLINE"  { L _ (ITspec_inline_prag _ _) }
+ "{-# SOURCE"             { L _ (ITsource_prag _) }
+ "{-# RULES"              { L _ (ITrules_prag _) }
+ "{-# CORE"               { L _ (ITcore_prag _) }      -- hdaume: annotated core
+ "{-# SCC"                { L _ (ITscc_prag _)}
+ "{-# GENERATED"          { L _ (ITgenerated_prag _) }
+ "{-# DEPRECATED"         { L _ (ITdeprecated_prag _) }
+ "{-# WARNING"            { L _ (ITwarning_prag _) }
+ "{-# UNPACK"             { L _ (ITunpack_prag _) }
+ "{-# NOUNPACK"           { L _ (ITnounpack_prag _) }
+ "{-# ANN"                { L _ (ITann_prag _) }
+ "{-# MINIMAL"            { L _ (ITminimal_prag _) }
+ "{-# CTYPE"              { L _ (ITctype _) }
+ "{-# OVERLAPPING"        { L _ (IToverlapping_prag _) }
+ "{-# OVERLAPPABLE"       { L _ (IToverlappable_prag _) }
+ "{-# OVERLAPS"           { L _ (IToverlaps_prag _) }
+ "{-# INCOHERENT"         { L _ (ITincoherent_prag _) }
+ "{-# COMPLETE"           { L _ (ITcomplete_prag _)   }
+ "#-}"                    { L _ ITclose_prag }
 
  '..'           { L _ ITdotdot }                        -- reserved symbols
  '='            { L _ ITequal }
@@ -844,10 +844,10 @@ implicit_top :: { () }
         : {- empty -}                           {% pushModuleContext }
 
 maybemodwarning :: { Maybe (Located WarningTxt) }
-    : '{-# DEPRECATED' strings '#-}'
+    : "{-# DEPRECATED" strings "#-}"
                       {% ajs (Just (sLL $1 $> $ DeprecatedTxt (sL1 $1 (getDEPRECATED_PRAGs $1)) (snd $ unLoc $2)))
                              (mo $1:mc $3: (fst $ unLoc $2)) }
-    | '{-# WARNING' strings '#-}'
+    | "{-# WARNING" strings "#-}"
                          {% ajs (Just (sLL $1 $> $ WarningTxt (sL1 $1 (getWARNING_PRAGs $1)) (snd $ unLoc $2)))
                                 (mo $1:mc $3 : (fst $ unLoc $2)) }
     |  {- empty -}                  { Nothing }
@@ -1054,7 +1054,7 @@ importdecl :: { LImportDecl GhcPs }
                                         ++ fst $5 ++ fst $8)) }
 
 maybe_src :: { (([AddAnn],SourceText),IsBootInterface) }
-        : '{-# SOURCE' '#-}'        { (([mo $1,mc $2],getSOURCE_PRAGs $1)
+        : "{-# SOURCE" "#-}"        { (([mo $1,mc $2],getSOURCE_PRAGs $1)
                                       ,True) }
         | {- empty -}               { (([],NoSourceText),False) }
 
@@ -1146,11 +1146,11 @@ topdecl :: { LHsDecl GhcPs }
                                                          ,mop $2,mcp $4] }
         | 'foreign' fdecl          {% ams (sLL $1 $> (snd $ unLoc $2))
                                            (mj AnnForeign $1:(fst $ unLoc $2)) }
-        | '{-# DEPRECATED' deprecations '#-}'   {% ams (sLL $1 $> $ WarningD noExt (Warnings noExt (getDEPRECATED_PRAGs $1) (fromOL $2)))
+        | "{-# DEPRECATED" deprecations "#-}"   {% ams (sLL $1 $> $ WarningD noExt (Warnings noExt (getDEPRECATED_PRAGs $1) (fromOL $2)))
                                                        [mo $1,mc $3] }
-        | '{-# WARNING' warnings '#-}'          {% ams (sLL $1 $> $ WarningD noExt (Warnings noExt (getWARNING_PRAGs $1) (fromOL $2)))
+        | "{-# WARNING" warnings "#-}"          {% ams (sLL $1 $> $ WarningD noExt (Warnings noExt (getWARNING_PRAGs $1) (fromOL $2)))
                                                        [mo $1,mc $3] }
-        | '{-# RULES' rules '#-}'               {% ams (sLL $1 $> $ RuleD noExt (HsRules noExt (getRULES_PRAGs $1) (fromOL $2)))
+        | "{-# RULES" rules "#-}"               {% ams (sLL $1 $> $ RuleD noExt (HsRules noExt (getRULES_PRAGs $1) (fromOL $2)))
                                                        [mo $1,mc $3] }
         | annotation { $1 }
         | decl_no_th                            { $1 }
@@ -1484,13 +1484,13 @@ inst_decl :: { LInstDecl GhcPs }
                        :(fst $ unLoc $4)++(fst $ unLoc $5)++(fst $ unLoc $6)) }
 
 overlap_pragma :: { Maybe (Located OverlapMode) }
-  : '{-# OVERLAPPABLE'    '#-}' {% ajs (Just (sLL $1 $> (Overlappable (getOVERLAPPABLE_PRAGs $1))))
+  : "{-# OVERLAPPABLE"    "#-}" {% ajs (Just (sLL $1 $> (Overlappable (getOVERLAPPABLE_PRAGs $1))))
                                        [mo $1,mc $2] }
-  | '{-# OVERLAPPING'     '#-}' {% ajs (Just (sLL $1 $> (Overlapping (getOVERLAPPING_PRAGs $1))))
+  | "{-# OVERLAPPING"     "#-}" {% ajs (Just (sLL $1 $> (Overlapping (getOVERLAPPING_PRAGs $1))))
                                        [mo $1,mc $2] }
-  | '{-# OVERLAPS'        '#-}' {% ajs (Just (sLL $1 $> (Overlaps (getOVERLAPS_PRAGs $1))))
+  | "{-# OVERLAPS"        "#-}" {% ajs (Just (sLL $1 $> (Overlaps (getOVERLAPS_PRAGs $1))))
                                        [mo $1,mc $2] }
-  | '{-# INCOHERENT'      '#-}' {% ajs (Just (sLL $1 $> (Incoherent (getINCOHERENT_PRAGs $1))))
+  | "{-# INCOHERENT"      "#-}" {% ajs (Just (sLL $1 $> (Incoherent (getINCOHERENT_PRAGs $1))))
                                        [mo $1,mc $2] }
   | {- empty -}                 { Nothing }
 
@@ -1735,12 +1735,12 @@ tycl_hdr_inst :: { Located ([AddAnn],(Maybe (LHsContext GhcPs), Maybe [LHsTyVarB
 
 
 capi_ctype :: { Maybe (Located CType) }
-capi_ctype : '{-# CTYPE' STRING STRING '#-}'
+capi_ctype : "{-# CTYPE" STRING STRING "#-}"
                        {% ajs (Just (sLL $1 $> (CType (getCTYPEs $1) (Just (Header (getSTRINGs $2) (getSTRING $2)))
                                         (getSTRINGs $3,getSTRING $3))))
                               [mo $1,mj AnnHeader $2,mj AnnVal $3,mc $4] }
 
-           | '{-# CTYPE'        STRING '#-}'
+           | "{-# CTYPE"        STRING "#-}"
                        {% ajs (Just (sLL $1 $> (CType (getCTYPEs $1) Nothing  (getSTRINGs $2, getSTRING $2))))
                               [mo $1,mj AnnVal $2,mc $3] }
 
@@ -2089,17 +2089,17 @@ stringlist :: { Located (OrdList (Located StringLiteral)) }
 -----------------------------------------------------------------------------
 -- Annotations
 annotation :: { LHsDecl GhcPs }
-    : '{-# ANN' name_var aexp '#-}'      {% ams (sLL $1 $> (AnnD noExt $ HsAnnotation noExt
+    : "{-# ANN" name_var aexp "#-}"      {% ams (sLL $1 $> (AnnD noExt $ HsAnnotation noExt
                                             (getANN_PRAGs $1)
                                             (ValueAnnProvenance $2) $3))
                                             [mo $1,mc $4] }
 
-    | '{-# ANN' 'type' tycon aexp '#-}'  {% ams (sLL $1 $> (AnnD noExt $ HsAnnotation noExt
+    | "{-# ANN" 'type' tycon aexp "#-}"  {% ams (sLL $1 $> (AnnD noExt $ HsAnnotation noExt
                                             (getANN_PRAGs $1)
                                             (TypeAnnProvenance $3) $4))
                                             [mo $1,mj AnnType $2,mc $5] }
 
-    | '{-# ANN' 'module' aexp '#-}'      {% ams (sLL $1 $> (AnnD noExt $ HsAnnotation noExt
+    | "{-# ANN" 'module' aexp "#-}"      {% ams (sLL $1 $> (AnnD noExt $ HsAnnotation noExt
                                                 (getANN_PRAGs $1)
                                                  ModuleAnnProvenance $3))
                                                 [mo $1,mj AnnModule $2,mc $4] }
@@ -2175,8 +2175,8 @@ sigtypes1 :: { (OrdList (LHsSigType GhcPs)) }
 -- Types
 
 unpackedness :: { Located ([AddAnn], SourceText, SrcUnpackedness) }
-        : '{-# UNPACK' '#-}'   { sLL $1 $> ([mo $1, mc $2], getUNPACK_PRAGs $1, SrcUnpack) }
-        | '{-# NOUNPACK' '#-}' { sLL $1 $> ([mo $1, mc $2], getNOUNPACK_PRAGs $1, SrcNoUnpack) }
+        : "{-# UNPACK" "#-}"   { sLL $1 $> ([mo $1, mc $2], getUNPACK_PRAGs $1, SrcUnpack) }
+        | "{-# NOUNPACK" "#-}" { sLL $1 $> ([mo $1, mc $2], getNOUNPACK_PRAGs $1, SrcNoUnpack) }
 
 -- A ktype/ktypedoc is a ctype/ctypedoc, possibly with a kind annotation
 ktype :: { LHsType GhcPs }
@@ -2822,7 +2822,7 @@ sigdecl :: { LHsDecl GhcPs }
 
         | pattern_synonym_sig   { sLL $1 $> . SigD noExt . unLoc $ $1 }
 
-        | '{-# COMPLETE' con_list opt_tyconsig  '#-}'
+        | "{-# COMPLETE" con_list opt_tyconsig  "#-}"
                 {% let (dcolon, tc) = $3
                    in ams
                        (sLL $1 $>
@@ -2830,42 +2830,42 @@ sigdecl :: { LHsDecl GhcPs }
                     ([ mo $1 ] ++ dcolon ++ [mc $4]) }
 
         -- This rule is for both INLINE and INLINABLE pragmas
-        | '{-# INLINE' activation qvar '#-}'
+        | "{-# INLINE" activation qvar "#-}"
                 {% ams ((sLL $1 $> $ SigD noExt (InlineSig noExt $3
                             (mkInlinePragma (getINLINE_PRAGs $1) (getINLINE $1)
                                             (snd $2)))))
                        ((mo $1:fst $2) ++ [mc $4]) }
 
-        | '{-# SCC' qvar '#-}'
+        | "{-# SCC" qvar "#-}"
           {% ams (sLL $1 $> (SigD noExt (SCCFunSig noExt (getSCC_PRAGs $1) $2 Nothing)))
                  [mo $1, mc $3] }
 
-        | '{-# SCC' qvar STRING '#-}'
+        | "{-# SCC" qvar STRING "#-}"
           {% do { scc <- getSCC $3
                 ; let str_lit = StringLiteral (getSTRINGs $3) scc
                 ; ams (sLL $1 $> (SigD noExt (SCCFunSig noExt (getSCC_PRAGs $1) $2 (Just ( sL1 $3 str_lit)))))
                       [mo $1, mc $4] } }
 
-        | '{-# SPECIALISE' activation qvar OF_TYPE sigtypes1 '#-}'
+        | "{-# SPECIALISE" activation qvar OF_TYPE sigtypes1 "#-}"
              {% ams (
                  let inl_prag = mkInlinePragma (getSPEC_PRAGs $1)
                                              (NoUserInline, FunLike) (snd $2)
                   in sLL $1 $> $ SigD noExt (SpecSig noExt $3 (fromOL $5) inl_prag))
                     (mo $1:mu AnnDcolon $4:mc $6:(fst $2)) }
 
-        | '{-# SPECIALISE_INLINE' activation qvar OF_TYPE sigtypes1 '#-}'
+        | "{-# SPECIALISE_INLINE" activation qvar OF_TYPE sigtypes1 "#-}"
              {% ams (sLL $1 $> $ SigD noExt (SpecSig noExt $3 (fromOL $5)
                                (mkInlinePragma (getSPEC_INLINE_PRAGs $1)
                                                (getSPEC_INLINE $1) (snd $2))))
                        (mo $1:mu AnnDcolon $4:mc $6:(fst $2)) }
 
-        | '{-# SPECIALISE' 'instance' inst_type '#-}'
+        | "{-# SPECIALISE" 'instance' inst_type "#-}"
                 {% ams (sLL $1 $>
                                   $ SigD noExt (SpecInstSig noExt (getSPEC_PRAGs $1) $3))
                        [mo $1,mj AnnInstance $2,mc $4] }
 
         -- A minimal complete definition
-        | '{-# MINIMAL' name_boolformula_opt '#-}'
+        | "{-# MINIMAL" name_boolformula_opt "#-}"
             {% ams (sLL $1 $> $ SigD noExt (MinimalSig noExt (getMINIMAL_PRAGs $1) $2))
                    [mo $1,mc $3] }
 
@@ -2937,7 +2937,7 @@ exp10_top :: { LHsExpr GhcPs }
                                                                 (snd $ fst $ unLoc $1) (snd $ unLoc $1) $2)
                                       (fst $ fst $ fst $ unLoc $1) }
 
-        | '{-# CORE' STRING '#-}' exp  {% ams (sLL $1 $> $ HsCoreAnn noExt (getCORE_PRAGs $1) (getStringLiteral $2) $4)
+        | "{-# CORE" STRING "#-}" exp  {% ams (sLL $1 $> $ HsCoreAnn noExt (getCORE_PRAGs $1) (getStringLiteral $2) $4)
                                               [mo $1,mj AnnVal $2
                                               ,mc $3] }
                                           -- hdaume: core annotation
@@ -2953,18 +2953,18 @@ optSemi :: { ([Located Token],Bool) }
         | {- empty -} { ([],False) }
 
 scc_annot :: { Located (([AddAnn],SourceText),StringLiteral) }
-        : '{-# SCC' STRING '#-}'      {% do scc <- getSCC $2
+        : "{-# SCC" STRING "#-}"      {% do scc <- getSCC $2
                                             ; return $ sLL $1 $>
                                                (([mo $1,mj AnnValStr $2
                                                 ,mc $3],getSCC_PRAGs $1),(StringLiteral (getSTRINGs $2) scc)) }
-        | '{-# SCC' VARID  '#-}'      { sLL $1 $> (([mo $1,mj AnnVal $2
+        | "{-# SCC" VARID  "#-}"      { sLL $1 $> (([mo $1,mj AnnVal $2
                                          ,mc $3],getSCC_PRAGs $1)
                                         ,(StringLiteral NoSourceText (getVARID $2))) }
 
 hpc_annot :: { Located ( (([AddAnn],SourceText),(StringLiteral,(Int,Int),(Int,Int))),
                          ((SourceText,SourceText),(SourceText,SourceText))
                        ) }
-      : '{-# GENERATED' STRING INTEGER colon INTEGER '-' INTEGER colon INTEGER '#-}'
+      : "{-# GENERATED" STRING INTEGER colon INTEGER '-' INTEGER colon INTEGER "#-}"
                                       { sLL $1 $> $ ((([mo $1,mj AnnVal $2
                                               ,mj AnnVal $3,mj AnnColon $4
                                               ,mj AnnVal $5,mj AnnMinus $6
