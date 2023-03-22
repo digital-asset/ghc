@@ -514,6 +514,7 @@ are the most common patterns, rewritten as regular expressions for clarity:
  'controller'   { L _ ITcontroller }
  'choice'       { L _ ITchoice }
  'observer'     { L _ ITobserver }
+ 'authority'    { L _ ITauthority }
  'nonconsuming' { L _ ITnonconsuming }
  'preconsuming' { L _ ITpreconsuming }
  'postconsuming'{ L _ ITpostconsuming }
@@ -1260,11 +1261,11 @@ choice_decl :: { Located ChoiceData }
     }
 
 flex_choice_decl :: { Located FlexChoiceData }
-  : consuming 'choice' qtycon OF_TYPE btype_ maybe_docprev arecord_with_opt observer_and_controller doexp
+  : consuming 'choice' qtycon OF_TYPE btype_ maybe_docprev arecord_with_opt choice_parties doexp
       -- NOTE: We use `btype_` (`btype` excluding record `with` types) to
       -- prevent the choice return type capturing the `with` parameter types.
     { sL (comb3 $1 $2 $>) $
-        FlexChoiceData (fst $8) (snd $8)
+        FlexChoiceData $8
             ChoiceData { cdChoiceName = $3
                        , cdChoiceReturnTy = $5
                        , cdChoiceFields = $7
@@ -1273,10 +1274,102 @@ flex_choice_decl :: { Located FlexChoiceData }
                        , cdChoiceDoc = $6 }
     }
 
-observer_and_controller :: { (LHsExpr GhcPs, Maybe (LHsExpr GhcPs)) }
-  : 'controller' party_list { (applyConcat $2, Nothing) }
-  -- we currently only support an optional observer clause *before* the controller clause
-  | 'observer' parties 'controller' party_list  { (applyConcat $4, Just (applyConcat $2)) }
+choice_parties :: { ChoiceParties }
+  : observer_and_controller { $1 }
+  | 'where' choice_party_decl_list { $2 }
+
+choice_party_decl_list :: { ChoiceParties } -- follows 'where" so there will be braces
+  : '{' choice_party_decls '}'        { $2 }
+  | vocurly choice_party_decls close  { $2 }
+
+
+-- new choice_parties syntax: follows a 'where' keyword
+-- (optional) 'observer', 'authority' and (mandatory) 'controller' decls can be in any order
+
+choice_party_decls :: { ChoiceParties }
+  : controller_decl {
+        ChoiceParties { cpControllers = $1
+                      , cpObservers = Nothing
+                      , cpAuthorizers = Nothing
+                      }
+  }
+  | controller_decl ';' observer_decl {
+        ChoiceParties { cpControllers = $1
+                      , cpObservers = Just $3
+                      , cpAuthorizers = Nothing
+                      }
+  }
+  | observer_decl ';' controller_decl {
+        ChoiceParties { cpControllers = $3
+                      , cpObservers = Just $1
+                      , cpAuthorizers = Nothing
+                      }
+  }
+  | controller_decl ';' authority_decl {
+        ChoiceParties { cpControllers = $1
+                      , cpObservers = Nothing
+                      , cpAuthorizers = Just $3
+                      }
+  }
+  | authority_decl ';' controller_decl {
+        ChoiceParties { cpControllers = $3
+                      , cpObservers = Nothing
+                      , cpAuthorizers = Just $1
+                      }
+  }
+  | authority_decl ';' observer_decl ';' controller_decl {
+        ChoiceParties { cpControllers = $5
+                      , cpObservers = Just $3
+                      , cpAuthorizers = Just $1
+                      }
+  }
+  | authority_decl ';' controller_decl ';' observer_decl {
+        ChoiceParties { cpControllers = $3
+                      , cpObservers = Just $5
+                      , cpAuthorizers = Just $1
+                      }
+  }
+  | controller_decl ';' authority_decl ';' observer_decl {
+        ChoiceParties { cpControllers = $1
+                      , cpObservers = Just $5
+                      , cpAuthorizers = Just $3
+                      }
+  }
+  | observer_decl ';' authority_decl ';' controller_decl {
+        ChoiceParties { cpControllers = $5
+                      , cpObservers = Just $1
+                      , cpAuthorizers = Just $3
+                      }
+  }
+  | observer_decl ';' controller_decl ';' authority_decl {
+        ChoiceParties { cpControllers = $3
+                      , cpObservers = Just $1
+                      , cpAuthorizers = Just $5
+                      }
+  }
+  | controller_decl ';' observer_decl ';' authority_decl {
+        ChoiceParties { cpControllers = $1
+                      , cpObservers = Just $3
+                      , cpAuthorizers = Just $5
+                      }
+  }
+
+
+-- choice_parties legacy syntax; without a 'where' keyword
+-- supports just an optional observer clause *before* a mandatory controller clause
+observer_and_controller :: { ChoiceParties }
+  : 'controller' party_list {
+        ChoiceParties { cpControllers = (applyConcat $2)
+                      , cpObservers = Nothing
+                      , cpAuthorizers = Nothing
+                      }
+  }
+  | 'observer' parties 'controller' party_list {
+        ChoiceParties { cpControllers = (applyConcat $4)
+                      , cpObservers = Just (applyConcat $2)
+                      , cpAuthorizers = Nothing
+                      }
+  }
 
 consuming_ :: { Located ChoiceConsuming }
  : 'preconsuming'                               { sL1 $1 PreConsuming  }
@@ -1304,6 +1397,12 @@ signatory_decl :: { LHsExpr GhcPs }
 
 observer_decl :: { LHsExpr GhcPs }
   : 'observer' parties                           { sLL $1 $> $ unLoc (applyConcat $2) }
+
+authority_decl :: { LHsExpr GhcPs }
+  : 'authority' parties                          { sLL $1 $> $ unLoc (applyConcat $2) }
+
+controller_decl :: { LHsExpr GhcPs }
+  : 'controller' party_list                      { sLL $1 $> $ unLoc (applyConcat $2) }
 
 agreement_decl :: { LHsExpr GhcPs }
   : 'agreement' exp                              { sLL $1 $> $ unLoc $2 }
@@ -1387,7 +1486,7 @@ interface_view_type_decl
 
 interface_choice_body :: { Located InterfaceChoiceBody }
 interface_choice_body
-  : observer_and_controller doexp { sL (comb2 (fst $1) $2) $ InterfaceChoiceBody (snd $1) (fst $1) $2 }
+  : choice_parties doexp { sL (comb2 (cpControllers $1) $2) $ InterfaceChoiceBody $1 $2 }
 
 -- Type classes
 --
@@ -3846,6 +3945,7 @@ varid :: { Located RdrName }
         | 'signatory'      { sL1 $1 $! mkUnqual varName (fsLit "signatory") }
         | 'agreement'      { sL1 $1 $! mkUnqual varName (fsLit "agreement") }
         | 'observer'       { sL1 $1 $! mkUnqual varName (fsLit "observer") }
+        | 'authority'      { sL1 $1 $! mkUnqual varName (fsLit "authority") }
         | 'nonconsuming'   { sL1 $1 $! mkUnqual varName (fsLit "nonconsuming") }
         | 'preconsuming'   { sL1 $1 $! mkUnqual varName (fsLit "preconsuming") }
         | 'postconsuming'  { sL1 $1 $! mkUnqual varName (fsLit "postconsuming") }
