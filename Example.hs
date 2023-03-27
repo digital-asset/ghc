@@ -96,11 +96,6 @@ template TrySyntax
       controller _CONTROLLER
       do _BODY
 
-    {-choice X_old_illegal_synax_controller_before_observer : ()
-      controller _CONTROLLER
-      observer _OBSERVER
-      do _BODY-}
-
     choice X_new_just_controllerX : () where { controller _CONTROLLER } do _BODY
 
     choice X_new_just_controller : ()
@@ -122,21 +117,11 @@ template TrySyntax
         observer _OBSERVER
       do _BODY
 
-    {-choice X_new_illegal_just_observer : ()
-      where
-        observer _OBSERVER
-      do _BODY-}
-
     choice X_new_authority_and_controller : ()
       where
         authority _AUTHORITY
         controller _CONTROLLER
       do _BODY
-
-    {-choice X_new_illegal_just_authority : ()
-      where
-        authority _AUTHORITY
-      do _BODY-}
 
     choice X_new_observer_authority_and_controllerX : ()
       where { observer _OBSERVER; authority _AUTHORITY; controller _CONTROLLER } do _BODY
@@ -168,10 +153,3 @@ template TrySyntax
         controller _CONTROLLER
         observer _OBSERVER
       do _BODY
-
-    {-choice X_new_illegal_multiple_authority_and_controller : ()
-      where
-        authority _AUTHORITY
-        authority _OBSERVER
-        controller _CONTROLLER
-      do _BODY-}

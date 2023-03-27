@@ -1274,101 +1274,38 @@ flex_choice_decl :: { Located FlexChoiceData }
                        , cdChoiceDoc = $6 }
     }
 
-choice_parties :: { ChoiceParties }
-  : observer_and_controller { $1 }
-  | 'where' choice_party_decl_list { $2 }
+choice_parties :: { Located [Located ChoiceBodyDecl] }
+  : legacy_observer_and_controller      { $1 }
+  | 'where' choice_body_decl_list       { $2 }
 
-choice_party_decl_list :: { ChoiceParties } -- follows 'where" so there will be braces
-  : '{' choice_party_decls '}'        { $2 }
-  | vocurly choice_party_decls close  { $2 }
+choice_body_decl_list :: { Located [Located ChoiceBodyDecl] }
+  : '{' choice_body_decls '}'           { $2 }
+  | vocurly choice_body_decls close     { $2 }
 
-
--- new choice_parties syntax: follows a 'where' keyword
+-- new choice_body_decls syntax: follows a 'where' keyword
 -- (optional) 'observer', 'authority' and (mandatory) 'controller' decls can be in any order
 
-choice_party_decls :: { ChoiceParties }
-  : controller_decl {
-        ChoiceParties { cpControllers = $1
-                      , cpObservers = Nothing
-                      , cpAuthorizers = Nothing
-                      }
-  }
-  | controller_decl ';' observer_decl {
-        ChoiceParties { cpControllers = $1
-                      , cpObservers = Just $3
-                      , cpAuthorizers = Nothing
-                      }
-  }
-  | observer_decl ';' controller_decl {
-        ChoiceParties { cpControllers = $3
-                      , cpObservers = Just $1
-                      , cpAuthorizers = Nothing
-                      }
-  }
-  | controller_decl ';' authority_decl {
-        ChoiceParties { cpControllers = $1
-                      , cpObservers = Nothing
-                      , cpAuthorizers = Just $3
-                      }
-  }
-  | authority_decl ';' controller_decl {
-        ChoiceParties { cpControllers = $3
-                      , cpObservers = Nothing
-                      , cpAuthorizers = Just $1
-                      }
-  }
-  | authority_decl ';' observer_decl ';' controller_decl {
-        ChoiceParties { cpControllers = $5
-                      , cpObservers = Just $3
-                      , cpAuthorizers = Just $1
-                      }
-  }
-  | authority_decl ';' controller_decl ';' observer_decl {
-        ChoiceParties { cpControllers = $3
-                      , cpObservers = Just $5
-                      , cpAuthorizers = Just $1
-                      }
-  }
-  | controller_decl ';' authority_decl ';' observer_decl {
-        ChoiceParties { cpControllers = $1
-                      , cpObservers = Just $5
-                      , cpAuthorizers = Just $3
-                      }
-  }
-  | observer_decl ';' authority_decl ';' controller_decl {
-        ChoiceParties { cpControllers = $5
-                      , cpObservers = Just $1
-                      , cpAuthorizers = Just $3
-                      }
-  }
-  | observer_decl ';' controller_decl ';' authority_decl {
-        ChoiceParties { cpControllers = $3
-                      , cpObservers = Just $1
-                      , cpAuthorizers = Just $5
-                      }
-  }
-  | controller_decl ';' observer_decl ';' authority_decl {
-        ChoiceParties { cpControllers = $1
-                      , cpObservers = Just $3
-                      , cpAuthorizers = Just $5
-                      }
-  }
+choice_body_decls :: { Located [Located ChoiceBodyDecl] }
+  : choice_body_decls ';' choice_body_decl      { sLL $1 $> $ $3 : (unLoc $1) }
+  | choice_body_decls ';'                       { sLL $1 $> $ unLoc $1 }
+  | choice_body_decl                            { sL1 $1 [$1] }
+  | {- empty -}                                 { sL0 [] }
 
+choice_body_decl :: { Located ChoiceBodyDecl }
+  : controller_decl                             { sL1 $1 $ ChoiceControllerDecl $1 }
+  | observer_decl                               { sL1 $1 $ ChoiceObserverDecl $1 }
+  | authority_decl                              { sL1 $1 $ ChoiceAuthorityDecl $1 }
 
--- choice_parties legacy syntax; without a 'where' keyword
+-- legacy choice_body_decls syntax; without a 'where' keyword
 -- supports just an optional observer clause *before* a mandatory controller clause
-observer_and_controller :: { ChoiceParties }
+
+legacy_observer_and_controller :: { Located [Located ChoiceBodyDecl]  }
   : 'controller' party_list {
-        ChoiceParties { cpControllers = (applyConcat $2)
-                      , cpObservers = Nothing
-                      , cpAuthorizers = Nothing
-                      }
+        sL0 [ sL0 $ ChoiceControllerDecl (applyConcat $2) ]
   }
   | 'observer' parties 'controller' party_list {
-        ChoiceParties { cpControllers = (applyConcat $4)
-                      , cpObservers = Just (applyConcat $2)
-                      , cpAuthorizers = Nothing
-                      }
+        sL0 [ sL0 $ ChoiceControllerDecl (applyConcat $4),
+              sL0 $ ChoiceObserverDecl (applyConcat $2) ]
   }
 
 consuming_ :: { Located ChoiceConsuming }
@@ -1486,7 +1423,7 @@ interface_view_type_decl
 
 interface_choice_body :: { Located InterfaceChoiceBody }
 interface_choice_body
-  : choice_parties doexp { sL (comb2 (cpControllers $1) $2) $ InterfaceChoiceBody $1 $2 }
+  : choice_parties doexp { sL (comb2 $1 $2) $ InterfaceChoiceBody $1 $2 }
 
 -- Type classes
 --

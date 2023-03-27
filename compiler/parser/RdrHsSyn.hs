@@ -42,7 +42,7 @@ module   RdrHsSyn (
         ChoiceData(..),
         ChoiceConsuming(..),
         FlexChoiceData(..),
-        ChoiceParties(..),
+        ChoiceBodyDecl(..),
         TemplateBodyDecl(..),
         mkTemplateDecls,
         applyToParties,
@@ -2237,7 +2237,7 @@ data ChoiceConsuming = PreConsuming | Consuming | PostConsuming | NonConsuming
   deriving Show -- for creating type/data names from these constructors
 
 data FlexChoiceData = FlexChoiceData {
-    fcdChoiceParties :: ChoiceParties
+    fcdChoiceBodyDecls :: Located [Located ChoiceBodyDecl]
   , fcdChoiceData    :: ChoiceData
   }
 
@@ -2246,6 +2246,53 @@ data ChoiceParties = ChoiceParties {
   , cpObservers   :: Maybe (LHsExpr GhcPs)
   , cpAuthorizers :: Maybe (LHsExpr GhcPs)
   }
+
+data ChoiceBodyDecl
+  = ChoiceControllerDecl (LHsExpr GhcPs)
+  | ChoiceObserverDecl (LHsExpr GhcPs)
+  | ChoiceAuthorityDecl (LHsExpr GhcPs)
+
+data ChoiceBodyDecls = ChoiceBodyDecls {
+      cbdControllers :: [LHsExpr GhcPs]
+    , cbdObservers :: [LHsExpr GhcPs]
+    , cbdAuthrizers :: [LHsExpr GhcPs]
+    }
+
+instance Semigroup ChoiceBodyDecls where
+  (<>) x y = ChoiceBodyDecls {
+      cbdControllers = cbdControllers x Monoid.<> cbdControllers y
+    , cbdObservers = cbdObservers x Monoid.<> cbdObservers y
+    , cbdAuthrizers = cbdAuthrizers x Monoid.<> cbdAuthrizers y
+    }
+
+instance Monoid ChoiceBodyDecls where
+  mempty = ChoiceBodyDecls [] [] []
+
+choiceBodyDeclToDecls :: Located ChoiceBodyDecl -> ChoiceBodyDecls
+choiceBodyDeclToDecls (L _ decl) = case decl of
+  ChoiceControllerDecl x -> mempty { cbdControllers = [x] }
+  ChoiceObserverDecl x -> mempty { cbdObservers = [x] }
+  ChoiceAuthorityDecl x -> mempty { cbdAuthrizers = [x] }
+
+extractChoiceBodyDecls :: [Located ChoiceBodyDecl] -> ChoiceBodyDecls
+extractChoiceBodyDecls = foldMap choiceBodyDeclToDecls
+
+validateChoiceBodyDecls :: Located RdrName -> Located [Located ChoiceBodyDecl] -> P ChoiceParties
+validateChoiceBodyDecls choiceName (L _ decls)
+  | null cbdControllers = report "Missing 'controller' declaration"
+  | length cbdControllers > 1 = report "Multiple 'controller' declarations"
+  | length cbdObservers > 1 = report "Multiple 'observer' declarations"
+  | length cbdAuthrizers > 1 = report "Multiple 'authority' declarations"
+  | otherwise =
+    do
+      let cpControllers = head cbdControllers
+      let cpObservers = listToMaybe cbdObservers
+      let cpAuthorizers = listToMaybe cbdAuthrizers
+      pure $ ChoiceParties{..}
+  where
+    ChoiceBodyDecls{..} = extractChoiceBodyDecls decls
+    report :: String -> P a
+    report e = addFatalError (getLoc choiceName) (text e)
 
 data ChoiceSource
   = TemplateChoice
@@ -2346,7 +2393,7 @@ data InterfaceChoiceSignature = InterfaceChoiceSignature
       }
 
 data InterfaceChoiceBody = InterfaceChoiceBody
-      { lfChoiceParties :: ChoiceParties
+      { lfChoiceBodyDecls :: Located [Located ChoiceBodyDecl]
       , ifChoiceExpr :: LHsExpr GhcPs
       }
 
@@ -3205,9 +3252,10 @@ validateTemplate vtTemplateName tbd@TemplateBodyDecls{..}
   | otherwise
   = do
       vtInterfaceInstances <- validateInterfaceInstances (TorI_Template vtTemplateName) tbdInterfaceInstances
+      vtChoices <- combineChoices tbd
       return ValidTemplate
         { vtTemplateName
-        , vtChoices = combineChoices tbd
+        , vtChoices
         , vtEnsure = listToMaybe tbdEnsures
         , vtSignatories = applyConcat (noLoc tbdSignatories)
         , vtObservers
@@ -3246,10 +3294,13 @@ validateTemplate vtTemplateName tbd@TemplateBodyDecls{..}
            Nothing -> app
            Just (L loc _) -> L loc (unLoc app)
 
-combineChoices :: TemplateBodyDecls -> [CombinedChoiceData]
-combineChoices TemplateBodyDecls{..} =
-  choiceGroupsToCombinedChoices tbdControlledChoiceGroups
-    ++ map (flexChoiceToCombinedChoice TemplateChoice . unLoc) tbdFlexChoices
+combineChoices :: TemplateBodyDecls -> P [CombinedChoiceData]
+combineChoices TemplateBodyDecls{..} = do
+  flexCcds <-
+    sequence [ flexChoiceToCombinedChoice TemplateChoice (unLoc fc)
+             | fc <- tbdFlexChoices
+             ]
+  pure $ (choiceGroupsToCombinedChoices tbdControlledChoiceGroups ++ flexCcds)
 
 -- | Convert controlled choice groups to a list of individual choices with controllers.
 -- Leave type variable information empty, to be added afterwards.
@@ -3434,10 +3485,11 @@ validateInterfaceInstance parent (L loc piib) = do
         XHsDecl{} -> unexpected "HsDecl extension point"
 
 -- | Simple type conversion, leaving type variable information empty for now.
-flexChoiceToCombinedChoice :: ChoiceSource -> FlexChoiceData -> CombinedChoiceData
+flexChoiceToCombinedChoice :: ChoiceSource -> FlexChoiceData -> P CombinedChoiceData
 flexChoiceToCombinedChoice source FlexChoiceData{..} = do
-  let ChoiceParties{..} = fcdChoiceParties
-  CombinedChoiceData
+  let ChoiceData{cdChoiceName} = fcdChoiceData
+  ChoiceParties{..} <- validateChoiceBodyDecls cdChoiceName fcdChoiceBodyDecls
+  pure $ CombinedChoiceData
     { ccdControllers = cpControllers
     , ccdObservers = cpObservers
     , ccdAuthorizers = cpAuthorizers
@@ -3456,13 +3508,11 @@ mkInterfaceArchiveChoicePair =
       , ifChoiceDoc = Nothing
       }
   , InterfaceChoiceBody
-      { lfChoiceParties = ChoiceParties
-        { cpObservers = Nothing
-        , cpAuthorizers = Nothing
-        , cpControllers = mkApp
-                          (mkQualVar $ mkVarOcc "signatory")
-                          (mkUnqualVar $ mkVarOcc "this")
-        }
+      { lfChoiceBodyDecls =
+          noLoc [noLoc $ ChoiceControllerDecl
+                 (mkApp
+                   (mkQualVar $ mkVarOcc "signatory")
+                   (mkUnqualVar $ mkVarOcc "this"))]
       , ifChoiceExpr = pureUnit
       }
   )
@@ -3492,10 +3542,10 @@ mkArchiveChoice =
     pureUnit = mkApp (mkUnqualVar $ mkVarOcc "pure") (noLoc $ ExplicitTuple noExt [] Boxed)
 
 interfaceChoiceToCombinedChoiceData ::
-  InterfaceChoiceSignature -> InterfaceChoiceBody -> CombinedChoiceData
+  InterfaceChoiceSignature -> InterfaceChoiceBody -> P CombinedChoiceData
 interfaceChoiceToCombinedChoiceData InterfaceChoiceSignature{..} InterfaceChoiceBody{..} = do
-  let ChoiceParties{..} = lfChoiceParties
-  CombinedChoiceData
+  ChoiceParties{..} <- validateChoiceBodyDecls ifChoiceName lfChoiceBodyDecls
+  pure $ CombinedChoiceData
     { ccdControllers = cpControllers
     , ccdObservers = cpObservers
     , ccdAuthorizers = cpAuthorizers
@@ -4040,18 +4090,19 @@ mkInterfaceDecl tycon (L requiresLoc requires) decls = do
             | (choiceSig, _) <- mkInterfaceArchiveChoicePair : viChoices
             ]
 
-        choiceDecls :: [LHsDecl GhcPs]
-        choiceDecls = concat $
-            [ mkChoiceDecls (getLoc viInterfaceName) viInterfaceName (noLoc (EmptyLocalBinds noExt))
-                (interfaceChoiceToCombinedChoiceData choiceSig choiceBody)
-            | (choiceSig, choiceBody) <- mkInterfaceArchiveChoicePair : viChoices
-            ]
-
         viewTypeDecls :: [LHsDecl GhcPs]
         viewTypeDecls = mkHasInterfaceViewInstances tycon viViewType
 
+    choiceDecls <- concat <$> sequence
+      [ do
+          ccd <- interfaceChoiceToCombinedChoiceData choiceSig choiceBody
+          pure $ mkChoiceDecls (getLoc viInterfaceName) viInterfaceName (noLoc (EmptyLocalBinds noExt)) ccd
+      | (choiceSig, choiceBody) <- mkInterfaceArchiveChoicePair : viChoices
+      ]
+
     choiceTys <- concat <$> sequence
-            [ mkChoiceDataDecls $ interfaceChoiceToCombinedChoiceData choiceSig choiceBody
+            [ do ccd <- interfaceChoiceToCombinedChoiceData choiceSig choiceBody
+                 mkChoiceDataDecls ccd
             | (choiceSig, choiceBody) <- viChoices
             ]
 
