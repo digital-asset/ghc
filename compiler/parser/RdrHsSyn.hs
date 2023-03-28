@@ -2928,10 +2928,13 @@ mkChoiceDecls templateLoc conName binds
   , ccdFlexible = flexible
   , ccdSource = source
   } =
-    [ noLoc (SigD noExt (TypeSig noExt [noLoc name] (mkHsWildCardBndrs (mkHsImplicitBndrs $ noLoc $ HsTupleTy noExt HsBoxedOrConstraintTuple [controllerSig, actionSig, consumingSig, observersSig, authorizersSig]))))
-    , noLoc (ValD noExt (FunBind noExt (noLoc name) (matchGroup noSrcSpan $ matchWithBinds (matchContext $ noLoc name) [] noSrcSpan (noLoc $ ExplicitTuple noExt (map (noLoc . Present noExt) [controllerDef, actionDef, consumingDef, observersDef, authorizersDef]) Boxed) (noLoc emptyLocalBinds)) WpHole []))
+    [ noLoc (SigD noExt (TypeSig noExt [noLoc name] (mkHsWildCardBndrs (mkHsImplicitBndrs $ noLoc $ HsTupleTy noExt HsBoxedOrConstraintTuple sig5tuple))))
+    , noLoc (ValD noExt (FunBind noExt (noLoc name) (matchGroup noSrcSpan $ matchWithBinds (matchContext $ noLoc name) [] noSrcSpan (noLoc $ ExplicitTuple noExt (map (noLoc . Present noExt) def5tuple) Boxed) (noLoc emptyLocalBinds)) WpHole []))
     ]
     where
+        def5tuple = [controllerDef, actionDef, consumingDef, observersDef, authorizersDef]
+        sig5tuple = [controllerSig, actionSig, consumingSig, observersSig, authorizersSig]
+
         name = mkRdrUnqual $ mkVarOcc ("_choice$_" ++ rdrNameToString conName ++ rdrNameToString cdChoiceName)
         consumingSig = (unLoc . mkQualType . show . fromMaybe Consuming <$> cdChoiceConsuming) `mkAppTy` templateType
         consumingDef = unLoc . mkQualVar . mkDataOcc . show . fromMaybe Consuming <$> cdChoiceConsuming
