@@ -2932,8 +2932,9 @@ mkChoiceDecls templateLoc conName binds
     , noLoc (ValD noExt (FunBind noExt (noLoc name) (matchGroup noSrcSpan $ matchWithBinds (matchContext $ noLoc name) [] noSrcSpan (noLoc $ ExplicitTuple noExt (map (noLoc . Present noExt) def5tuple) Boxed) (noLoc emptyLocalBinds)) WpHole []))
     ]
     where
-        def5tuple = [controllerDef, actionDef, consumingDef, observersDef, authorizersDef]
-        sig5tuple = [controllerSig, actionSig, consumingSig, observersSig, authorizersSig]
+        -- ordered in an approximation of the user's syntax
+        def5tuple = [consumingDef, controllerDef, observersDef, authorizersDef, actionDef]
+        sig5tuple = [consumingSig, controllerSig, observersSig, authorizersSig, actionSig]
 
         name = mkRdrUnqual $ mkVarOcc ("_choice$_" ++ rdrNameToString conName ++ rdrNameToString cdChoiceName)
         consumingSig = (unLoc . mkQualType . show . fromMaybe Consuming <$> cdChoiceConsuming) `mkAppTy` templateType
