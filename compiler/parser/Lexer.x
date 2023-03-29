@@ -647,6 +647,7 @@ data Token
   | ITcontroller
   | ITchoice
   | ITobserver
+  | ITauthority
   | ITnonconsuming
   | ITpreconsuming
   | ITpostconsuming
@@ -895,6 +896,7 @@ reservedWordsFM = listToUFM $
          ( "controller",     ITcontroller,    xbit DamlSyntaxBit),
          ( "choice",         ITchoice,        xbit DamlSyntaxBit),
          ( "observer",       ITobserver,      xbit DamlSyntaxBit),
+         ( "authority",      ITauthority,     xbit DamlSyntaxBit),
          ( "nonconsuming",   ITnonconsuming,  xbit DamlSyntaxBit),
          ( "preconsuming",   ITpreconsuming,  xbit DamlSyntaxBit),
          ( "postconsuming",  ITpostconsuming, xbit DamlSyntaxBit),

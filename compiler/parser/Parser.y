@@ -514,6 +514,7 @@ are the most common patterns, rewritten as regular expressions for clarity:
  'controller'   { L _ ITcontroller }
  'choice'       { L _ ITchoice }
  'observer'     { L _ ITobserver }
+ 'authority'    { L _ ITauthority }
  'nonconsuming' { L _ ITnonconsuming }
  'preconsuming' { L _ ITpreconsuming }
  'postconsuming'{ L _ ITpostconsuming }
@@ -1210,7 +1211,7 @@ template_body_decl :: { Located TemplateBodyDecl }
   | signatory_decl                               { sL1 $1 $ SignatoryDecl $1 }
   | observer_decl                                { sL1 $1 $ ObserverDecl $1 }
   | agreement_decl                               { sL1 $1 $ AgreementDecl $1 }
-  | choice_group_decl                            { sL1 $1 $ ChoiceGroupDecl $1 }
+  | legacy_controller_decl                       { sL1 $1 $ ChoiceGroupDecl $1 }
   | let_bindings_decl                            { sL1 $1 $ LetBindingsDecl $1 }
   | flex_choice_decl                             { sL1 $1 $ FlexChoiceDecl $1 }
   | key_decl                                     { sL1 $1 $ KeyDecl $1 }
@@ -1225,28 +1226,29 @@ interface_instance :: { Located ParsedInterfaceInstance }
   : 'interface' 'instance' qtycon 'for' qtycon where_inst
       { sL (comb3 $1 $5 $6) $ ParsedInterfaceInstance $3 $5 $6 }
 
-choice_group_decl :: { Located (LHsExpr GhcPs , Located [Located ChoiceData]) }
-  : 'controller' party_list 'can' choice_decl_list
+-- legacy controller/choice-group syntax; predates flexible choices; deprecated
+legacy_controller_decl :: { Located (LHsExpr GhcPs , Located [Located ChoiceData]) }
+  : 'controller' party_list 'can' legacy_choice_decl_list
         {% do { let controllerCan = sLL $1 $> (applyConcat $2, $4)
               ; warnControllerCan (getLoc controllerCan)
               ; return controllerCan
               }
         }
 
-choice_decl_list :: { Located [Located ChoiceData] }
-  : '{' choice_decls '}'                         { sLL $1 $3 $ reverse (unLoc $2) }
-  | vocurly choice_decls close                   { let cs = reverse (unLoc $2) in
+legacy_choice_decl_list :: { Located [Located ChoiceData] }
+  : '{' legacy_choice_decls '}'                  { sLL $1 $3 $ reverse (unLoc $2) }
+  | vocurly legacy_choice_decls close            { let cs = reverse (unLoc $2) in
                                                     L (comb2 $1
                                                         (last (void $1:map void cs))
                                                       ) $ cs }
 
-choice_decls :: { Located [Located ChoiceData] }
- : choice_decls ';' choice_decl                  { sLL $1 $> $ $3 : (unLoc $1) }
- | choice_decls ';'                              { sLL $1 $> $ unLoc $1 }
- | choice_decl                                   { sL1 $1 [$1] }
+legacy_choice_decls :: { Located [Located ChoiceData] }
+ : legacy_choice_decls ';' legacy_choice_decl    { sLL $1 $> $ $3 : (unLoc $1) }
+ | legacy_choice_decls ';'                       { sLL $1 $> $ unLoc $1 }
+ | legacy_choice_decl                            { sL1 $1 [$1] }
  | {- empty -}                                   { sL0 [] }
 
-choice_decl :: { Located ChoiceData }
+legacy_choice_decl :: { Located ChoiceData }
   : consuming qtycon OF_TYPE btype_ maybe_docprev arecord_with_opt doexp
       -- NOTE: We use `btype_` (`btype` excluding record `with` types) to
       -- prevent the choice return type capturing the `with` parameter types.
@@ -1260,11 +1262,11 @@ choice_decl :: { Located ChoiceData }
     }
 
 flex_choice_decl :: { Located FlexChoiceData }
-  : consuming 'choice' qtycon OF_TYPE btype_ maybe_docprev arecord_with_opt observer_and_controller doexp
+  : consuming 'choice' qtycon OF_TYPE btype_ maybe_docprev arecord_with_opt choice_parties doexp
       -- NOTE: We use `btype_` (`btype` excluding record `with` types) to
       -- prevent the choice return type capturing the `with` parameter types.
     { sL (comb3 $1 $2 $>) $
-        FlexChoiceData (fst $8) (snd $8)
+        FlexChoiceData $8
             ChoiceData { cdChoiceName = $3
                        , cdChoiceReturnTy = $5
                        , cdChoiceFields = $7
@@ -1273,10 +1275,39 @@ flex_choice_decl :: { Located FlexChoiceData }
                        , cdChoiceDoc = $6 }
     }
 
-observer_and_controller :: { (LHsExpr GhcPs, Maybe (LHsExpr GhcPs)) }
-  : 'controller' party_list { (applyConcat $2, Nothing) }
-  -- we currently only support an optional observer clause *before* the controller clause
-  | 'observer' parties 'controller' party_list  { (applyConcat $4, Just (applyConcat $2)) }
+choice_parties :: { Located [Located ChoiceBodyDecl] }
+  : legacy_observer_and_controller      { $1 }
+  | 'where' choice_body_decl_list       { $2 }
+
+choice_body_decl_list :: { Located [Located ChoiceBodyDecl] }
+  : '{' choice_body_decls '}'           { $2 }
+  | vocurly choice_body_decls close     { $2 }
+
+-- new choice_body_decls syntax: follows a 'where' keyword
+-- (optional) 'observer', 'authority' and (mandatory) 'controller' decls can be in any order
+
+choice_body_decls :: { Located [Located ChoiceBodyDecl] }
+  : choice_body_decls ';' choice_body_decl      { sLL $1 $> $ $3 : (unLoc $1) }
+  | choice_body_decls ';'                       { sLL $1 $> $ unLoc $1 }
+  | choice_body_decl                            { sL1 $1 [$1] }
+  | {- empty -}                                 { sL0 [] }
+
+choice_body_decl :: { Located ChoiceBodyDecl }
+  : controller_decl                             { sL1 $1 $ ChoiceControllerDecl $1 }
+  | observer_decl                               { sL1 $1 $ ChoiceObserverDecl $1 }
+  | authority_decl                              { sL1 $1 $ ChoiceAuthorityDecl $1 }
+
+-- legacy choice_body_decls syntax; without a 'where' keyword
+-- supports just an optional observer clause *before* a mandatory controller clause
+
+legacy_observer_and_controller :: { Located [Located ChoiceBodyDecl]  }
+  : 'controller' party_list {
+        sL0 [ sL0 $ ChoiceControllerDecl (applyConcat $2) ]
+  }
+  | 'observer' parties 'controller' party_list {
+        sL0 [ sL0 $ ChoiceControllerDecl (applyConcat $4),
+              sL0 $ ChoiceObserverDecl (applyConcat $2) ]
+  }
 
 consuming_ :: { Located ChoiceConsuming }
  : 'preconsuming'                               { sL1 $1 PreConsuming  }
@@ -1304,6 +1335,12 @@ signatory_decl :: { LHsExpr GhcPs }
 
 observer_decl :: { LHsExpr GhcPs }
   : 'observer' parties                           { sLL $1 $> $ unLoc (applyConcat $2) }
+
+authority_decl :: { LHsExpr GhcPs }
+  : 'authority' parties                          { sLL $1 $> $ unLoc (applyConcat $2) }
+
+controller_decl :: { LHsExpr GhcPs }
+  : 'controller' party_list                      { sLL $1 $> $ unLoc (applyConcat $2) }
 
 agreement_decl :: { LHsExpr GhcPs }
   : 'agreement' exp                              { sLL $1 $> $ unLoc $2 }
@@ -1387,7 +1424,7 @@ interface_view_type_decl
 
 interface_choice_body :: { Located InterfaceChoiceBody }
 interface_choice_body
-  : observer_and_controller doexp { sL (comb2 (fst $1) $2) $ InterfaceChoiceBody (snd $1) (fst $1) $2 }
+  : choice_parties doexp { sL (comb2 $1 $2) $ InterfaceChoiceBody $1 $2 }
 
 -- Type classes
 --
@@ -3846,6 +3883,7 @@ varid :: { Located RdrName }
         | 'signatory'      { sL1 $1 $! mkUnqual varName (fsLit "signatory") }
         | 'agreement'      { sL1 $1 $! mkUnqual varName (fsLit "agreement") }
         | 'observer'       { sL1 $1 $! mkUnqual varName (fsLit "observer") }
+        | 'authority'      { sL1 $1 $! mkUnqual varName (fsLit "authority") }
         | 'nonconsuming'   { sL1 $1 $! mkUnqual varName (fsLit "nonconsuming") }
         | 'preconsuming'   { sL1 $1 $! mkUnqual varName (fsLit "preconsuming") }
         | 'postconsuming'  { sL1 $1 $! mkUnqual varName (fsLit "postconsuming") }

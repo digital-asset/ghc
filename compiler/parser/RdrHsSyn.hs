@@ -42,6 +42,7 @@ module   RdrHsSyn (
         ChoiceData(..),
         ChoiceConsuming(..),
         FlexChoiceData(..),
+        ChoiceBodyDecl(..),
         TemplateBodyDecl(..),
         mkTemplateDecls,
         applyToParties,
@@ -2236,10 +2237,62 @@ data ChoiceConsuming = PreConsuming | Consuming | PostConsuming | NonConsuming
   deriving Show -- for creating type/data names from these constructors
 
 data FlexChoiceData = FlexChoiceData {
-    fcdControllers :: LHsExpr GhcPs
-  , fcdObservers   :: Maybe (LHsExpr GhcPs)
-  , fcdChoiceData  :: ChoiceData
+    fcdChoiceBodyDecls :: Located [Located ChoiceBodyDecl]
+  , fcdChoiceData    :: ChoiceData
   }
+
+data ChoiceParties = ChoiceParties {
+    cpControllers :: LHsExpr GhcPs
+  , cpObservers   :: Maybe (LHsExpr GhcPs)
+  , cpAuthorizers :: Maybe (LHsExpr GhcPs)
+  }
+
+data ChoiceBodyDecl
+  = ChoiceControllerDecl (LHsExpr GhcPs)
+  | ChoiceObserverDecl (LHsExpr GhcPs)
+  | ChoiceAuthorityDecl (LHsExpr GhcPs)
+
+data ChoiceBodyDecls = ChoiceBodyDecls {
+      cbdControllers :: [LHsExpr GhcPs]
+    , cbdObservers :: [LHsExpr GhcPs]
+    , cbdAuthrizers :: [LHsExpr GhcPs]
+    }
+
+instance Semigroup ChoiceBodyDecls where
+  (<>) x y = ChoiceBodyDecls {
+      cbdControllers = cbdControllers x Monoid.<> cbdControllers y
+    , cbdObservers = cbdObservers x Monoid.<> cbdObservers y
+    , cbdAuthrizers = cbdAuthrizers x Monoid.<> cbdAuthrizers y
+    }
+
+instance Monoid ChoiceBodyDecls where
+  mempty = ChoiceBodyDecls [] [] []
+
+choiceBodyDeclToDecls :: Located ChoiceBodyDecl -> ChoiceBodyDecls
+choiceBodyDeclToDecls (L _ decl) = case decl of
+  ChoiceControllerDecl x -> mempty { cbdControllers = [x] }
+  ChoiceObserverDecl x -> mempty { cbdObservers = [x] }
+  ChoiceAuthorityDecl x -> mempty { cbdAuthrizers = [x] }
+
+extractChoiceBodyDecls :: [Located ChoiceBodyDecl] -> ChoiceBodyDecls
+extractChoiceBodyDecls = foldMap choiceBodyDeclToDecls
+
+validateChoiceBodyDecls :: Located RdrName -> Located [Located ChoiceBodyDecl] -> P ChoiceParties
+validateChoiceBodyDecls choiceName (L _ decls)
+  | null cbdControllers = report "Missing 'controller' declaration"
+  | length cbdControllers > 1 = report "Multiple 'controller' declarations"
+  | length cbdObservers > 1 = report "Multiple 'observer' declarations"
+  | length cbdAuthrizers > 1 = report "Multiple 'authority' declarations"
+  | otherwise =
+    do
+      let cpControllers = head cbdControllers
+      let cpObservers = listToMaybe cbdObservers
+      let cpAuthorizers = listToMaybe cbdAuthrizers
+      pure $ ChoiceParties{..}
+  where
+    ChoiceBodyDecls{..} = extractChoiceBodyDecls decls
+    report :: String -> P a
+    report e = addFatalError (getLoc choiceName) (text e)
 
 data ChoiceSource
   = TemplateChoice
@@ -2248,6 +2301,7 @@ data ChoiceSource
 data CombinedChoiceData = CombinedChoiceData {
     ccdControllers :: LHsExpr GhcPs
   , ccdObservers   :: Maybe (LHsExpr GhcPs)
+  , ccdAuthorizers :: Maybe (LHsExpr GhcPs)
   , ccdChoiceData  :: ChoiceData
   , ccdFlexible    :: Bool
   , ccdSource :: ChoiceSource
@@ -2339,8 +2393,7 @@ data InterfaceChoiceSignature = InterfaceChoiceSignature
       }
 
 data InterfaceChoiceBody = InterfaceChoiceBody
-      { ifChoiceObserver :: Maybe (LHsExpr GhcPs)
-      , ifChoiceControllers :: LHsExpr GhcPs
+      { lfChoiceBodyDecls :: Located [Located ChoiceBodyDecl]
       , ifChoiceExpr :: LHsExpr GhcPs
       }
 
@@ -2866,11 +2919,23 @@ mkLambda args body mBinds =
 
 
 mkChoiceDecls :: SrcSpan -> Located RdrName -> LHsLocalBinds GhcPs -> CombinedChoiceData -> [LHsDecl GhcPs]
-mkChoiceDecls templateLoc conName binds (CombinedChoiceData controllers observersM ChoiceData{..} flexible source) =
-    [ noLoc (SigD noExt (TypeSig noExt [noLoc name] (mkHsWildCardBndrs (mkHsImplicitBndrs $ noLoc $ HsTupleTy noExt HsBoxedOrConstraintTuple [controllerSig, actionSig, consumingSig, observersSig]))))
-    , noLoc (ValD noExt (FunBind noExt (noLoc name) (matchGroup noSrcSpan $ matchWithBinds (matchContext $ noLoc name) [] noSrcSpan (noLoc $ ExplicitTuple noExt (map (noLoc . Present noExt) [controllerDef, actionDef, consumingDef, observersDef]) Boxed) (noLoc emptyLocalBinds)) WpHole []))
+mkChoiceDecls templateLoc conName binds
+  CombinedChoiceData
+  { ccdControllers = controllers
+  , ccdObservers = observersM
+  , ccdAuthorizers = autorizersM
+  , ccdChoiceData = ChoiceData{..}
+  , ccdFlexible = flexible
+  , ccdSource = source
+  } =
+    [ noLoc (SigD noExt (TypeSig noExt [noLoc name] (mkHsWildCardBndrs (mkHsImplicitBndrs $ noLoc $ HsTupleTy noExt HsBoxedOrConstraintTuple sig5tuple))))
+    , noLoc (ValD noExt (FunBind noExt (noLoc name) (matchGroup noSrcSpan $ matchWithBinds (matchContext $ noLoc name) [] noSrcSpan (noLoc $ ExplicitTuple noExt (map (noLoc . Present noExt) def5tuple) Boxed) (noLoc emptyLocalBinds)) WpHole []))
     ]
     where
+        -- ordered in an approximation of the user's syntax
+        def5tuple = [consumingDef, controllerDef, observersDef, authorizersDef, actionDef]
+        sig5tuple = [consumingSig, controllerSig, observersSig, authorizersSig, actionSig]
+
         name = mkRdrUnqual $ mkVarOcc ("_choice$_" ++ rdrNameToString conName ++ rdrNameToString cdChoiceName)
         consumingSig = (unLoc . mkQualType . show . fromMaybe Consuming <$> cdChoiceConsuming) `mkAppTy` templateType
         consumingDef = unLoc . mkQualVar . mkDataOcc . show . fromMaybe Consuming <$> cdChoiceConsuming
@@ -2878,10 +2943,13 @@ mkChoiceDecls templateLoc conName binds (CombinedChoiceData controllers observer
         controllerDef = mkBody [this] [argPat] controllers
         argPat = if flexible && not isArchive then arg else wildPat
         observersSig = mkOptional (mkParenTy (mkFunTy templateType (mkFunTy choiceType partiesType)))
+        authorizersSig = mkOptional (mkParenTy (mkFunTy templateType (mkFunTy choiceType partiesType)))
         observersDef = case observersM of
           Nothing -> mkNone
-          Just observers ->
-            mkSome $ mkBody [this] [arg] observers
+          Just xs -> mkSome $ mkBody [this] [arg] xs
+        authorizersDef = case autorizersM of
+          Nothing -> mkNone
+          Just xs -> mkSome $ mkBody [this] [arg] xs
         actionSig = mkFunTy contractIdType (mkFunTy templateType (mkFunTy choiceType choiceReturnType))
         actionDef = mkBody [archiveWild self, archiveWild this] [archiveWild arg] cdChoiceBody
         archiveWild pat = if isArchive then wildPat else pat
@@ -3188,9 +3256,10 @@ validateTemplate vtTemplateName tbd@TemplateBodyDecls{..}
   | otherwise
   = do
       vtInterfaceInstances <- validateInterfaceInstances (TorI_Template vtTemplateName) tbdInterfaceInstances
+      vtChoices <- combineChoices tbd
       return ValidTemplate
         { vtTemplateName
-        , vtChoices = combineChoices tbd
+        , vtChoices
         , vtEnsure = listToMaybe tbdEnsures
         , vtSignatories = applyConcat (noLoc tbdSignatories)
         , vtObservers
@@ -3229,10 +3298,13 @@ validateTemplate vtTemplateName tbd@TemplateBodyDecls{..}
            Nothing -> app
            Just (L loc _) -> L loc (unLoc app)
 
-combineChoices :: TemplateBodyDecls -> [CombinedChoiceData]
-combineChoices TemplateBodyDecls{..} =
-  choiceGroupsToCombinedChoices tbdControlledChoiceGroups
-    ++ map (flexChoiceToCombinedChoice TemplateChoice . unLoc) tbdFlexChoices
+combineChoices :: TemplateBodyDecls -> P [CombinedChoiceData]
+combineChoices TemplateBodyDecls{..} = do
+  flexCcds <-
+    sequence [ flexChoiceToCombinedChoice TemplateChoice (unLoc fc)
+             | fc <- tbdFlexChoices
+             ]
+  pure $ (choiceGroupsToCombinedChoices tbdControlledChoiceGroups ++ flexCcds)
 
 -- | Convert controlled choice groups to a list of individual choices with controllers.
 -- Leave type variable information empty, to be added afterwards.
@@ -3242,7 +3314,7 @@ choiceGroupsToCombinedChoices
 choiceGroupsToCombinedChoices = concatMap distributeController
   where
     distributeController (L _ (controller, L _ choices)) = map (makeCombinedChoice controller) choices
-    makeCombinedChoice controller choice = CombinedChoiceData controller Nothing (unLoc choice) False TemplateChoice
+    makeCombinedChoice controller choice = CombinedChoiceData controller Nothing Nothing (unLoc choice) False TemplateChoice
 
 data TemplateOrInterface a b
   = TorI_Template a
@@ -3417,9 +3489,18 @@ validateInterfaceInstance parent (L loc piib) = do
         XHsDecl{} -> unexpected "HsDecl extension point"
 
 -- | Simple type conversion, leaving type variable information empty for now.
-flexChoiceToCombinedChoice :: ChoiceSource -> FlexChoiceData -> CombinedChoiceData
-flexChoiceToCombinedChoice source FlexChoiceData{..} =
-  CombinedChoiceData fcdControllers fcdObservers fcdChoiceData True source
+flexChoiceToCombinedChoice :: ChoiceSource -> FlexChoiceData -> P CombinedChoiceData
+flexChoiceToCombinedChoice source FlexChoiceData{..} = do
+  let ChoiceData{cdChoiceName} = fcdChoiceData
+  ChoiceParties{..} <- validateChoiceBodyDecls cdChoiceName fcdChoiceBodyDecls
+  pure $ CombinedChoiceData
+    { ccdControllers = cpControllers
+    , ccdObservers = cpObservers
+    , ccdAuthorizers = cpAuthorizers
+    , ccdChoiceData = fcdChoiceData
+    , ccdFlexible = True
+    , ccdSource = source
+    }
 
 mkInterfaceArchiveChoicePair :: (InterfaceChoiceSignature, InterfaceChoiceBody)
 mkInterfaceArchiveChoicePair =
@@ -3431,10 +3512,11 @@ mkInterfaceArchiveChoicePair =
       , ifChoiceDoc = Nothing
       }
   , InterfaceChoiceBody
-      { ifChoiceObserver = Nothing
-      , ifChoiceControllers = mkApp
-                          (mkQualVar $ mkVarOcc "signatory")
-                          (mkUnqualVar $ mkVarOcc "this")
+      { lfChoiceBodyDecls =
+          noLoc [noLoc $ ChoiceControllerDecl
+                 (mkApp
+                   (mkQualVar $ mkVarOcc "signatory")
+                   (mkUnqualVar $ mkVarOcc "this"))]
       , ifChoiceExpr = pureUnit
       }
   )
@@ -3448,6 +3530,7 @@ mkArchiveChoice =
                           (mkQualVar $ mkVarOcc "signatory")
                           (mkUnqualVar $ mkVarOcc "this")
     , ccdObservers = Nothing
+    , ccdAuthorizers = Nothing
     , ccdChoiceData = ChoiceData {
           cdChoiceName = noLoc $ qualifyDesugar $ mkTcOcc "Archive"
         , cdChoiceFields = noLoc $ HsRecTy noExt []
@@ -3463,11 +3546,13 @@ mkArchiveChoice =
     pureUnit = mkApp (mkUnqualVar $ mkVarOcc "pure") (noLoc $ ExplicitTuple noExt [] Boxed)
 
 interfaceChoiceToCombinedChoiceData ::
-  InterfaceChoiceSignature -> InterfaceChoiceBody -> CombinedChoiceData
-interfaceChoiceToCombinedChoiceData InterfaceChoiceSignature{..} InterfaceChoiceBody{..} =
-  CombinedChoiceData
-    { ccdControllers = ifChoiceControllers
-    , ccdObservers = ifChoiceObserver
+  InterfaceChoiceSignature -> InterfaceChoiceBody -> P CombinedChoiceData
+interfaceChoiceToCombinedChoiceData InterfaceChoiceSignature{..} InterfaceChoiceBody{..} = do
+  ChoiceParties{..} <- validateChoiceBodyDecls ifChoiceName lfChoiceBodyDecls
+  pure $ CombinedChoiceData
+    { ccdControllers = cpControllers
+    , ccdObservers = cpObservers
+    , ccdAuthorizers = cpAuthorizers
     , ccdChoiceData = ChoiceData
         { cdChoiceName = ifChoiceName
         , cdChoiceFields = ifChoiceFields
@@ -4009,18 +4094,19 @@ mkInterfaceDecl tycon (L requiresLoc requires) decls = do
             | (choiceSig, _) <- mkInterfaceArchiveChoicePair : viChoices
             ]
 
-        choiceDecls :: [LHsDecl GhcPs]
-        choiceDecls = concat $
-            [ mkChoiceDecls (getLoc viInterfaceName) viInterfaceName (noLoc (EmptyLocalBinds noExt))
-                (interfaceChoiceToCombinedChoiceData choiceSig choiceBody)
-            | (choiceSig, choiceBody) <- mkInterfaceArchiveChoicePair : viChoices
-            ]
-
         viewTypeDecls :: [LHsDecl GhcPs]
         viewTypeDecls = mkHasInterfaceViewInstances tycon viViewType
 
+    choiceDecls <- concat <$> sequence
+      [ do
+          ccd <- interfaceChoiceToCombinedChoiceData choiceSig choiceBody
+          pure $ mkChoiceDecls (getLoc viInterfaceName) viInterfaceName (noLoc (EmptyLocalBinds noExt)) ccd
+      | (choiceSig, choiceBody) <- mkInterfaceArchiveChoicePair : viChoices
+      ]
+
     choiceTys <- concat <$> sequence
-            [ mkChoiceDataDecls $ interfaceChoiceToCombinedChoiceData choiceSig choiceBody
+            [ do ccd <- interfaceChoiceToCombinedChoiceData choiceSig choiceBody
+                 mkChoiceDataDecls ccd
             | (choiceSig, choiceBody) <- viChoices
             ]
 
