@@ -2936,7 +2936,7 @@ mkChoiceDecls templateLoc conName binds
         def5tuple = [consumingDef, controllerDef, observersDef, authorizersDef, actionDef]
         sig5tuple = [consumingSig, controllerSig, observersSig, authorizersSig, actionSig]
 
-        name = mkRdrUnqual $ mkVarOcc ("_choice$_" ++ rdrNameToString conName ++ rdrNameToString cdChoiceName)
+        name = mkRdrUnqual $ mkVarOcc ("_choice$_" ++ rdrNameToString conName ++ "$" ++ rdrNameToString cdChoiceName)
         consumingSig = (unLoc . mkQualType . show . fromMaybe Consuming <$> cdChoiceConsuming) `mkAppTy` templateType
         consumingDef = unLoc . mkQualVar . mkDataOcc . show . fromMaybe Consuming <$> cdChoiceConsuming
         controllerSig = mkFunTy templateType (mkFunTy choiceType partiesType)
