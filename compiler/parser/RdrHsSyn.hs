@@ -3011,6 +3011,7 @@ mkTemplateInstances sharedBinds templateName conName ValidTemplate{..} =
   , archiveInstance
   , mkInstance "HasCreate" $ mkPrimMethod "create" "UCreate"
   , mkInstance "HasFetch" $ mkPrimMethod "fetch" "UFetch"
+  , mkInstance "HasSoftFetch" $ mkPrimMethod "_softFetch" "USoftFetch"
   , mkInstance "HasToAnyTemplate" $ mkPrimMethod "_toAnyTemplate" "EToAnyTemplate"
   , mkInstance "HasFromAnyTemplate" $ mkPrimMethod "_fromAnyTemplate" "EFromAnyTemplate"
   , mkInstance "HasTemplateTypeRep" $ mkPrimMethod "_templateTypeRep" "ETemplateTypeRep"
@@ -3111,6 +3112,8 @@ mkChoiceInstanceDecl :: Located String -> CombinedChoiceData -> [LHsDecl GhcPs]
 mkChoiceInstanceDecl templateName CombinedChoiceData { ccdChoiceData = ChoiceData{..} } =
   [ mkInstance "HasExercise" [templateType, choiceType, returnType]
       (mkPrimMethod "exercise" "UExercise")
+  , mkInstance "HasSoftExercise" [templateType, choiceType, returnType]
+      (mkPrimMethod "_softExercise" "UExercise")
   , mkInstance "HasToAnyChoice" [templateType, choiceType, returnType]
       (mkPrimMethod "_toAnyChoice" "EToAnyChoice")
   , mkInstance "HasFromAnyChoice" [templateType, choiceType, returnType]
