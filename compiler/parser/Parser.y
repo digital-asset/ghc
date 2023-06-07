@@ -51,7 +51,7 @@ import PackageConfig
 import OrdList
 import BooleanFormula   ( BooleanFormula(..), LBooleanFormula(..), mkTrue )
 import FastString
-import Maybes           ( isJust, orElse )
+import Maybes           ( fromMaybe, isJust, listToMaybe, orElse )
 import Outputable
 
 -- compiler/basicTypes
@@ -1355,10 +1355,11 @@ maintainer_decl :: { LHsExpr GhcPs }
 
 party_list :: { Located [LHsExpr GhcPs] }
   : '{' parties '}'                              { sLL $1 $> (unLoc $2) }
-  | vocurly parties close                        { let ps = reverse (unLoc $2) in
-                                                    L (comb2 $1
-                                                        (last (void $1:map void ps))
+  | vocurly parties close                        { let ps = unLoc $2 in
+                                                    L (getLoc $ fromMaybe (void $1) $
+                                                        listToMaybe (map void ps)
                                                       ) $ ps }
+
 parties :: { Located [LHsExpr GhcPs] }
   : parties ',' exp                              { sLL $1 $> $ applyToParties $3 : (unLoc $1) }
   | parties ','                                  { sLL $1 $> $ unLoc $1 }
