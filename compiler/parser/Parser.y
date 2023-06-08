@@ -1361,8 +1361,11 @@ party_list :: { Located [LHsExpr GhcPs] }
                                                       ) $ ps }
 
 parties :: { Located [LHsExpr GhcPs] }
-  : parties ',' exp                              { sLL $1 $> $ applyToParties $3 : (unLoc $1) }
-  | parties ','                                  { sLL $1 $> $ unLoc $1 }
+  : parties_rev                                  { fmap reverse $1 }
+
+parties_rev :: { Located [LHsExpr GhcPs] }
+  : parties_rev ',' exp                          { sLL $1 $> $ applyToParties $3 : (unLoc $1) }
+  | parties_rev ','                              { sLL $1 $> $ unLoc $1 }
   | exp                                          { sL1 $1 [applyToParties $1] }
 
 btype_ :: { LHsType GhcPs } -- Like 'btype' but excludes @arecord_with@
