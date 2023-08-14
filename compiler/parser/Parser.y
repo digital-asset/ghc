@@ -1219,8 +1219,14 @@ template_body_decl :: { Located TemplateBodyDecl }
   | interface_instance                           { sL1 $1 $ TemplateInterfaceInstanceDecl $1 }
 
 let_bindings_decl :: { Located ([AddAnn], LHsLocalBinds GhcPs) }
-  : 'let' binds                 { sLL $1 $> (mj AnnWhere $1 : (fst $ unLoc $2)
-                                             , snd $ unLoc $2) }
+  : 'let' binds
+        {% do { let templateLet =
+                        sLL $1 $>
+                            (mj AnnWhere $1 : (fst $ unLoc $2), snd $ unLoc $2)
+              ; warnTemplateLet (getLoc templateLet)
+              ; return templateLet
+              }
+        }
 
 interface_instance :: { Located ParsedInterfaceInstance }
   : 'interface' 'instance' qtycon 'for' qtycon where_inst
@@ -4297,6 +4303,16 @@ warnControllerCan span = do
             text "Note that 'choice ... with ... controller' syntax does not " $$
             text "implicitly add the controller as an observer," $$
             text "so it must be added explicitly as one (or as a signatory)."
+
+-- | Warn about deprecated @template .. let@ syntax
+warnTemplateLet :: SrcSpan -> P ()
+warnTemplateLet span = do
+    addWarning Opt_WarnTemplateLet span msg
+    where
+      msg = text "Template-local binding syntax (\"template-let\") is deprecated," $$
+            text "it will be removed in a future version of Daml." $$
+            text "Instead, use plain top level definitions, taking parameters" $$
+            text "for the contract fields or body (\"this\") if necessary."
 
 -- When two single quotes don't followed by tyvar or gtycon, we report the
 -- error as empty character literal, or TH quote that missing proper type
