@@ -2671,9 +2671,10 @@ applyConcat (L loc ps) =
 -- | The "-Wunused-matches hack." Construct dummy bindings of the form
 -- @_ = this@ or @_ = self@. We use this hack to suppress warnings of
 -- the form "Defined but not used: ‘this’".
-dummyBinds :: [Pat GhcPs] -> Bag (LHsBind GhcPs)
-dummyBinds args = listToBag [dummyBind n | Just n <- map patToRdrName args]
+dummyLocalBinds :: [Pat GhcPs] -> LHsLocalBinds GhcPs
+dummyLocalBinds args = asLocalBinds [dummyBind n | Just n <- map patToRdrName args]
   where
+    asLocalBinds bs = noLoc $ HsValBinds noExt (ValBinds noExt (listToBag bs) [])
     dummyBind :: Located RdrName -> LHsBind GhcPs
     dummyBind n =
       let grhss = GRHSs noExt [noLoc $ GRHS noExt [] (noLoc (HsVar noExt n))] (noLoc emptyLocalBinds)
@@ -2684,9 +2685,6 @@ dummyBinds args = listToBag [dummyBind n | Just n <- map patToRdrName args]
     patToRdrName _ = Nothing
     wildCard :: Pat GhcPs
     wildCard = WildPat noExt
--- | Part of the -Wunused-matches hack.
-mkLetBindings :: Bag (LHsBind GhcPs) -> LHsLocalBinds GhcPs
-mkLetBindings binds = noLoc $ HsValBinds noExt (ValBinds noExt binds [])
 
 -- | Utility for constructing a match context.
 matchContext :: Located RdrName -> HsMatchContext RdrName
@@ -2951,7 +2949,7 @@ mkChoiceDecls templateLoc conName
         isInterfaceFixedChoice
           | InterfaceFixedChoice <- source = True
           | otherwise = False
-        mkBodyBinds args = noLetBindingsIfArchive (mkLetBindings (dummyBinds args))
+        mkBodyBinds args = noLetBindingsIfArchive (dummyLocalBinds args)
         shouldThisRecWild = not (isInterfaceFixedChoice || isArchive)
         shouldArgRecWild = not $ isEmptyRecord cdChoiceFields
         shouldSplitBody = shouldThisRecWild && shouldArgRecWild
@@ -2963,10 +2961,6 @@ mkChoiceDecls templateLoc conName
 
 emptyString :: LHsExpr GhcPs
 emptyString = noLoc $ HsLit noExt $ HsString NoSourceText $ fsLit ""
-
--- Tiny utility to reduce code duplication.
-allLetBindings :: [Pat GhcPs] -> Maybe (LHsLocalBinds GhcPs)
-allLetBindings args = Just $ mkLetBindings (dummyBinds args)
 
 -- | Construct instances for split-up Template typeclass, i.e., instances for all the single-method typeclasses
 -- that constitute the Template constraint synonym.
@@ -3000,7 +2994,7 @@ mkTemplateInstances templateName conName ValidTemplate{..} =
     mkMethod :: String -> [Pat GhcPs] -> LHsExpr GhcPs -> LHsBind GhcPs
     mkMethod methodName args methodBody =
       mkTemplateClassMethod methodName args methodBody $
-      allLetBindings args
+      Just (dummyLocalBinds args)
 
     proxy = WildPat noExt
     this = asPatRecWild "this" conName
@@ -3160,7 +3154,7 @@ mkKeyInstanceDecl templateName conName ValidTemplate{..}
         mkMethod :: String -> [Pat GhcPs] -> LHsExpr GhcPs -> LHsBind GhcPs
         mkMethod methodName args methodBody =
           mkTemplateClassMethod methodName args methodBody $
-          allLetBindings args
+          Just (dummyLocalBinds args)
         mkInstance name method = instDecl $ classInstDecl (mkClass name) (unitBag method)
         keyInstance = mkInstance "HasKey" $ mkMethod "key" [this] kdKeyExpr
         maintainerInstance = mkInstance "HasMaintainer" $ mkMethod "_maintainer" [proxy, key] kdMaintainers
@@ -3589,7 +3583,7 @@ mkExceptionInstanceDecls ValidException{..} =
         Nothing ->
           mkMethod "message" [] (mkUnqualVar (mkVarOcc "show"))
         Just messageBody ->
-          mkMethod "message" [this] $ noLoc $ HsLet noExt (mkLetBindings $ dummyBinds [this]) messageBody
+          mkMethod "message" [this] $ noLoc $ HsLet noExt (dummyLocalBinds [this]) messageBody
 
     mkInstance name method = instDecl $
       classInstDecl (mkQualClass name `mkAppTy` exceptionType) (unitBag method)
@@ -3669,7 +3663,7 @@ mkInterfaceInstanceDecls parentName (L loc interfaceInstance) = do
     --  * The template type and data constructors are in scope.
     --       * The regular error message should be good enough otherwise.
     thisPat = asPatRecWild "this" (fmap (`setRdrNameSpace` srcDataName) viiTemplate)
-    localBinds = allLetBindings [thisPat]
+    localBinds = Just $ dummyLocalBinds [thisPat]
 
     -- NOTE(MA): This is used to generate the names for the interface instance
     -- desugaring bindings, e.g. `_interface_instance_...`, `_view_...`, `_method_...`.
