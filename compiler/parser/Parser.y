@@ -1210,21 +1210,10 @@ template_body_decl :: { Located TemplateBodyDecl }
   | signatory_decl                               { sL1 $1 $ SignatoryDecl $1 }
   | observer_decl                                { sL1 $1 $ ObserverDecl $1 }
   | agreement_decl                               { sL1 $1 $ AgreementDecl $1 }
-  | let_bindings_decl                            { sL1 $1 $ LetBindingsDecl $1 }
   | template_choice_decl                         { sL1 $1 $ TemplateChoiceDecl $1 }
   | key_decl                                     { sL1 $1 $ KeyDecl $1 }
   | maintainer_decl                              { sL1 $1 $ MaintainerDecl $1 }
   | interface_instance                           { sL1 $1 $ TemplateInterfaceInstanceDecl $1 }
-
-let_bindings_decl :: { Located ([AddAnn], LHsLocalBinds GhcPs) }
-  : 'let' binds
-        {% do { let templateLet =
-                        sLL $1 $>
-                            (mj AnnWhere $1 : (fst $ unLoc $2), snd $ unLoc $2)
-              ; warnTemplateLet (getLoc templateLet)
-              ; return templateLet
-              }
-        }
 
 interface_instance :: { Located ParsedInterfaceInstance }
   : 'interface' 'instance' qtycon 'for' qtycon where_inst
@@ -4254,16 +4243,6 @@ warnSpaceAfterBang span = do
       msg = text "Did you forget to enable BangPatterns?" $$
             text "If you mean to bind (!) then perhaps you want" $$
             text "to add a space after the bang for clarity."
-
--- | Warn about deprecated @template .. let@ syntax
-warnTemplateLet :: SrcSpan -> P ()
-warnTemplateLet span = do
-    addWarning Opt_WarnTemplateLet span msg
-    where
-      msg = text "Template-local binding syntax (\"template-let\") is deprecated," $$
-            text "it will be removed in a future version of Daml." $$
-            text "Instead, use plain top level definitions, taking parameters" $$
-            text "for the contract fields or body (\"this\") if necessary."
 
 -- When two single quotes don't followed by tyvar or gtycon, we report the
 -- error as empty character literal, or TH quote that missing proper type

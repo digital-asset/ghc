@@ -838,7 +838,6 @@ data WarningFlag =
    | Opt_WarnSpaceAfterBang
    | Opt_WarnMissingDerivingStrategies    -- Since 8.8
    | Opt_WarnUnsupportedDamlFieldNames
-   | Opt_WarnTemplateLet
    deriving (Eq, Show, Enum)
 
 data Language = Haskell98 | Haskell2010
@@ -4055,7 +4054,6 @@ wWarningFlagsDeps = [
   flagSpec "missing-space-after-bang"    Opt_WarnSpaceAfterBang,
   flagSpec "unsupported-daml-field-names"
                                          Opt_WarnUnsupportedDamlFieldNames,
-  flagSpec "template-let"                Opt_WarnTemplateLet,
   flagSpec "partial-fields"              Opt_WarnPartialFields ]
 
 -- | These @-\<blah\>@ flags can all be reversed with @-no-\<blah\>@
@@ -4770,8 +4768,7 @@ standardWarnings -- see Note [Documenting warning flags]
         Opt_WarnStarBinder,
         Opt_WarnInaccessibleCode,
         Opt_WarnSpaceAfterBang,
-        Opt_WarnUnsupportedDamlFieldNames,
-        Opt_WarnTemplateLet
+        Opt_WarnUnsupportedDamlFieldNames
       ]
 
 -- | Things you get with -W
