@@ -2409,7 +2409,6 @@ data TemplateBodyDecl
   | SignatoryDecl (LHsExpr GhcPs)
   | ObserverDecl (LHsExpr GhcPs)
   | AgreementDecl (LHsExpr GhcPs)
-  | ChoiceGroupDecl (Located (LHsExpr GhcPs, Located [Located ChoiceData]))
   | LetBindingsDecl (Located ([AddAnn], LHsLocalBinds GhcPs))
   | FlexChoiceDecl (Located FlexChoiceData)
   | KeyDecl (Located (LHsExpr GhcPs, LHsType GhcPs))
@@ -2422,7 +2421,6 @@ data TemplateBodyDecls = TemplateBodyDecls {
     , tbdSignatories :: [LHsExpr GhcPs]
     , tbdObservers :: [LHsExpr GhcPs]
     , tbdAgreements :: [LHsExpr GhcPs]
-    , tbdControlledChoiceGroups :: [Located (LHsExpr GhcPs, Located [Located ChoiceData])]
     , tbdLetBindings :: [LHsLocalBinds GhcPs]
     , tbdFlexChoices :: [Located FlexChoiceData]
     , tbdKeys :: [Located (LHsExpr GhcPs, LHsType GhcPs)]
@@ -2462,7 +2460,6 @@ instance Semigroup TemplateBodyDecls where
     , tbdSignatories = tbdSignatories x Monoid.<> tbdSignatories y
     , tbdObservers = tbdObservers x Monoid.<> tbdObservers y
     , tbdAgreements = tbdAgreements x Monoid.<> tbdAgreements y
-    , tbdControlledChoiceGroups = tbdControlledChoiceGroups x Monoid.<> tbdControlledChoiceGroups y
     , tbdLetBindings = tbdLetBindings x Monoid.<> tbdLetBindings y
     , tbdFlexChoices = tbdFlexChoices x Monoid.<> tbdFlexChoices y
     , tbdKeys = tbdKeys x Monoid.<> tbdKeys y
@@ -2471,7 +2468,7 @@ instance Semigroup TemplateBodyDecls where
     }
 
 instance Monoid TemplateBodyDecls where
-  mempty = TemplateBodyDecls [] [] [] [] [] [] [] [] [] []
+  mempty = TemplateBodyDecls [] [] [] [] [] [] [] [] []
 
 templateBodyDeclToDecls :: Located TemplateBodyDecl -> TemplateBodyDecls
 templateBodyDeclToDecls (L _ decl) = case decl of
@@ -2479,7 +2476,6 @@ templateBodyDeclToDecls (L _ decl) = case decl of
   SignatoryDecl s -> mempty { tbdSignatories = [s] }
   ObserverDecl o -> mempty { tbdObservers = [o] }
   AgreementDecl a -> mempty { tbdAgreements = [a] }
-  ChoiceGroupDecl g -> mempty { tbdControlledChoiceGroups = [g] }
   LetBindingsDecl (L _ (_, b)) -> mempty { tbdLetBindings = [b] }
   FlexChoiceDecl f -> mempty { tbdFlexChoices = [f] }
   KeyDecl k -> mempty { tbdKeys = [k] }
@@ -3262,7 +3258,7 @@ validateTemplate vtTemplateName tbd@TemplateBodyDecls{..}
         , vtChoices
         , vtEnsure = listToMaybe tbdEnsures
         , vtSignatories = applyConcat (noLoc tbdSignatories)
-        , vtObservers
+        , vtObservers = applyConcat (noLoc tbdObservers)
         , vtAgreement = listToMaybe tbdAgreements
         , vtLetBindings = fromMaybe (noLoc emptyLocalBinds) (listToMaybe tbdLetBindings)
         , vtKeyData
@@ -3277,44 +3273,12 @@ validateTemplate vtTemplateName tbd@TemplateBodyDecls{..}
     vtKeyData = (fmap . fmap) (\(kdKeyExpr, kdKeyType) -> KeyData{..}) (listToMaybe tbdKeys)
     kdMaintainers = applyConcat $ noLoc tbdMaintainers
 
-    -- | Full list of observers includes all controllers of controlled choice groups.
-    vtObservers = allTemplateObservers (mergeDecls tbdObservers) $ map (fst . unLoc) tbdControlledChoiceGroups
-
-    -- | Combine support multiple 'observer' and 'maintainer' declarations into
-    -- a single list expression.
-    mergeDecls :: [LHsExpr GhcPs] -> Maybe (LHsExpr GhcPs)
-    mergeDecls [] = Nothing
-    mergeDecls xs = Just $ applyConcat $ noLoc xs -- TODO(RJR): Combine locations from the list elements
-
-    -- | Calculate an expression for the full list of a contract's observers.
-    -- TODO(RJR): Figure out how to simplify this
-    allTemplateObservers
-      :: Maybe (LHsExpr GhcPs) -- ^ Explicit (list of) observers.
-      -> [LHsExpr GhcPs]       -- ^ Contract controllers (list of lists).
-      -> LHsExpr GhcPs         -- ^ Union (list) of observers and controllers.
-    allTemplateObservers obs controllers =
-      let app = applyConcat (L noSrcSpan $ maybeToList obs ++ controllers)
-      in case obs of
-           Nothing -> app
-           Just (L loc _) -> L loc (unLoc app)
-
 combineChoices :: TemplateBodyDecls -> P [CombinedChoiceData]
-combineChoices TemplateBodyDecls{..} = do
-  flexCcds <-
-    sequence [ flexChoiceToCombinedChoice TemplateChoice (unLoc fc)
-             | fc <- tbdFlexChoices
-             ]
-  pure $ (choiceGroupsToCombinedChoices tbdControlledChoiceGroups ++ flexCcds)
-
--- | Convert controlled choice groups to a list of individual choices with controllers.
--- Leave type variable information empty, to be added afterwards.
-choiceGroupsToCombinedChoices
-  :: [Located (LHsExpr GhcPs, Located [Located ChoiceData])]
-  -> [CombinedChoiceData]
-choiceGroupsToCombinedChoices = concatMap distributeController
-  where
-    distributeController (L _ (controller, L _ choices)) = map (makeCombinedChoice controller) choices
-    makeCombinedChoice controller choice = CombinedChoiceData controller Nothing Nothing (unLoc choice) False TemplateChoice
+combineChoices TemplateBodyDecls{..} =
+  sequence
+    [ flexChoiceToCombinedChoice TemplateChoice (unLoc fc)
+    | fc <- tbdFlexChoices
+    ]
 
 data TemplateOrInterface a b
   = TorI_Template a

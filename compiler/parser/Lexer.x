@@ -640,7 +640,6 @@ data Token
 
   | ITdaml
   | ITtemplate
-  | ITcan
   | ITensure
   | ITsignatory
   | ITagreement
@@ -889,7 +888,6 @@ reservedWordsFM = listToUFM $
 
          ( "daml",           ITdaml,          xbit DamlSyntaxBit),
          ( "template",       ITtemplate,      xbit DamlSyntaxBit),
-         ( "can",            ITcan,           xbit DamlSyntaxBit),
          ( "ensure",         ITensure,        xbit DamlSyntaxBit),
          ( "signatory",      ITsignatory,     xbit DamlSyntaxBit),
          ( "agreement",      ITagreement,     xbit DamlSyntaxBit),
@@ -1553,7 +1551,6 @@ maybe_layout t = do -- If the alternative layout rule is enabled then
           f ITwhere = pushLexState layout
           f ITwith  = pushLexState layout
           f ITcontroller = pushLexState layout
-          f ITcan   = pushLexState layout
           f ITrec   = pushLexState layout
           f ITif    = pushLexState layout_if
           f _       = return ()

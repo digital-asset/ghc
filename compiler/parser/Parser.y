@@ -507,7 +507,6 @@ are the most common patterns, rewritten as regular expressions for clarity:
 
  'daml'         { L _ ITdaml }
  'template'     { L _ ITtemplate }
- 'can'          { L _ ITcan }
  'ensure'       { L _ ITensure }
  'signatory'    { L _ ITsignatory }
  'agreement'    { L _ ITagreement }
@@ -1211,7 +1210,6 @@ template_body_decl :: { Located TemplateBodyDecl }
   | signatory_decl                               { sL1 $1 $ SignatoryDecl $1 }
   | observer_decl                                { sL1 $1 $ ObserverDecl $1 }
   | agreement_decl                               { sL1 $1 $ AgreementDecl $1 }
-  | legacy_controller_decl                       { sL1 $1 $ ChoiceGroupDecl $1 }
   | let_bindings_decl                            { sL1 $1 $ LetBindingsDecl $1 }
   | flex_choice_decl                             { sL1 $1 $ FlexChoiceDecl $1 }
   | key_decl                                     { sL1 $1 $ KeyDecl $1 }
@@ -1231,41 +1229,6 @@ let_bindings_decl :: { Located ([AddAnn], LHsLocalBinds GhcPs) }
 interface_instance :: { Located ParsedInterfaceInstance }
   : 'interface' 'instance' qtycon 'for' qtycon where_inst
       { sL (comb3 $1 $5 $6) $ ParsedInterfaceInstance $3 $5 $6 }
-
--- legacy controller/choice-group syntax; predates flexible choices; deprecated
-legacy_controller_decl :: { Located (LHsExpr GhcPs , Located [Located ChoiceData]) }
-  : 'controller' party_list 'can' legacy_choice_decl_list
-        {% do { let controllerCan = sLL $1 $> (applyConcat $2, $4)
-              ; warnControllerCan (getLoc controllerCan)
-              ; return controllerCan
-              }
-        }
-
-legacy_choice_decl_list :: { Located [Located ChoiceData] }
-  : '{' legacy_choice_decls '}'                  { sLL $1 $3 $ reverse (unLoc $2) }
-  | vocurly legacy_choice_decls close            { let cs = reverse (unLoc $2) in
-                                                    L (comb2 $1
-                                                        (last (void $1:map void cs))
-                                                      ) $ cs }
-
-legacy_choice_decls :: { Located [Located ChoiceData] }
- : legacy_choice_decls ';' legacy_choice_decl    { sLL $1 $> $ $3 : (unLoc $1) }
- | legacy_choice_decls ';'                       { sLL $1 $> $ unLoc $1 }
- | legacy_choice_decl                            { sL1 $1 [$1] }
- | {- empty -}                                   { sL0 [] }
-
-legacy_choice_decl :: { Located ChoiceData }
-  : consuming qtycon OF_TYPE btype_ maybe_docprev arecord_with_opt doexp
-      -- NOTE: We use `btype_` (`btype` excluding record `with` types) to
-      -- prevent the choice return type capturing the `with` parameter types.
-    { sL (comb3 $1 $2 $>) $
-            ChoiceData { cdChoiceName = $2
-                       , cdChoiceReturnTy = $4
-                       , cdChoiceFields = $6
-                       , cdChoiceBody = $7
-                       , cdChoiceConsuming = $1
-                       , cdChoiceDoc = $5 }
-    }
 
 flex_choice_decl :: { Located FlexChoiceData }
   : consuming 'choice' qtycon OF_TYPE btype_ maybe_docprev arecord_with_opt choice_parties doexp
