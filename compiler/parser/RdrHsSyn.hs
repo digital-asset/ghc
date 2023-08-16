@@ -41,7 +41,7 @@ module   RdrHsSyn (
         -- DAML Template Syntax
         ChoiceData(..),
         ChoiceConsuming(..),
-        FlexChoiceData(..),
+        TemplateChoiceData(..),
         ChoiceBodyDecl(..),
         TemplateBodyDecl(..),
         mkTemplateDecls,
@@ -2236,9 +2236,9 @@ data ChoiceData = ChoiceData {
 data ChoiceConsuming = PreConsuming | Consuming | PostConsuming | NonConsuming
   deriving Show -- for creating type/data names from these constructors
 
-data FlexChoiceData = FlexChoiceData {
-    fcdChoiceBodyDecls :: Located [Located ChoiceBodyDecl]
-  , fcdChoiceData    :: ChoiceData
+data TemplateChoiceData = TemplateChoiceData {
+    tcdChoiceBodyDecls :: Located [Located ChoiceBodyDecl]
+  , tcdChoiceData      :: ChoiceData
   }
 
 data ChoiceParties = ChoiceParties {
@@ -2410,7 +2410,7 @@ data TemplateBodyDecl
   | ObserverDecl (LHsExpr GhcPs)
   | AgreementDecl (LHsExpr GhcPs)
   | LetBindingsDecl (Located ([AddAnn], LHsLocalBinds GhcPs))
-  | FlexChoiceDecl (Located FlexChoiceData)
+  | TemplateChoiceDecl (Located TemplateChoiceData)
   | KeyDecl (Located (LHsExpr GhcPs, LHsType GhcPs))
   | MaintainerDecl (LHsExpr GhcPs)
   | TemplateInterfaceInstanceDecl (Located ParsedInterfaceInstance)
@@ -2422,7 +2422,7 @@ data TemplateBodyDecls = TemplateBodyDecls {
     , tbdObservers :: [LHsExpr GhcPs]
     , tbdAgreements :: [LHsExpr GhcPs]
     , tbdLetBindings :: [LHsLocalBinds GhcPs]
-    , tbdFlexChoices :: [Located FlexChoiceData]
+    , tbdChoices :: [Located TemplateChoiceData]
     , tbdKeys :: [Located (LHsExpr GhcPs, LHsType GhcPs)]
     , tbdMaintainers :: [LHsExpr GhcPs]
     , tbdInterfaceInstances :: [Located ParsedInterfaceInstance]
@@ -2461,7 +2461,7 @@ instance Semigroup TemplateBodyDecls where
     , tbdObservers = tbdObservers x Monoid.<> tbdObservers y
     , tbdAgreements = tbdAgreements x Monoid.<> tbdAgreements y
     , tbdLetBindings = tbdLetBindings x Monoid.<> tbdLetBindings y
-    , tbdFlexChoices = tbdFlexChoices x Monoid.<> tbdFlexChoices y
+    , tbdChoices = tbdChoices x Monoid.<> tbdChoices y
     , tbdKeys = tbdKeys x Monoid.<> tbdKeys y
     , tbdMaintainers = tbdMaintainers x Monoid.<> tbdMaintainers y
     , tbdInterfaceInstances = tbdInterfaceInstances x Monoid.<> tbdInterfaceInstances y
@@ -2477,7 +2477,7 @@ templateBodyDeclToDecls (L _ decl) = case decl of
   ObserverDecl o -> mempty { tbdObservers = [o] }
   AgreementDecl a -> mempty { tbdAgreements = [a] }
   LetBindingsDecl (L _ (_, b)) -> mempty { tbdLetBindings = [b] }
-  FlexChoiceDecl f -> mempty { tbdFlexChoices = [f] }
+  TemplateChoiceDecl f -> mempty { tbdChoices = [f] }
   KeyDecl k -> mempty { tbdKeys = [k] }
   MaintainerDecl m -> mempty { tbdMaintainers = [m] }
   TemplateInterfaceInstanceDecl d -> mempty { tbdInterfaceInstances = [d] }
@@ -3276,8 +3276,8 @@ validateTemplate vtTemplateName tbd@TemplateBodyDecls{..}
 combineChoices :: TemplateBodyDecls -> P [CombinedChoiceData]
 combineChoices TemplateBodyDecls{..} =
   sequence
-    [ flexChoiceToCombinedChoice TemplateChoice (unLoc fc)
-    | fc <- tbdFlexChoices
+    [ templateChoiceToCombinedChoice TemplateChoice (unLoc c)
+    | c <- tbdChoices
     ]
 
 data TemplateOrInterface a b
@@ -3453,15 +3453,15 @@ validateInterfaceInstance parent (L loc piib) = do
         XHsDecl{} -> unexpected "HsDecl extension point"
 
 -- | Simple type conversion, leaving type variable information empty for now.
-flexChoiceToCombinedChoice :: ChoiceSource -> FlexChoiceData -> P CombinedChoiceData
-flexChoiceToCombinedChoice source FlexChoiceData{..} = do
-  let ChoiceData{cdChoiceName} = fcdChoiceData
-  ChoiceParties{..} <- validateChoiceBodyDecls cdChoiceName fcdChoiceBodyDecls
+templateChoiceToCombinedChoice :: ChoiceSource -> TemplateChoiceData -> P CombinedChoiceData
+templateChoiceToCombinedChoice source TemplateChoiceData{..} = do
+  let ChoiceData{cdChoiceName} = tcdChoiceData
+  ChoiceParties{..} <- validateChoiceBodyDecls cdChoiceName tcdChoiceBodyDecls
   pure $ CombinedChoiceData
     { ccdControllers = cpControllers
     , ccdObservers = cpObservers
     , ccdAuthorizers = cpAuthorizers
-    , ccdChoiceData = fcdChoiceData
+    , ccdChoiceData = tcdChoiceData
     , ccdFlexible = True
     , ccdSource = source
     }

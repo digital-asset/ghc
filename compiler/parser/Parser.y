@@ -1211,7 +1211,7 @@ template_body_decl :: { Located TemplateBodyDecl }
   | observer_decl                                { sL1 $1 $ ObserverDecl $1 }
   | agreement_decl                               { sL1 $1 $ AgreementDecl $1 }
   | let_bindings_decl                            { sL1 $1 $ LetBindingsDecl $1 }
-  | flex_choice_decl                             { sL1 $1 $ FlexChoiceDecl $1 }
+  | template_choice_decl                         { sL1 $1 $ TemplateChoiceDecl $1 }
   | key_decl                                     { sL1 $1 $ KeyDecl $1 }
   | maintainer_decl                              { sL1 $1 $ MaintainerDecl $1 }
   | interface_instance                           { sL1 $1 $ TemplateInterfaceInstanceDecl $1 }
@@ -1230,12 +1230,12 @@ interface_instance :: { Located ParsedInterfaceInstance }
   : 'interface' 'instance' qtycon 'for' qtycon where_inst
       { sL (comb3 $1 $5 $6) $ ParsedInterfaceInstance $3 $5 $6 }
 
-flex_choice_decl :: { Located FlexChoiceData }
+template_choice_decl :: { Located TemplateChoiceData }
   : consuming 'choice' qtycon OF_TYPE btype_ maybe_docprev arecord_with_opt choice_parties doexp
       -- NOTE: We use `btype_` (`btype` excluding record `with` types) to
       -- prevent the choice return type capturing the `with` parameter types.
     { sL (comb3 $1 $2 $>) $
-        FlexChoiceData $8
+        TemplateChoiceData $8
             ChoiceData { cdChoiceName = $3
                        , cdChoiceReturnTy = $5
                        , cdChoiceFields = $7
