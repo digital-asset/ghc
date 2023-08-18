@@ -839,6 +839,7 @@ data WarningFlag =
    | Opt_WarnMissingDerivingStrategies    -- Since 8.8
    | Opt_WarnControllerCan
    | Opt_WarnUnsupportedDamlFieldNames
+   | Opt_WarnTemplateLet
    deriving (Eq, Show, Enum)
 
 data Language = Haskell98 | Haskell2010
@@ -4056,6 +4057,7 @@ wWarningFlagsDeps = [
   flagSpec "controller-can"              Opt_WarnControllerCan,
   flagSpec "unsupported-daml-field-names"
                                          Opt_WarnUnsupportedDamlFieldNames,
+  flagSpec "template-let"                Opt_WarnTemplateLet,
   flagSpec "partial-fields"              Opt_WarnPartialFields ]
 
 -- | These @-\<blah\>@ flags can all be reversed with @-no-\<blah\>@
@@ -4771,7 +4773,8 @@ standardWarnings -- see Note [Documenting warning flags]
         Opt_WarnInaccessibleCode,
         Opt_WarnSpaceAfterBang,
         Opt_WarnControllerCan,
-        Opt_WarnUnsupportedDamlFieldNames
+        Opt_WarnUnsupportedDamlFieldNames,
+        Opt_WarnTemplateLet
       ]
 
 -- | Things you get with -W
