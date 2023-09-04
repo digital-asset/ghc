@@ -4255,18 +4255,6 @@ warnSpaceAfterBang span = do
             text "If you mean to bind (!) then perhaps you want" $$
             text "to add a space after the bang for clarity."
 
--- | Warn about deprecated @controller ... can@ syntax
-warnControllerCan :: SrcSpan -> P ()
-warnControllerCan span = do
-    addWarning Opt_WarnControllerCan span msg
-    where
-      msg = text "The syntax 'controller ... can' is deprecated," $$
-            text "it will be removed in a future version of Daml." $$
-            text "Instead, use 'choice ... with ... controller' syntax." $$
-            text "Note that 'choice ... with ... controller' syntax does not " $$
-            text "implicitly add the controller as an observer," $$
-            text "so it must be added explicitly as one (or as a signatory)."
-
 -- | Warn about deprecated @template .. let@ syntax
 warnTemplateLet :: SrcSpan -> P ()
 warnTemplateLet span = do
