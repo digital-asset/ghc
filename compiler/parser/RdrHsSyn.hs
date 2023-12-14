@@ -2370,6 +2370,7 @@ validateInterface viInterfaceName requires decls = do
       mapM_ (\ty -> report (getLoc ty) "Multiple 'viewtype' declarations") tys
       pure (Just ty)
   viInterfaceInstances <- validateInterfaceInstances (TorI_Interface viInterfaceName) ibdInterfaceInstances
+  mapM_ (warnRetroactiveInterfaceInstance . getLoc) viInterfaceInstances
   pure ValidInterface
     { viInterfaceName
     , viRequiredInterfaces = requires
@@ -4472,6 +4473,19 @@ warnStarBndr span = addWarning Opt_WarnStarBinder span msg
         $$ text "NB. To use (or export) this operator in"
            <+> text "modules with StarIsType,"
         $$ text "    including the definition module, you must qualify it."
+
+
+warnRetroactiveInterfaceInstance :: SrcSpan -> P ()
+warnRetroactiveInterfaceInstance span =
+  addWarning Opt_WarnRetroactiveInterfaceInstances span msg
+  where
+    -- TODO(https://github.com/digital-asset/daml/issues/18326):
+    -- Refer users to migration guide (retroactive interface instances => package upgrades)
+    -- in cases where the template's package is already deployed.
+    msg =  text "Found interface instance in the body of an interface" <+>
+           parens (text "a" <+> doubleQuotes (text "retroactive interface instance")) <> dot
+        $$ text "This feature is deprecated, it will be removed in a future version of Daml."
+        $$ text "Instead, consider defining the interface instance in the body of the template."
 
 failOpFewArgs :: Located RdrName -> P a
 failOpFewArgs (dL->L loc op) =
