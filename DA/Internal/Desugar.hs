@@ -83,9 +83,6 @@ class HasObserver t where
 class HasEnsure t where
   ensure : t -> Bool
 
-class HasAgreement t where
-  agreement : t -> Text
-
 class HasCreate t where
   create : t -> Update (ContractId t)
 
