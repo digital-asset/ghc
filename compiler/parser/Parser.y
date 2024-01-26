@@ -509,7 +509,6 @@ are the most common patterns, rewritten as regular expressions for clarity:
  'template'     { L _ ITtemplate }
  'ensure'       { L _ ITensure }
  'signatory'    { L _ ITsignatory }
- 'agreement'    { L _ ITagreement }
  'controller'   { L _ ITcontroller }
  'choice'       { L _ ITchoice }
  'observer'     { L _ ITobserver }
@@ -1209,7 +1208,6 @@ template_body_decl :: { Located TemplateBodyDecl }
   : ensure_decl                                  { sL1 $1 $ EnsureDecl $1 }
   | signatory_decl                               { sL1 $1 $ SignatoryDecl $1 }
   | observer_decl                                { sL1 $1 $ ObserverDecl $1 }
-  | agreement_decl                               { sL1 $1 $ AgreementDecl $1 }
   | template_choice_decl                         { sL1 $1 $ TemplateChoiceDecl $1 }
   | key_decl                                     { sL1 $1 $ KeyDecl $1 }
   | maintainer_decl                              { sL1 $1 $ MaintainerDecl $1 }
@@ -1299,9 +1297,6 @@ authority_decl :: { LHsExpr GhcPs }
 
 controller_decl :: { LHsExpr GhcPs }
   : 'controller' party_list                      { sLL $1 $> $ unLoc (applyConcat $2) }
-
-agreement_decl :: { LHsExpr GhcPs }
-  : 'agreement' exp                              { sLL $1 $> $ unLoc $2 }
 
 key_decl :: { Located (LHsExpr GhcPs, LHsType GhcPs) }
     -- We use `infixexp` rather than `exp` here because we need to
@@ -3839,7 +3834,6 @@ varid :: { Located RdrName }
         | 'role'           { sL1 $1 $! mkUnqual varName (fsLit "role") }
         | 'ensure'         { sL1 $1 $! mkUnqual varName (fsLit "ensure") }
         | 'signatory'      { sL1 $1 $! mkUnqual varName (fsLit "signatory") }
-        | 'agreement'      { sL1 $1 $! mkUnqual varName (fsLit "agreement") }
         | 'observer'       { sL1 $1 $! mkUnqual varName (fsLit "observer") }
         | 'authority'      { sL1 $1 $! mkUnqual varName (fsLit "authority") }
         | 'nonconsuming'   { sL1 $1 $! mkUnqual varName (fsLit "nonconsuming") }

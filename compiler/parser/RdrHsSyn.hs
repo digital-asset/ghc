@@ -2408,7 +2408,6 @@ data TemplateBodyDecl
   = EnsureDecl (LHsExpr GhcPs)
   | SignatoryDecl (LHsExpr GhcPs)
   | ObserverDecl (LHsExpr GhcPs)
-  | AgreementDecl (LHsExpr GhcPs)
   | TemplateChoiceDecl (Located TemplateChoiceData)
   | KeyDecl (Located (LHsExpr GhcPs, LHsType GhcPs))
   | MaintainerDecl (LHsExpr GhcPs)
@@ -2419,7 +2418,6 @@ data TemplateBodyDecls = TemplateBodyDecls {
       tbdEnsures :: [LHsExpr GhcPs]
     , tbdSignatories :: [LHsExpr GhcPs]
     , tbdObservers :: [LHsExpr GhcPs]
-    , tbdAgreements :: [LHsExpr GhcPs]
     , tbdChoices :: [Located TemplateChoiceData]
     , tbdKeys :: [Located (LHsExpr GhcPs, LHsType GhcPs)]
     , tbdMaintainers :: [LHsExpr GhcPs]
@@ -2445,7 +2443,6 @@ data ValidTemplate = ValidTemplate {
     , vtEnsure :: Maybe (LHsExpr GhcPs)
     , vtSignatories :: LHsExpr GhcPs
     , vtObservers :: LHsExpr GhcPs
-    , vtAgreement :: Maybe (LHsExpr GhcPs)
     , vtChoices :: [CombinedChoiceData]
     , vtKeyData :: Maybe (Located KeyData)
     , vtInterfaceInstances :: [Located ValidInterfaceInstance]
@@ -2456,7 +2453,6 @@ instance Semigroup TemplateBodyDecls where
       tbdEnsures = tbdEnsures x Monoid.<> tbdEnsures y
     , tbdSignatories = tbdSignatories x Monoid.<> tbdSignatories y
     , tbdObservers = tbdObservers x Monoid.<> tbdObservers y
-    , tbdAgreements = tbdAgreements x Monoid.<> tbdAgreements y
     , tbdChoices = tbdChoices x Monoid.<> tbdChoices y
     , tbdKeys = tbdKeys x Monoid.<> tbdKeys y
     , tbdMaintainers = tbdMaintainers x Monoid.<> tbdMaintainers y
@@ -2464,14 +2460,13 @@ instance Semigroup TemplateBodyDecls where
     }
 
 instance Monoid TemplateBodyDecls where
-  mempty = TemplateBodyDecls [] [] [] [] [] [] [] []
+  mempty = TemplateBodyDecls [] [] [] [] [] [] []
 
 templateBodyDeclToDecls :: Located TemplateBodyDecl -> TemplateBodyDecls
 templateBodyDeclToDecls (L _ decl) = case decl of
   EnsureDecl e -> mempty { tbdEnsures = [e] }
   SignatoryDecl s -> mempty { tbdSignatories = [s] }
   ObserverDecl o -> mempty { tbdObservers = [o] }
-  AgreementDecl a -> mempty { tbdAgreements = [a] }
   TemplateChoiceDecl f -> mempty { tbdChoices = [f] }
   KeyDecl k -> mempty { tbdKeys = [k] }
   MaintainerDecl m -> mempty { tbdMaintainers = [m] }
@@ -2959,9 +2954,6 @@ mkChoiceDecls templateLoc conName
         mkSplitBody args1 args2 body =
           mkLambda args1 (mkApp (mkQualVar $ mkVarOcc "bypassReduceLambda") $ mkLambda args2 body (mkBodyBinds $ args1 ++ args2)) Nothing
 
-emptyString :: LHsExpr GhcPs
-emptyString = noLoc $ HsLit noExt $ HsString NoSourceText $ fsLit ""
-
 -- | Construct instances for split-up Template typeclass, i.e., instances for all the single-method typeclasses
 -- that constitute the Template constraint synonym.
 mkTemplateInstances :: Located String -> Located RdrName -> ValidTemplate -> [LHsDecl GhcPs]
@@ -2969,7 +2961,6 @@ mkTemplateInstances templateName conName ValidTemplate{..} =
   [ signatoryInstance
   , observerInstance
   , ensureInstance
-  , agreementInstance
   , archiveInstance
   , mkInstance "HasCreate" $ mkPrimMethod "create" "UCreate"
   , mkInstance "HasFetch" $ mkPrimMethod "fetch" "UFetch"
@@ -2984,7 +2975,6 @@ mkTemplateInstances templateName conName ValidTemplate{..} =
     signatoryInstance = mkInstance "HasSignatory" $ mkMethod "signatory" [this] vtSignatories
     observerInstance = mkInstance "HasObserver" $ mkMethod "observer" [this] vtObservers
     ensureInstance = mkInstance "HasEnsure" $ mkMethod "ensure" [this] (fromMaybe mkTrue vtEnsure)
-    agreementInstance = mkInstance "HasAgreement" $ mkMethod "agreement" [this] (fromMaybe emptyString vtAgreement)
     archiveInstance = mkInstance "HasArchive" $ mkMethod "archive" [cid] $
       mkApp (mkApp (mkQualVar $ mkVarOcc "exercise") (mkUnqualVar $ mkVarOcc "cid"))
             (mkQualVar $ mkDataOcc "Archive")
@@ -3210,7 +3200,6 @@ validateTemplate
 validateTemplate vtTemplateName tbd@TemplateBodyDecls{..}
   | length tbdEnsures > 1 = report "Multiple 'ensure' declarations"
   | null tbdSignatories = report "Missing 'signatory' declaration"
-  | length tbdAgreements > 1 = report "Multiple 'agreement' declarations"
   | length tbdKeys > 1 = report "Multiple 'key' declarations"
   | null tbdKeys && (not . null) tbdMaintainers = report "Missing 'key' declaration for given 'maintainer'"
   | null tbdMaintainers && (not . null) tbdKeys = report "Missing 'maintainer' declaration for given 'key'"
@@ -3224,7 +3213,6 @@ validateTemplate vtTemplateName tbd@TemplateBodyDecls{..}
         , vtEnsure = listToMaybe tbdEnsures
         , vtSignatories = applyConcat (noLoc tbdSignatories)
         , vtObservers = applyConcat (noLoc tbdObservers)
-        , vtAgreement = listToMaybe tbdAgreements
         , vtKeyData
         , vtInterfaceInstances
         }
