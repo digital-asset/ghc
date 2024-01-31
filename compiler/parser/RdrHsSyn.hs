@@ -2317,14 +2317,12 @@ data InterfaceBodyDecl
   = InterfaceFunctionSignatureDecl (Located RdrName) (LHsType GhcPs) (Maybe LHsDocString)
   | InterfaceChoiceDecl InterfaceChoiceSignature InterfaceChoiceBody
   | InterfaceViewDecl (LHsType GhcPs)
-  | InterfaceInterfaceInstanceDecl (Located ParsedInterfaceInstance)
 
 data InterfaceBodyDecls = InterfaceBodyDecls
   { ibdFunctionSignatures :: [(Located RdrName, LHsType GhcPs, Maybe LHsDocString)]
   , ibdChoices :: [(InterfaceChoiceSignature, InterfaceChoiceBody)]
   , ibdEnsures :: [LHsExpr GhcPs]
   , ibdViewDecls :: [LHsType GhcPs]
-  , ibdInterfaceInstances :: [Located ParsedInterfaceInstance]
   }
 
 instance Semigroup InterfaceBodyDecls where
@@ -2333,18 +2331,21 @@ instance Semigroup InterfaceBodyDecls where
     , ibdChoices = ibdChoices a Monoid.<> ibdChoices b
     , ibdEnsures = ibdEnsures a Monoid.<> ibdEnsures b
     , ibdViewDecls = ibdViewDecls a Monoid.<> ibdViewDecls b
-    , ibdInterfaceInstances = ibdInterfaceInstances a Monoid.<> ibdInterfaceInstances b
     }
 
 instance Monoid InterfaceBodyDecls where
-  mempty = InterfaceBodyDecls [] [] [] [] []
+  mempty = InterfaceBodyDecls
+    { ibdFunctionSignatures = []
+    , ibdChoices = []
+    , ibdEnsures = []
+    , ibdViewDecls = []
+    }
 
 interfaceBodyDeclToDecls :: InterfaceBodyDecl -> InterfaceBodyDecls
 interfaceBodyDeclToDecls = \case
   InterfaceFunctionSignatureDecl name ty mbDocString -> mempty { ibdFunctionSignatures = [(name, ty, mbDocString)] }
   InterfaceChoiceDecl signature body                 -> mempty { ibdChoices = [(signature, body)] }
   InterfaceViewDecl viewType                         -> mempty { ibdViewDecls = [viewType] }
-  InterfaceInterfaceInstanceDecl interfaceInstance   -> mempty { ibdInterfaceInstances = [interfaceInstance] }
 
 extractInterfaceBodyDecls :: [Located InterfaceBodyDecl] -> InterfaceBodyDecls
 extractInterfaceBodyDecls = foldMap (interfaceBodyDeclToDecls . unLoc)
@@ -2355,7 +2356,6 @@ data ValidInterface = ValidInterface
   , viFunctionSignatures :: [(Located RdrName, LHsType GhcPs, Maybe LHsDocString)]
   , viChoices :: [(InterfaceChoiceSignature, InterfaceChoiceBody)]
   , viViewType :: Maybe (LHsType GhcPs) -- Check for presence of viewtype occurs during LF conversion
-  , viInterfaceInstances :: [Located ValidInterfaceInstance]
   }
 
 validateInterface ::
@@ -2369,14 +2369,12 @@ validateInterface viInterfaceName requires decls = do
     (ty:tys) -> do
       mapM_ (\ty -> report (getLoc ty) "Multiple 'viewtype' declarations") tys
       pure (Just ty)
-  viInterfaceInstances <- validateInterfaceInstances (TorI_Interface viInterfaceName) ibdInterfaceInstances
   pure ValidInterface
     { viInterfaceName
     , viRequiredInterfaces = requires
     , viFunctionSignatures = ibdFunctionSignatures
     , viChoices = ibdChoices
     , viViewType
-    , viInterfaceInstances
     }
   where
     InterfaceBodyDecls {..} = extractInterfaceBodyDecls decls
@@ -3205,7 +3203,7 @@ validateTemplate vtTemplateName tbd@TemplateBodyDecls{..}
   | null tbdMaintainers && (not . null) tbdKeys = report "Missing 'maintainer' declaration for given 'key'"
   | otherwise
   = do
-      vtInterfaceInstances <- validateInterfaceInstances (TorI_Template vtTemplateName) tbdInterfaceInstances
+      vtInterfaceInstances <- validateInterfaceInstances vtTemplateName tbdInterfaceInstances
       vtChoices <- combineChoices tbd
       return ValidTemplate
         { vtTemplateName
@@ -3232,20 +3230,14 @@ combineChoices TemplateBodyDecls{..} =
     | c <- tbdChoices
     ]
 
-data TemplateOrInterface a b
-  = TorI_Template a
-  | TorI_Interface b
-
-type TemplateOrInterface' a = TemplateOrInterface a a
-
 validateInterfaceInstances ::
-       TemplateOrInterface' (Located RdrName)
+       Located RdrName
   ->   [Located ParsedInterfaceInstance]
   -> P [Located ValidInterfaceInstance]
 validateInterfaceInstances parent = mapM (validateInterfaceInstance parent)
 
 validateInterfaceInstance ::
-       TemplateOrInterface' (Located RdrName)
+       Located RdrName
   ->   Located ParsedInterfaceInstance
   -> P (Located ValidInterfaceInstance)
 validateInterfaceInstance parent (L loc piib) = do
@@ -3282,33 +3274,20 @@ validateInterfaceInstance parent (L loc piib) = do
               <+> text "for"
               <+> ppr piiTemplate
             )
-        , text "in" <+> pprParent
+        , text "in template" <+> quotes (ppr parent)
         ]
-
-    pprParent = case parent of
-      TorI_Template t -> text "template" <+> quotes (ppr t)
-      TorI_Interface i -> text "interface" <+> quotes (ppr i)
 
     -- NOTE(MA): this only really checks the 'RdrName's are identical,
     -- so it doesn't look through qualified types or type synonyms.
     -- To look through those, we would need to do this check as part of
     -- GHC typechecking.
-    checkParent = case parent of
-      TorI_Template parentTemplate ->
-        checkParent' "template" (unLoc piiTemplate == unLoc parentTemplate)
-      TorI_Interface parentInterface ->
-        checkParent' "interface" (unLoc piiInterface == unLoc parentInterface)
-      where
-        checkParent' tOrI check = do
-          unless check $
-            iiFatalError loc $ vcat
-              [ text "The" <+> text tOrI
-                <+> text "of this interface instance does not match the enclosing"
-                <+> text tOrI <+> text "declaration."
-              , text "Perhaps consider moving this interface instance into"
-              , text "* template" <+> quotes (ppr piiTemplate)
-              , text "* or interface" <+> quotes (ppr piiInterface)
-              ]
+    checkParent = unless (unLoc piiTemplate == unLoc parent) $
+      iiFatalError loc $ vcat
+        [ text "The template of this interface instance does not match"
+          <+> text "the enclosing template declaration."
+        , text "Consider moving this interface instance into template"
+          <+> quotes (ppr piiTemplate)
+        ]
 
     isViewImpl :: Located ValidInterfaceInstanceMethodDecl -> Bool
     isViewImpl impl = rdrNameToString (viimdId (unLoc impl)) == "view"
@@ -4031,11 +4010,6 @@ mkInterfaceDecl tycon (L requiresLoc requires) decls = do
       | (methodName, methodType, mbDocString) <- viFunctionSignatures
       ]
 
-    interfaceInterfaceInstances <- concat <$>
-      traverse
-        (mkInterfaceInstanceDecls viInterfaceName)
-        viInterfaceInstances
-
     pure $ toOL
       $ existential
       : hasInterfaceTypeRepInstance
@@ -4049,7 +4023,6 @@ mkInterfaceDecl tycon (L requiresLoc requires) decls = do
       ++ choiceTys
       ++ choiceDecls
       ++ viewTypeDecls
-      ++ interfaceInterfaceInstances
   where
     hasFetch t = mkQualClass "HasFetch" `mkAppTy` t
 
