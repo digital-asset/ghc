@@ -73,13 +73,13 @@ detectError info ct
   , attemptedScale > 37 || attemptedScale < 0
   = Just $ NumericScaleOutOfBounds { attemptedScale }
   | TyConApp con [LitTy (StrTyLit fieldName), recordType, resultType] <- ctev_pred (ctEvidence ct)
-  , check ["DA.Internal.Desugar", "DA.Internal.Record"] ["HasField"] con
+  , check ["DA.Internal.Desugar", "DA.Internal.Record"] ["HasField", "GetField", "SetField"] con
   = Just $ NonExistentFieldAccess { fieldName, recordType, expectedReturnType = resultType }
   | FunDepOrigin2 targetPred _ instancePred _ <- ctOrigin ct
   , TyConApp targetPredCon [LitTy (StrTyLit fieldName1), recordType1, targetRetType] <- targetPred
   , TyConApp instancePredCon [LitTy (StrTyLit fieldName2), recordType2, instanceRetType] <- instancePred
-  , check ["DA.Internal.Desugar", "DA.Internal.Record"] ["HasField"] targetPredCon
-  , check ["DA.Internal.Desugar", "DA.Internal.Record"] ["HasField"] instancePredCon
+  , check ["DA.Internal.Desugar", "DA.Internal.Record"] ["HasField", "GetField", "SetField"] targetPredCon
+  , check ["DA.Internal.Desugar", "DA.Internal.Record"] ["HasField", "GetField", "SetField"] instancePredCon
   , fieldName1 == fieldName2
   , eqType recordType1 recordType2
   , not (eqType targetRetType instanceRetType)
