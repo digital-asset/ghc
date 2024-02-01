@@ -41,11 +41,11 @@ import qualified Prelude as P ((<>))
 import Control.Monad
 import Data.Foldable (fold)
 
-check :: NamedThing a => [String] -> String -> a -> Bool
-check modules name namedThing
+check :: NamedThing a => [String] -> [String] -> a -> Bool
+check modules names namedThing
   | Just mod <- moduleNameString . moduleName <$> nameModule_maybe (getName namedThing)
   , mod `elem` modules
-  , name == occNameString (getOccName namedThing)
+  , occNameString (getOccName namedThing) `elem` names
   = True
   | otherwise
   = False
@@ -69,42 +69,42 @@ data DamlError
 detectError :: DamlInfo -> Ct -> Maybe DamlError
 detectError info ct
   | TyConApp con [LitTy (NumTyLit attemptedScale)] <- ctev_pred (ctEvidence ct)
-  , check ["DA.Internal.Desugar", "GHC.Classes"] "NumericScale" con
+  , check ["DA.Internal.Desugar", "GHC.Classes"] ["NumericScale"] con
   , attemptedScale > 37 || attemptedScale < 0
   = Just $ NumericScaleOutOfBounds { attemptedScale }
   | TyConApp con [LitTy (StrTyLit fieldName), recordType, resultType] <- ctev_pred (ctEvidence ct)
-  , check ["DA.Internal.Desugar", "DA.Internal.Record"] "HasField" con
+  , check ["DA.Internal.Desugar", "DA.Internal.Record"] ["HasField"] con
   = Just $ NonExistentFieldAccess { fieldName, recordType, expectedReturnType = resultType }
   | FunDepOrigin2 targetPred _ instancePred _ <- ctOrigin ct
   , TyConApp targetPredCon [LitTy (StrTyLit fieldName1), recordType1, targetRetType] <- targetPred
   , TyConApp instancePredCon [LitTy (StrTyLit fieldName2), recordType2, instanceRetType] <- instancePred
-  , check ["DA.Internal.Desugar", "DA.Internal.Record"] "HasField" targetPredCon
-  , check ["DA.Internal.Desugar", "DA.Internal.Record"] "HasField" instancePredCon
+  , check ["DA.Internal.Desugar", "DA.Internal.Record"] ["HasField"] targetPredCon
+  , check ["DA.Internal.Desugar", "DA.Internal.Record"] ["HasField"] instancePredCon
   , fieldName1 == fieldName2
   , eqType recordType1 recordType2
   , not (eqType targetRetType instanceRetType)
   = Just $ FieldAccessWrongReturnType { fieldName = fieldName1, recordType = recordType1, triedReturnType = targetRetType, expectedReturnType = instanceRetType }
   | TyConApp con [TyConApp target []] <- ctev_pred (ctEvidence ct)
-  , check ["DA.Internal.Desugar", "DA.Internal.Interface"] "HasInterfaceTypeRep" con
+  , check ["DA.Internal.Desugar", "DA.Internal.Interface"] ["HasInterfaceTypeRep"] con
   = Just $ TriedImplementNonInterface { triedIface = tyConName target }
   | FunDepOrigin2 targetPred _ instancePred _ <- ctOrigin ct
   , TyConApp targetPredCon [TyConApp iface1 [], targetRetType] <- targetPred
   , TyConApp instancePredCon [TyConApp iface2 [], instanceRetType] <- instancePred
-  , check ["DA.Internal.Desugar", "DA.Internal.Interface"] "HasInterfaceView" targetPredCon
-  , check ["DA.Internal.Desugar", "DA.Internal.Interface"] "HasInterfaceView" instancePredCon
+  , check ["DA.Internal.Desugar", "DA.Internal.Interface"] ["HasInterfaceView"] targetPredCon
+  , check ["DA.Internal.Desugar", "DA.Internal.Interface"] ["HasInterfaceView"] instancePredCon
   , let iface1Name = tyConName iface1
   , let iface2Name = tyConName iface2
   , synEq info iface1Name iface2Name
   , not (eqType targetRetType instanceRetType)
   = Just $ TriedImplementView { target = iface1Name, triedReturnType = targetRetType, expectedReturnType = instanceRetType }
   | TyConApp con [TyConApp target [], viewType] <- ctev_pred (ctEvidence ct)
-  , check ["DA.Internal.Desugar", "DA.Internal.Interface"] "HasInterfaceView" con
+  , check ["DA.Internal.Desugar", "DA.Internal.Interface"] ["HasInterfaceView"] con
   = Just $ TriedView { target = tyConName target, result = viewType }
   | FunDepOrigin2 targetPred _ instancePred _ <- ctOrigin ct
   , TyConApp targetPredCon (_ `Snoc` TyConApp targetCon [] `Snoc` LitTy (StrTyLit targetMethodName) `Snoc` targetResult) <- targetPred
   , TyConApp instancePredCon (_ `Snoc` TyConApp instanceCon [] `Snoc` LitTy (StrTyLit instanceMethodName) `Snoc` instanceResult) <- instancePred
-  , check ["DA.Internal.Desugar"] "HasMethod" targetPredCon
-  , check ["DA.Internal.Desugar"] "HasMethod" instancePredCon
+  , check ["DA.Internal.Desugar"] ["HasMethod"] targetPredCon
+  , check ["DA.Internal.Desugar"] ["HasMethod"] instancePredCon
   , let targetConName = tyConName targetCon
   , let instanceConName = tyConName instanceCon
   , synEq info targetConName instanceConName
@@ -114,8 +114,8 @@ detectError info ct
   | FunDepOrigin2 targetPred _ instancePred _ <- ctOrigin ct
   , TyConApp targetPredCon [TyConApp targetCon [], TyConApp targetChoice [], targetResult] <- targetPred
   , TyConApp instancePredCon [TyConApp instanceCon [], TyConApp instanceChoice [], instanceResult] <- instancePred
-  , check ["DA.Internal.Desugar", "DA.Internal.Template.Functions"] "HasExercise" targetPredCon
-  , check ["DA.Internal.Desugar", "DA.Internal.Template.Functions"] "HasExercise" instancePredCon
+  , check ["DA.Internal.Desugar", "DA.Internal.Template.Functions"] ["HasExercise"] targetPredCon
+  , check ["DA.Internal.Desugar", "DA.Internal.Template.Functions"] ["HasExercise"] instancePredCon
   , let targetConName = tyConName targetCon
   , let instanceConName = tyConName instanceCon
   , let targetChoiceName = tyConName targetChoice
@@ -125,10 +125,10 @@ detectError info ct
   , not (eqType targetResult instanceResult)
   = Just $ TriedExercise { target = instanceConName, choice = instanceChoiceName, result = targetResult }
   | TyConApp con [TyConApp target [], TyConApp choice [], result] <- ctev_pred (ctEvidence ct)
-  , check ["DA.Internal.Desugar", "DA.Internal.Template.Functions"] "HasExercise" con
+  , check ["DA.Internal.Desugar", "DA.Internal.Template.Functions"] ["HasExercise"] con
   = Just $ TriedExercise { target = tyConName target, choice = tyConName choice, result }
   | TyConApp con (_ `Snoc` TyConApp target [] `Snoc` LitTy (StrTyLit methodName) `Snoc` result) <- ctev_pred (ctEvidence ct)
-  , check ["DA.Internal.Desugar"] "HasMethod" con
+  , check ["DA.Internal.Desugar"] ["HasMethod"] con
   = Just $ TriedImplementMethod { target = tyConName target, method = methodName, result }
   | otherwise
   = Nothing
