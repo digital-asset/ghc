@@ -839,6 +839,7 @@ data WarningFlag =
    | Opt_WarnMissingDerivingStrategies    -- Since 8.8
    | Opt_WarnUnsupportedDamlFieldNames
    | Opt_WarnTemplateLet
+   | Opt_WarnRetroactiveInterfaceInstances
    deriving (Eq, Show, Enum)
 
 data Language = Haskell98 | Haskell2010
@@ -4056,6 +4057,8 @@ wWarningFlagsDeps = [
   flagSpec "unsupported-daml-field-names"
                                          Opt_WarnUnsupportedDamlFieldNames,
   flagSpec "template-let"                Opt_WarnTemplateLet,
+  flagSpec "retroactive-interface-instances"
+                                         Opt_WarnRetroactiveInterfaceInstances,
   flagSpec "partial-fields"              Opt_WarnPartialFields ]
 
 -- | These @-\<blah\>@ flags can all be reversed with @-no-\<blah\>@
