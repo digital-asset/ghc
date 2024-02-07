@@ -1368,8 +1368,6 @@ interface_body_decl
         { sL (comb3 $3 $7 $>) $ InterfaceChoiceDecl (InterfaceChoiceSignature (Just (unLoc $1)) $3 $5 $7 $6) (unLoc $8) }
   | var OF_TYPE sigtype maybe_docprev
         { sL1 $1 $ InterfaceFunctionSignatureDecl $1 $3 $4 }
-  | interface_instance
-        { sL1 $1 $ InterfaceInterfaceInstanceDecl $1 }
 
 interface_view_type_decl :: { Located InterfaceBodyDecl }
 interface_view_type_decl
