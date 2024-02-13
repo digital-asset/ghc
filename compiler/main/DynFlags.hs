@@ -840,6 +840,7 @@ data WarningFlag =
    | Opt_WarnUnsupportedDamlFieldNames
    | Opt_WarnTemplateLet
    | Opt_WarnRetroactiveInterfaceInstances
+   | Opt_WarnTemplateAgreement
    deriving (Eq, Show, Enum)
 
 data Language = Haskell98 | Haskell2010
@@ -4059,6 +4060,7 @@ wWarningFlagsDeps = [
   flagSpec "template-let"                Opt_WarnTemplateLet,
   flagSpec "retroactive-interface-instances"
                                          Opt_WarnRetroactiveInterfaceInstances,
+  flagSpec "template-agreement"          Opt_WarnTemplateAgreement,
   flagSpec "partial-fields"              Opt_WarnPartialFields ]
 
 -- | These @-\<blah\>@ flags can all be reversed with @-no-\<blah\>@
@@ -4774,7 +4776,8 @@ standardWarnings -- see Note [Documenting warning flags]
         Opt_WarnInaccessibleCode,
         Opt_WarnSpaceAfterBang,
         Opt_WarnUnsupportedDamlFieldNames,
-        Opt_WarnTemplateLet
+        Opt_WarnTemplateLet,
+        Opt_WarnTemplateAgreement
       ]
 
 -- | Things you get with -W
