@@ -1312,7 +1312,12 @@ controller_decl :: { LHsExpr GhcPs }
   : 'controller' party_list                      { sLL $1 $> $ unLoc (applyConcat $2) }
 
 agreement_decl :: { LHsExpr GhcPs }
-  : 'agreement' exp                              { sLL $1 $> $ unLoc $2 }
+  : 'agreement' exp
+        {% do { let agreement = sLL $1 $> $ unLoc $2
+              ; warnTemplateAgreement (getLoc agreement)
+              ; return agreement
+              }
+        }
 
 key_decl :: { Located (LHsExpr GhcPs, LHsType GhcPs) }
     -- We use `infixexp` rather than `exp` here because we need to
@@ -4264,6 +4269,13 @@ warnTemplateLet span = do
             text "it will be removed in a future version of Daml." $$
             text "Instead, use plain top level definitions, taking parameters" $$
             text "for the contract fields or body (\"this\") if necessary."
+
+warnTemplateAgreement :: SrcSpan -> P ()
+warnTemplateAgreement span =
+  addWarning Opt_WarnTemplateAgreement span msg
+  where
+    msg =  text "Found 'agreement' declaration in template definition."
+        $$ text "This feature is deprecated, it will be removed in a future version of Daml."
 
 -- When two single quotes don't followed by tyvar or gtycon, we report the
 -- error as empty character literal, or TH quote that missing proper type
