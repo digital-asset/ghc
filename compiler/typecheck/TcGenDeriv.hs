@@ -1955,7 +1955,7 @@ genAuxBindSpec dflags loc (DerivCon2Tag tycon)
     rdr_name = con2tag_RDR dflags tycon
 
     sig_ty = mkLHsSigWcType $ L loc $ XHsType $ NHsCoreTy $
-             mkSpecSigmaTy (tyConTyVars tycon) (tyConStupidTheta tycon) $
+             mkSpecSigmaTy (tyConTyVars tycon) [] $
              mkParentType tycon `mkFunTy` intPrimTy
 
     lots_of_constructors = tyConFamilySize tycon > 8
