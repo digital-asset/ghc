@@ -2,13 +2,11 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
 -- Covers:
---   Version syntax
 --   New colon convention
 --   Record "with" definition/update
 --   Function return type annotations
 --   Support for 'qualified' in postpositive position
 
-daml 1.2
 module Test0 where
 
 import Data.List qualified
