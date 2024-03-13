@@ -505,7 +505,6 @@ are the most common patterns, rewritten as regular expressions for clarity:
  'signature'    { L _ ITsignature }
  'dependency'   { L _ ITdependency }
 
- 'daml'         { L _ ITdaml }
  'template'     { L _ ITtemplate }
  'ensure'       { L _ ITensure }
  'signatory'    { L _ ITsignatory }
@@ -792,45 +791,17 @@ signature :: { Located (HsModule GhcPs) }
                     ([mj AnnSignature $2, mj AnnWhere $6] ++ fst $7) }
 
 module :: { Located (HsModule GhcPs) }
-       : daml_version maybedocheader 'module' modid maybemodwarning maybeexports 'where' body
+       : maybedocheader 'module' modid maybemodwarning maybeexports 'where' body
              {% fileSrcSpan >>= \ loc ->
-                ams (L loc (HsModule (Just $4) $6 (fst $ snd $8)
-                              (snd $ snd $8) $5 ($1 $2))
+                ams (L loc (HsModule (Just $3) $5 (fst $ snd $7)
+                              (snd $ snd $7) $4 $1)
                     )
-                    ([mj AnnModule $3, mj AnnWhere $7] ++ fst $8) }
-        | daml_version body2
+                    ([mj AnnModule $2, mj AnnWhere $6] ++ fst $7) }
+        | body2
                 {% fileSrcSpan >>= \ loc ->
                    ams (L loc (HsModule Nothing Nothing
-                               (fst $ snd $2) (snd $ snd $2) Nothing ($1 Nothing)))
-                       (fst $2) }
-
-daml_version :: { Maybe LHsDocString -> Maybe LHsDocString }
-  : daml version     {% do
-                          loc <- fileSrcSpan
-                          let doc = mkHsDocString "HAS_DAML_VERSION_HEADER"
-                          return $ \mdoc ->
-                            case mdoc of
-                              Nothing -> Just (L loc doc)
-                              Just (L _ doc') -> Just (L loc (appendDocs doc doc')) }
-  | {- empty  -}     { id }
-
-daml :: { () }
-  : 'daml'           {}
-
-version :: { () }
-  : RATIONAL         {% do
-                          let num = getRATIONAL $1
-                              version = fl_value num
-                              version_text = fl_text num
-                          if version == 1.2 then
-                            return ()
-                          else do
-                            loc <- fileSrcSpan
-                            parseErrorSDoc loc $ text $
-                                "Unrecognized daml version '" ++
-                                 (case version_text of SourceText txt -> txt) ++
-                                 "' (expected 1.2)"
-                      }
+                               (fst $ snd $1) (snd $ snd $1) Nothing Nothing))
+                       (fst $1) }
 
 maybedocheader :: { Maybe LHsDocString }
         : moduleheader            { $1 }
@@ -877,18 +848,18 @@ top1    :: { ([LImportDecl GhcPs], [LHsDecl GhcPs]) }
 -- Module declaration & imports only
 
 header  :: { Located (HsModule GhcPs) }
-        : daml_version maybedocheader 'module' modid maybemodwarning maybeexports 'where' header_body
+        : maybedocheader 'module' modid maybemodwarning maybeexports 'where' header_body
                 {% fileSrcSpan >>= \ loc ->
-                   ams (L loc (HsModule (Just $4) $6 $8 [] $5 ($1 $2)
-                          )) [mj AnnModule $3,mj AnnWhere $7] }
+                   ams (L loc (HsModule (Just $3) $5 $7 [] $4 $1
+                          )) [mj AnnModule $2,mj AnnWhere $6] }
         | maybedocheader 'signature' modid maybemodwarning maybeexports 'where' header_body
                 {% fileSrcSpan >>= \ loc ->
                    ams (cL loc (HsModule (Just $3) $5 $7 [] $4 $1
                           )) [mj AnnModule $2,mj AnnWhere $6] }
-        | daml_version header_body2
+        | header_body2
                 {% fileSrcSpan >>= \ loc ->
-                   return (L loc (HsModule Nothing Nothing $2 [] Nothing
-                          ($1 Nothing))) }
+                   return (L loc (HsModule Nothing Nothing $1 [] Nothing
+                          Nothing)) }
 
 header_body :: { [LImportDecl GhcPs] }
         :  '{'            header_top            { $2 }

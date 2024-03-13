@@ -638,7 +638,6 @@ data Token
   | ITsignature
   | ITdependency
 
-  | ITdaml
   | ITtemplate
   | ITensure
   | ITsignatory
@@ -886,7 +885,6 @@ reservedWordsFM = listToUFM $
                                               xbit RecursiveDoBit),
          ( "proc",           ITproc,          xbit ArrowsBit),
 
-         ( "daml",           ITdaml,          xbit DamlSyntaxBit),
          ( "template",       ITtemplate,      xbit DamlSyntaxBit),
          ( "ensure",         ITensure,        xbit DamlSyntaxBit),
          ( "signatory",      ITsignatory,     xbit DamlSyntaxBit),
