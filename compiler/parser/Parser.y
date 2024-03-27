@@ -525,6 +525,9 @@ are the most common patterns, rewritten as regular expressions for clarity:
  'for'          { L _ ITfor }
  'requires'     { L _ ITrequires }
  'viewtype'     { L _ ITviewtype }
+ 'record'       { L _ ITrecord }
+ 'variant'      { L _ ITvariant }
+ 'enum'         { L _ ITenum }
 
  "{-# INLINE"             { L _ (ITinline_prag _ _ _) } -- INLINE or INLINABLE
  "{-# SPECIALISE"         { L _ (ITspec_prag _) }
@@ -3813,6 +3816,9 @@ varid :: { Located RdrName }
         | 'maintainer'     { sL1 $1 $! mkUnqual varName (fsLit "maintainer") }
         | 'message'        { sL1 $1 $! mkUnqual varName (fsLit "message") }
         | 'for'            { sL1 $1 $! mkUnqual varName (fsLit "for") }
+        | 'record'         { sL1 $1 $! mkUnqual varName (fsLit "record") }
+        | 'variant'        { sL1 $1 $! mkUnqual varName (fsLit "variant") }
+        | 'enum'           { sL1 $1 $! mkUnqual varName (fsLit "enum") }
         -- If this changes relative to tyvarid, update 'checkRuleTyVarBndrNames' in RdrHsSyn.hs
         -- See Note [Parsing explicit foralls in Rules]
 
