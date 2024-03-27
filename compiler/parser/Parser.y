@@ -525,6 +525,9 @@ are the most common patterns, rewritten as regular expressions for clarity:
  'for'          { L _ ITfor }
  'requires'     { L _ ITrequires }
  'viewtype'     { L _ ITviewtype }
+ 'record'       { L _ ITrecord }
+ 'variant'      { L _ ITvariant }
+ 'enum'         { L _ ITenum }
 
  "{-# INLINE"             { L _ (ITinline_prag _ _ _) } -- INLINE or INLINABLE
  "{-# SPECIALISE"         { L _ (ITspec_prag _) }
@@ -1389,6 +1392,16 @@ ty_decl :: { LTyClDecl GhcPs }
                                    -- constrs and deriving are both empty
                         ((fst $ unLoc $1):(fst $ unLoc $4)) }
 
+          -- flavored data type or newtype declaration
+          -- (can't use e.g. opt_data_flavor on the above because you get reduce/reduce errors)
+        | data_or_newtype data_flavor capi_ctype tycl_hdr constrs maybe_derivings
+                {% amms (mkFlavoredTyData (comb4 $1 $4 $5 $6) (snd $ unLoc $1) $2 $3 $4
+                           Nothing (reverse (snd $ unLoc $5))
+                                   (fmap reverse $6))
+                                   -- We need the location on tycl_hdr in case
+                                   -- constrs and deriving are both empty
+                        ((fst $ unLoc $1):(fst $ unLoc $5)) }
+
           -- ordinary GADT declaration
         | data_or_newtype capi_ctype tycl_hdr opt_kind_sig
                  gadt_constrlist
@@ -1629,6 +1642,11 @@ at_decl_inst :: { LInstDecl GhcPs }
 data_or_newtype :: { Located (AddAnn, NewOrData) }
         : 'data'        { sL1 $1 (mj AnnData    $1,DataType) }
         | 'newtype'     { sL1 $1 (mj AnnNewtype $1,NewType) }
+
+data_flavor :: { Located DataFlavor }
+        : 'record'  { sL1 $1 FlavorRecord }
+        | 'variant' { sL1 $1 FlavorVariant }
+        | 'enum'    { sL1 $1 FlavorEnum }
 
 -- Family result/return kind signatures
 
@@ -3813,6 +3831,9 @@ varid :: { Located RdrName }
         | 'maintainer'     { sL1 $1 $! mkUnqual varName (fsLit "maintainer") }
         | 'message'        { sL1 $1 $! mkUnqual varName (fsLit "message") }
         | 'for'            { sL1 $1 $! mkUnqual varName (fsLit "for") }
+        | 'record'         { sL1 $1 $! mkUnqual varName (fsLit "record") }
+        | 'variant'        { sL1 $1 $! mkUnqual varName (fsLit "variant") }
+        | 'enum'           { sL1 $1 $! mkUnqual varName (fsLit "enum") }
         -- If this changes relative to tyvarid, update 'checkRuleTyVarBndrNames' in RdrHsSyn.hs
         -- See Note [Parsing explicit foralls in Rules]
 

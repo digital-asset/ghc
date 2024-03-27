@@ -659,6 +659,9 @@ data Token
   | ITfor
   | ITrequires
   | ITviewtype
+  | ITrecord
+  | ITvariant
+  | ITenum
 
   -- Pragmas, see  note [Pragma source text] in BasicTypes
   | ITinline_prag       SourceText InlineSpec RuleMatchInfo

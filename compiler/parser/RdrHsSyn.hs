@@ -66,6 +66,10 @@ module   RdrHsSyn (
         ValidInterfaceInstanceMethodDecl(..),
         ghcTypesDamlInterface,
 
+        -- Daml data syntax
+        DataFlavor(..),
+        mkFlavoredTyData,
+
         -- DAML name utilities
         qualifyDesugar,
         isDamlGenerated,
@@ -252,6 +256,47 @@ mkATDefault (dL->L _ (TyFamInstDecl (HsIB _ (XFamEqn _)))) = panic "mkATDefault"
 mkATDefault (dL->L _ (TyFamInstDecl (XHsImplicitBndrs _))) = panic "mkATDefault"
 mkATDefault _ = panic "mkATDefault: Impossible Match"
                                 -- due to #15884
+
+data DataFlavor
+  = FlavorRecord
+  | FlavorVariant
+  | FlavorEnum
+
+dataFlavorToCxt :: Located DataFlavor -> LHsContext GhcPs
+dataFlavorToCxt (L loc flavor) =
+  L loc [rdrNameToType . L loc . qualifyDesugar . mkClsOcc $ flavorString]
+  where
+    flavorString = case flavor of
+      FlavorRecord -> "DataRecord"
+      FlavorVariant -> "DataVariant"
+      FlavorEnum -> "DataEnum"
+
+mergeCxt :: LHsContext GhcPs -> LHsContext GhcPs -> LHsContext GhcPs
+mergeCxt (L lloc lcxt) (L rloc rcxt) =
+  L (combineSrcSpans lloc rloc) (lcxt ++ rcxt)
+
+mkFlavoredTyData ::
+     SrcSpan
+  -> NewOrData
+  -> Located DataFlavor
+  -> Maybe (Located CType)
+  -> Located (Maybe (LHsContext GhcPs), LHsType GhcPs)
+  -> Maybe (LHsKind GhcPs)
+  -> [LConDecl GhcPs]
+  -> HsDeriving GhcPs
+  -> P (LTyClDecl GhcPs)
+mkFlavoredTyData loc DataType flavor cType hdr' =
+  mkTyData loc DataType cType hdr
+  where
+    L hdrLoc (mCxt, tycl_hdr) = hdr'
+    flavorCxt = dataFlavorToCxt flavor
+    fullCxt = case mCxt of
+      Nothing -> flavorCxt
+      Just userCxt -> mergeCxt userCxt flavorCxt
+    hdr = L hdrLoc (Just fullCxt, tycl_hdr)
+mkFlavoredTyData loc NewType _ _ _ =
+  \_ _ _ -> parseErrorSDoc loc $
+      text "Newtypes with explicit data type representation are disallowed."
 
 mkTyData :: SrcSpan
          -> NewOrData
