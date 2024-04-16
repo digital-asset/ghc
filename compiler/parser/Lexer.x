@@ -909,9 +909,9 @@ reservedWordsFM = listToUFM $
          ( "for",            ITfor,           xbit DamlSyntaxBit),
          ( "requires",       ITrequires,      xbit DamlSyntaxBit),
          ( "viewtype",       ITviewtype,      xbit DamlSyntaxBit),
-         ( "record",         ITrecord,        xbit DamlSyntaxBit),
-         ( "variant",        ITvariant,       xbit DamlSyntaxBit),
-         ( "enum",           ITenum,          xbit DamlSyntaxBit)
+         ( "record",         ITrecord,        xbit ExplicitDataTypesBit),
+         ( "variant",        ITvariant,       xbit ExplicitDataTypesBit),
+         ( "enum",           ITenum,          xbit ExplicitDataTypesBit)
      ]
 
 {-----------------------------------
@@ -2409,6 +2409,7 @@ data ExtBits
   | MultiWayIfBit
   | GadtSyntaxBit
   | DamlSyntaxBit
+  | ExplicitDataTypesBit
   | ScopedTypeVariablesBit
   | OverloadedRecordUpdateBit
 
@@ -2504,6 +2505,7 @@ mkParserFlags' warningFlags extensionFlags thisPackage
       .|. MultiWayIfBit               `xoptBit` LangExt.MultiWayIf
       .|. GadtSyntaxBit               `xoptBit` LangExt.GADTSyntax
       .|. DamlSyntaxBit               `xoptBit` LangExt.DamlSyntax
+      .|. ExplicitDataTypesBit        `xoptBit` LangExt.ExplicitDataTypes
       .|. ScopedTypeVariablesBit      `xoptBit` LangExt.ScopedTypeVariables
       .|. OverloadedRecordUpdateBit   `xoptBit` LangExt.OverloadedRecordUpdate
     optBits =
