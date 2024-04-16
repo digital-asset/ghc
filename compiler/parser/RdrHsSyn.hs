@@ -21,6 +21,7 @@ module   RdrHsSyn (
         mkRoleAnnotDecl,
         mkClassDecl,
         mkTyData, mkDataFamInst,
+        mkExplicitData,
         mkTySynonym, mkTyFamInstEqn,
         mkTyFamInst,
         mkFamDecl, mkLHsSigType,
@@ -252,6 +253,36 @@ mkATDefault (dL->L _ (TyFamInstDecl (HsIB _ (XFamEqn _)))) = panic "mkATDefault"
 mkATDefault (dL->L _ (TyFamInstDecl (XHsImplicitBndrs _))) = panic "mkATDefault"
 mkATDefault _ = panic "mkATDefault: Impossible Match"
                                 -- due to #15884
+
+explicitDataKeywordToCxt :: Located ExplicitDataKeyword -> LHsContext GhcPs
+explicitDataKeywordToCxt (L loc flavor) =
+  L loc [rdrNameToType . L loc . qualifyDesugar . mkClsOcc $ flavorString]
+  where
+    flavorString = case flavor of
+      EdkRecord -> "DataRecord"
+      EdkVariant -> "DataVariant"
+      EdkEnum -> "DataEnum"
+
+mergeCxt :: LHsContext GhcPs -> LHsContext GhcPs -> LHsContext GhcPs
+mergeCxt (L lloc lcxt) (L rloc rcxt) =
+  L (combineSrcSpans lloc rloc) (lcxt ++ rcxt)
+
+mkExplicitData :: SrcSpan
+         -> Located ExplicitDataKeyword
+         -> Located (Maybe (LHsContext GhcPs), LHsType GhcPs)
+         -> Maybe (LHsKind GhcPs)
+         -> [LConDecl GhcPs]
+         -> HsDeriving GhcPs
+         -> P (LTyClDecl GhcPs)
+mkExplicitData loc edk hdr' =
+  mkTyData loc DataType Nothing hdr
+  where
+    L hdrLoc (mcxt, tycl_hdr) = hdr'
+    flavorCxt = explicitDataKeywordToCxt edk
+    fullCxt = case mcxt of
+      Nothing -> flavorCxt
+      Just userCxt -> mergeCxt userCxt flavorCxt
+    hdr = L hdrLoc (Just fullCxt, tycl_hdr)
 
 mkTyData :: SrcSpan
          -> NewOrData
