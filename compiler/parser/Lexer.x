@@ -659,6 +659,9 @@ data Token
   | ITfor
   | ITrequires
   | ITviewtype
+  | ITrecord
+  | ITvariant
+  | ITenum
 
   -- Pragmas, see  note [Pragma source text] in BasicTypes
   | ITinline_prag       SourceText InlineSpec RuleMatchInfo
@@ -905,7 +908,10 @@ reservedWordsFM = listToUFM $
          ( "interface",      ITinterface,     xbit DamlSyntaxBit),
          ( "for",            ITfor,           xbit DamlSyntaxBit),
          ( "requires",       ITrequires,      xbit DamlSyntaxBit),
-         ( "viewtype",       ITviewtype,      xbit DamlSyntaxBit)
+         ( "viewtype",       ITviewtype,      xbit DamlSyntaxBit),
+         ( "record",         ITrecord,        xbit DamlSyntaxBit),
+         ( "variant",        ITvariant,       xbit DamlSyntaxBit),
+         ( "enum",           ITenum,          xbit DamlSyntaxBit)
      ]
 
 {-----------------------------------

@@ -525,6 +525,9 @@ are the most common patterns, rewritten as regular expressions for clarity:
  'for'          { L _ ITfor }
  'requires'     { L _ ITrequires }
  'viewtype'     { L _ ITviewtype }
+ 'record'       { L _ ITrecord }
+ 'variant'      { L _ ITvariant }
+ 'enum'         { L _ ITenum }
 
  "{-# INLINE"             { L _ (ITinline_prag _ _ _) } -- INLINE or INLINABLE
  "{-# SPECIALISE"         { L _ (ITspec_prag _) }
