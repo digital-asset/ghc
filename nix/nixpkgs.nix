@@ -38,14 +38,14 @@ let
     });
     haskell = pkgs.haskell // {
       compiler = pkgs.haskell.compiler // {
-        ghc943 =
+        ghc902 =
           if system == "aarch64-darwin" then
-            pkgs.haskell.compiler.ghc943.override(oldAttrs: {
+            pkgs.haskell.compiler.ghc902.override(oldAttrs: {
               buildTargetLlvmPackages = pkgs.llvmPackages_12;
               llvmPackages = pkgs.llvmPackages_12;
             })
           else
-            pkgs.haskell.compiler.ghc943;
+            pkgs.haskell.compiler.ghc902;
       };
     };
   };

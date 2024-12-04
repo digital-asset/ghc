@@ -106,13 +106,25 @@ stack_snapshot(
         "unordered-containers",
         "text",
         "bytestring",
+        #"attoparsec-internal",
+        "attoparsec",
     ],
-    snapshot = "lts-19.33",
+    #snapshot = "lts-19.33",
+    local_snapshot = "//:stack-snapshot.yaml",
 
     # This uses an unpinned version of stack_snapshot, meaning that stack is invoked on every build.
     # To switch to pinned stackage dependencies, run `bazel run @stackage-unpinned//:pin` and
     # uncomment the following line.
-    # stack_snapshot_json = "//:stackage_snapshot.json",
+    stack_snapshot_json = "//:stackage_snapshot.json",
+    components = {
+        "attoparsec": [
+            "lib:attoparsec",
+            "lib:attoparsec-internal",
+        ],
+    },
+    components_dependencies = {
+        "attoparsec": """{"lib:attoparsec": ["lib:attoparsec-internal"]}""",
+    },
 )
 
 rules_haskell_toolchains(version = "9.0.2")

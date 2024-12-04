@@ -45,7 +45,7 @@ let shared = rec {
         gnumake
         ncurses
         perl
-        haskell.compiler.ghc943
+        haskell.compiler.ghc902
         stdenv.cc  # ghc-lib needs `gcc` or `clang`, but Bazel provides `cc`.
         xz
       ] ++ (
@@ -96,28 +96,28 @@ let shared = rec {
     '';
   };
 
-  ghcPkgs = pkgs.haskell.packages.native-bignum.ghc943;
+  ghcPkgs = pkgs.haskell.packages.native-bignum.ghc902;
 
   ghc =
     if system == "aarch64-darwin" then
       pkgs.runCommand "ghc-aarch64-symlinks" { buildInputs = [ pkgs.makeWrapper ]; } ''
         mkdir -p $out/bin
         for tool in \
-          ghc-9.4.3 \
+          ghc-9.0.2 \
           ghc-pkg \
-          ghc-pkg-9.4.3 \
+          ghc-pkg-9.0.2 \
           ghci \
-          ghci-9.4.3 \
+          ghci-9.0.2 \
           haddock \
           hp2ps \
           hpc \
-          runghc-9.4.3 \
+          runghc-9.0.2 \
           runhaskell
         do
             ln -s ${ghcPkgs.ghc}/bin/$tool $out/bin/$tool
         done;
         mkdir -p $out/lib
-        ln -s ${ghcPkgs.ghc}/lib/ghc-9.4.3 $out/lib/ghc-9.4.3
+        ln -s ${ghcPkgs.ghc}/lib/ghc-9.0.2 $out/lib/ghc-9.0.2
         makeWrapper ${ghcPkgs.ghc}/bin/ghc $out/bin/ghc \
           --set CODESIGN_ALLOCATE ${pkgs.darwin.cctools}/bin/codesign_allocate \
           --prefix PATH : ${pkgs.llvmPackages_12.clang}/bin:${pkgs.llvmPackages_12.llvm}/bin
