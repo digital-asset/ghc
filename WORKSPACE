@@ -205,6 +205,6 @@ nixpkgs_local_repository(
     ],
 )
 
-load("//bazel_tools/ghc-lib:repositories.bzl", "ghc_lib_and_dependencies")
+load("//:repositories.bzl", "ghc_lib_and_dependencies")
 
 ghc_lib_and_dependencies()
