@@ -14,7 +14,7 @@ load(
 
 unpack_tar(
     name = "unpack",
-    src = "@da-ghc//:ghc-lib-{}.tar.gz".format(GHC_LIB_VERSION),
+    src = "//:ghc-lib-{}.tar.gz".format(GHC_LIB_VERSION),
     outs = [
         "srcs/LICENSE",
         "srcs/compiler/",
@@ -28,20 +28,20 @@ unpack_tar(
 
 copy_file(
     name = "cabal-file",
-    src = "@da-ghc//:ghc-lib.cabal",
+    src = "//:ghc-lib.cabal",
     out = "srcs/ghc-lib.cabal",
 )
 
 sh_inline_binary(
     name = "cabal-update",
     cmd = """\
-SOURCE=$$(canonicalize_rlocation $(rootpath @da-ghc//:ghc-lib.cabal))
+SOURCE=$$(canonicalize_rlocation $(rootpath //:ghc-lib.cabal))
 OUTPUT_DIR=$$BUILD_WORKSPACE_DIRECTORY/bazel_tools/ghc-lib/ghc-lib
 
 cp --no-preserve=mode -t "$$OUTPUT_DIR" "$$SOURCE"
 """,
     data = [
-        "@da-ghc//:ghc-lib.cabal",
+        "//:ghc-lib.cabal",
     ],
     toolchains = ["@rules_sh//sh/posix:make_variables"],
 )
@@ -49,7 +49,7 @@ cp --no-preserve=mode -t "$$OUTPUT_DIR" "$$SOURCE"
 sh_inline_test(
     name = "cabal-file-diff",
     cmd = """\
-EXPECTED=$$(canonicalize_rlocation $(rootpath @da-ghc//:ghc-lib.cabal))
+EXPECTED=$$(canonicalize_rlocation $(rootpath //:ghc-lib.cabal))
 ACTUAL=$$(canonicalize_rlocation $(rootpath ghc-lib.cabal))
 $(POSIX_DIFF) -Naur --strip-trailing-cr $$EXPECTED $$ACTUAL || {
   echo "The checked in ghc-lib.cabal file is out of sync" >&2
@@ -58,7 +58,7 @@ $(POSIX_DIFF) -Naur --strip-trailing-cr $$EXPECTED $$ACTUAL || {
 """,
     data = [
         "ghc-lib.cabal",
-        "@da-ghc//:ghc-lib.cabal",
+        "//:ghc-lib.cabal",
     ],
     toolchains = ["@rules_sh//sh/posix:make_variables"],
 )
