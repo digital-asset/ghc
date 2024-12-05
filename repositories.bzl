@@ -166,13 +166,13 @@ def ghc_lib_and_dependencies():
         patches = GHC_LIB_PATCHES,
         patch_args = ["-p1"],
     )
-    new_git_repository(
-        name = "da-ghc",
-        remote = GHC_REPO_URL,
-        commit = GHC_REV,
-        recursive_init_submodules = True,
-        build_file = "@//bazel_tools/ghc-lib:BUILD.ghc",
-        shallow_since = "1639050525 +0100",
-        patches = GHC_PATCHES,
-        patch_args = ["-p1"],
-    )
+    #new_git_repository(
+    #    name = "da-ghc",
+    #    remote = GHC_REPO_URL,
+    #    commit = GHC_REV,
+    #    recursive_init_submodules = True,
+    #    build_file = "@//bazel_tools/ghc-lib:BUILD.ghc",
+    #    shallow_since = "1639050525 +0100",
+    #    patches = GHC_PATCHES,
+    #    patch_args = ["-p1"],
+    #)

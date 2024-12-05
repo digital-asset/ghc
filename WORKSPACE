@@ -133,27 +133,6 @@ load("//bazel_tools:os_info.bzl", "os_info")
 
 os_info(name = "os_info")
 
-load(
-    ":version.bzl",
-    "GHC_LIB_PATCHES",
-    "GHC_LIB_REPO_URL",
-    "GHC_LIB_REV",
-    "GHC_LIB_SHA256",
-    "GHC_PATCHES",
-    "GHC_REPO_URL",
-    "GHC_REV",
-)
-
-http_archive(
-    name = "ghc-lib-gen",
-    url = "{}/archive/{}.tar.gz".format(GHC_LIB_REPO_URL, GHC_LIB_REV),
-    sha256 = GHC_LIB_SHA256,
-    strip_prefix = "ghc-lib-{}".format(GHC_LIB_REV),
-    build_file = "@//bazel_tools/ghc-lib:BUILD.ghc-lib-gen",
-    patches = GHC_LIB_PATCHES,
-    patch_args = ["-p1"],
-)
-
 rules_nixpkgs_strip_prefix = "rules_nixpkgs-%s" % rules_nixpkgs_version
 
 http_archive(
