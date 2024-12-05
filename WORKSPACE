@@ -59,9 +59,9 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 # Add rules_haskell example
 http_archive(
     name = "rules_haskell",
-    sha256 = "2a07b55c30e526c07138c717b0343a07649e27008a873f2508ffab3074f3d4f3",
-    strip_prefix = "rules_haskell-0.16",
-    url = "https://github.com/tweag/rules_haskell/archive/refs/tags/v0.16.tar.gz",
+    sha256 = "4cae22bc84f327bf3cb7605021c3663160ff6bc8a0b7b6266062366bcbd19e79",
+    strip_prefix = "rules_haskell-1.0",
+    url = "https://github.com/tweag/rules_haskell/releases/download/v1.0/rules_haskell-1.0.tar.gz",
 )
 
 # Pull in dependencies for rules_haskell
