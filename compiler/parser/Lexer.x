@@ -656,6 +656,7 @@ data Token
   | ITtry
   | ITcatch
   | ITinterface
+  | ITimplements
   | ITfor
   | ITrequires
   | ITviewtype
@@ -903,6 +904,7 @@ reservedWordsFM = listToUFM $
          ( "try",            ITtry,           xbit DamlSyntaxBit),
          ( "catch",          ITcatch,         xbit DamlSyntaxBit),
          ( "interface",      ITinterface,     xbit DamlSyntaxBit),
+         ( "implements",     ITimplements,    xbit DamlSyntaxBit),
          ( "for",            ITfor,           xbit DamlSyntaxBit),
          ( "requires",       ITrequires,      xbit DamlSyntaxBit),
          ( "viewtype",       ITviewtype,      xbit DamlSyntaxBit)
