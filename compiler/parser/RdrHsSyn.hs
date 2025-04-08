@@ -2397,7 +2397,7 @@ data InterfaceChoiceBody = InterfaceChoiceBody
 
 data ParsedInterfaceInstance = ParsedInterfaceInstance
   { piiInterface :: Located RdrName
-  , piiTemplate :: Located RdrName
+  , piiTemplateOpt :: Maybe (Located RdrName)
   , piiDefs :: Located ([AddAnn], OrdList (LHsDecl GhcPs))
   }
 
@@ -2424,7 +2424,6 @@ data TemplateBodyDecls = TemplateBodyDecls {
 
 data ValidInterfaceInstance = ValidInterfaceInstance
   { viiInterface :: Located RdrName
-  , viiTemplate :: Located RdrName
   , viiDefs :: [Located ValidInterfaceInstanceMethodDecl]
   , viiView :: Located ValidInterfaceInstanceMethodDecl
   }
@@ -3252,17 +3251,17 @@ validateInterfaceInstance parent (L loc piib) = do
 
   pure $ L loc ValidInterfaceInstance
     { viiInterface = piiInterface
-    , viiTemplate = piiTemplate
     , viiDefs = nonViewImpls
     , viiView = viewImpl
     }
   where
     ParsedInterfaceInstance
       { piiInterface
-      , piiTemplate
+      , piiTemplateOpt
       , piiDefs
       } = piib
 
+    piiTemplate = fromMaybe parent piiTemplateOpt
     iiFatalError :: SrcSpan -> SDoc -> P a
     iiFatalError loc err =
       addFatalError loc $ vcat
@@ -3608,13 +3607,12 @@ mkInterfaceInstanceDecls parentName (L loc interfaceInstance) = do
   where
     ValidInterfaceInstance
       { viiInterface
-      , viiTemplate
       , viiDefs
       , viiView
       } = interfaceInstance
 
     parentType = rdrNameToType parentName
-    templateType = rdrNameToType viiTemplate
+    templateType = rdrNameToType parentName
     interfaceType = rdrNameToType viiInterface
 
     -- NOTE(MA): The definition of 'thisPat' makes the following assumptions:
@@ -3629,7 +3627,7 @@ mkInterfaceInstanceDecls parentName (L loc interfaceInstance) = do
     --         `signatory` declaration.
     --  * The template type and data constructors are in scope.
     --       * The regular error message should be good enough otherwise.
-    thisPat = asPatRecWild "this" (fmap (`setRdrNameSpace` srcDataName) viiTemplate)
+    thisPat = asPatRecWild "this" (fmap (`setRdrNameSpace` srcDataName) parentName)
     localBinds = Just $ dummyLocalBinds [thisPat]
 
     -- NOTE(MA): This is used to generate the names for the interface instance
@@ -3651,7 +3649,7 @@ mkInterfaceInstanceDecls parentName (L loc interfaceInstance) = do
         map mangle
           [ rdrNameToString parentName
           , rdrNameToQualString viiInterface
-          , rdrNameToQualString viiTemplate
+          , rdrNameToQualString parentName
           ] ++
         suffix
 

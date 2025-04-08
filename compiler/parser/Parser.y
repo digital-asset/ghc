@@ -522,6 +522,7 @@ are the most common patterns, rewritten as regular expressions for clarity:
  'try'          { L _ ITtry }
  'catch'        { L _ ITcatch }
  'interface'    { L _ ITinterface }
+ 'implements'   { L _ ITimplements }
  'for'          { L _ ITfor }
  'requires'     { L _ ITrequires }
  'viewtype'     { L _ ITviewtype }
@@ -1182,11 +1183,16 @@ template_body_decl :: { Located TemplateBodyDecl }
   | template_choice_decl                         { sL1 $1 $ TemplateChoiceDecl $1 }
   | key_decl                                     { sL1 $1 $ KeyDecl $1 }
   | maintainer_decl                              { sL1 $1 $ MaintainerDecl $1 }
+  | implements_decl                              { sL1 $1 $ TemplateInterfaceInstanceDecl $1 }
   | interface_instance                           { sL1 $1 $ TemplateInterfaceInstanceDecl $1 }
+
+implements_decl :: { Located ParsedInterfaceInstance }
+  : 'implements' qtycon where_inst
+      { sL (comb3 $1 $2 $3) $ ParsedInterfaceInstance $2 Nothing $3 }
 
 interface_instance :: { Located ParsedInterfaceInstance }
   : 'interface' 'instance' qtycon 'for' qtycon where_inst
-      { sL (comb3 $1 $5 $6) $ ParsedInterfaceInstance $3 $5 $6 }
+      { sL (comb3 $1 $5 $6) $ ParsedInterfaceInstance $3 (Just $5) $6 }
 
 template_choice_decl :: { Located TemplateChoiceData }
   : consuming 'choice' qtycon OF_TYPE btype_ maybe_docprev arecord_with_opt choice_parties doexp
