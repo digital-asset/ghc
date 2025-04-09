@@ -52,7 +52,7 @@ import NameEnv
 import Avail
 import Outputable
 import Bag
-import BasicTypes       ( pprRuleName )
+import BasicTypes       ( WarningTxt(..), WarningCategory(..), pprRuleName, validWarningCategory )
 import FastString
 import SrcLoc
 import DynFlags
@@ -296,6 +296,7 @@ rnSrcWarnDecls bndr_set decls'
        -- ensures that the names are defined locally
      = do { names <- concatMapM (lookupLocalTcNames sig_ctxt what . unLoc)
                                 rdr_names
+          ; _ <- checkWarningTextCategory txt
           ; return [(rdrNameOcc rdr, txt) | (rdr, _) <- names] }
    rn_deprec (XWarnDecl _) = panic "rnSrcWarnDecls"
 
@@ -303,6 +304,20 @@ rnSrcWarnDecls bndr_set decls'
 
    warn_rdr_dups = findDupRdrNames
                    $ concatMap (\(dL->L _ (Warning _ ns _)) -> ns) decls
+
+checkWarningTextCategory :: WarningTxt -> RnM ()
+checkWarningTextCategory txt = do
+  forM_ (getWarningTxtCategory txt) $ \(L loc cat) ->
+    unless (validWarningCategory cat) $
+      addErrAt loc $
+        vcat [ text "Warning category" <+> quotes (ppr cat) <+> text "is not valid"
+             , text "(user-defined category names must begin with" <+> quotes (text "x-")
+             , text "and contain only letters, numbers, apostrophes and dashes)"
+             ]
+  where
+    getWarningTxtCategory :: WarningTxt -> Maybe (Located WarningCategory)
+    getWarningTxtCategory (WarningTxt mb_cat _ _) = mb_cat
+    getWarningTxtCategory (DeprecatedTxt mb_cat _ _) = mb_cat
 
 findDupRdrNames :: [Located RdrName] -> [NonEmpty (Located RdrName)]
 findDupRdrNames = findDupsEq (\ x -> \ y -> rdrNameOcc (unLoc x) == rdrNameOcc (unLoc y))

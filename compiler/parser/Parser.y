@@ -815,12 +815,12 @@ implicit_top :: { () }
         : {- empty -}                           {% pushModuleContext }
 
 maybemodwarning :: { Maybe (Located WarningTxt) }
-    : "{-# DEPRECATED" strings "#-}"
-                      {% ajs (Just (sLL $1 $> $ DeprecatedTxt (sL1 $1 (getDEPRECATED_PRAGs $1)) (snd $ unLoc $2)))
-                             (mo $1:mc $3: (fst $ unLoc $2)) }
-    | "{-# WARNING" strings "#-}"
-                         {% ajs (Just (sLL $1 $> $ WarningTxt (sL1 $1 (getWARNING_PRAGs $1)) (snd $ unLoc $2)))
-                                (mo $1:mc $3 : (fst $ unLoc $2)) }
+    : "{-# DEPRECATED" warning_category strings "#-}"
+                      {% ajs (Just (sLL $1 $> $ DeprecatedTxt $2 (sL1 $1 (getDEPRECATED_PRAGs $1)) (snd $ unLoc $3)))
+                             (mo $1:mc $4: (fst $ unLoc $3)) }
+    | "{-# WARNING" warning_category strings "#-}"
+                         {% ajs (Just (sLL $1 $> $ WarningTxt $2 (sL1 $1 (getWARNING_PRAGs $1)) (snd $ unLoc $3)))
+                                (mo $1:mc $4 : (fst $ unLoc $3)) }
     |  {- empty -}                  { Nothing }
 
 body    :: { ([AddAnn]
@@ -2011,6 +2011,10 @@ to varid (used for rule_vars), 'checkRuleTyVarBndrNames' must be updated.
 -----------------------------------------------------------------------------
 -- Warnings and deprecations (c.f. rules)
 
+warning_category :: { Maybe (Located WarningCategory) }
+        : 'in' STRING                  { Just (sL1 $2 (mkWarningCategory (getSTRING $2))) }
+        | {- empty -}                  { Nothing }
+
 warnings :: { OrdList (LWarnDecl GhcPs) }
         : warnings ';' warning         {% addAnnotation (oll $1) AnnSemi (gl $2)
                                           >> return ($1 `appOL` $3) }
@@ -2021,9 +2025,9 @@ warnings :: { OrdList (LWarnDecl GhcPs) }
 
 -- SUP: TEMPORARY HACK, not checking for `module Foo'
 warning :: { OrdList (LWarnDecl GhcPs) }
-        : namelist strings
-                {% amsu (sLL $1 $> (Warning noExt (unLoc $1) (WarningTxt (noLoc NoSourceText) $ snd $ unLoc $2)))
-                     (fst $ unLoc $2) }
+        : warning_category namelist strings
+                {% amsu (sLL $2 $> (Warning noExt (unLoc $2) (WarningTxt $1 (noLoc NoSourceText) $ snd $ unLoc $3)))
+                     (fst $ unLoc $3) }
 
 deprecations :: { OrdList (LWarnDecl GhcPs) }
         : deprecations ';' deprecation
@@ -2036,9 +2040,9 @@ deprecations :: { OrdList (LWarnDecl GhcPs) }
 
 -- SUP: TEMPORARY HACK, not checking for `module Foo'
 deprecation :: { OrdList (LWarnDecl GhcPs) }
-        : namelist strings
-             {% amsu (sLL $1 $> $ (Warning noExt (unLoc $1) (DeprecatedTxt (noLoc NoSourceText) $ snd $ unLoc $2)))
-                     (fst $ unLoc $2) }
+        : warning_category namelist strings
+             {% amsu (sLL $2 $> $ (Warning noExt (unLoc $2) (DeprecatedTxt $1 (noLoc NoSourceText) $ snd $ unLoc $3)))
+                     (fst $ unLoc $3) }
 
 strings :: { Located ([AddAnn],[Located StringLiteral]) }
     : STRING { sL1 $1 ([],[cL (gl $1) (getStringLiteral $1)]) }

@@ -2304,8 +2304,14 @@ instance (p ~ GhcPass pass,OutputableBndr (IdP p))
 instance (p ~ GhcPass pass, OutputableBndr (IdP p))
        => Outputable (WarnDecl p) where
     ppr (Warning _ thing txt)
-      = hsep ( punctuate comma (map ppr thing))
+      = ppr_category
+              <+> hsep (punctuate comma (map ppr thing))
               <+> ppr txt
+      where
+        ppr_category = case txt of
+                         WarningTxt (Just cat) _ _ -> text "[" <> ppr (unLoc cat) <> text "]"
+                         DeprecatedTxt (Just cat) _ _ -> text "[" <> ppr (unLoc cat) <> text "]"
+                         _ -> empty
     ppr (XWarnDecl x) = ppr x
 
 {-

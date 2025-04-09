@@ -32,6 +32,7 @@ module BasicTypes(
         FunctionOrData(..),
 
         WarningTxt(..), pprWarningTxtForMsg, StringLiteral(..),
+        WarningCategory (..), mkWarningCategory, defaultWarningCategory, validWarningCategory, warningTxtCategory,
 
         Fixity(..), FixityDirection(..),
         defaultFixity, maxPrecedence, minPrecedence,
@@ -113,9 +114,11 @@ import GhcPrelude
 
 import FastString
 import Outputable
-import SrcLoc ( Located,unLoc )
+import SrcLoc ( Located, GenLocated(..), unLoc )
+import Data.Char (isAlphaNum)
 import Data.Data hiding (Fixity, Prefix, Infix)
 import Data.Function (on)
+import Data.List (isPrefixOf)
 
 {-
 ************************************************************************
@@ -328,6 +331,78 @@ initialVersion = 1
 ************************************************************************
 -}
 
+{-
+Note [Warning categories]
+~~~~~~~~~~~~~~~~~~~~~~~~~
+See GHC Proposal 541 for the design of the warning categories feature:
+https://github.com/ghc-proposals/ghc-proposals/blob/master/proposals/0541-warning-pragmas-with-categories.rst
+
+A WARNING pragma may be annotated with a category such as "x-partial" written
+after the 'in' keyword, like this:
+
+    {-# WARNING in "x-partial" head "This function is partial..." #-}
+
+This is represented by the 'Maybe (Located WarningCategory)' field in
+'WarningTxt'.  The parser will accept an arbitrary string as the category name,
+then the renamer (in 'rnWarningTxt') will check it contains only valid
+characters, so we can generate a nicer error message than a parse error.
+
+The corresponding warnings can then be controlled with the -Wx-partial,
+-Wno-x-partial, -Werror=x-partial and -Wwarn=x-partial flags.  Such a flag is
+distinguished from an 'unrecognisedWarning' by the flag parser testing
+'validWarningCategory'.  The 'x-' prefix means we can still usually report an
+unrecognised warning where the user has made a mistake.
+
+A DEPRECATED pragma may not have a user-defined category, and is always treated
+as belonging to the special category 'deprecations'.  Similarly, a WARNING
+pragma without a category belongs to the 'deprecations' category.
+Thus the '-Wdeprecations' flag will enable all of the following:
+
+    {-# WARNING in "deprecations" foo "This function is deprecated..." #-}
+    {-# WARNING foo "This function is deprecated..." #-}
+    {-# DEPRECATED foo "This function is deprecated..." #-}
+
+The '-Wwarnings-deprecations' flag is supported for backwards compatibility
+purposes as being equivalent to '-Wdeprecations'.
+
+The '-Wextended-warnings' warning group collects together all warnings with
+user-defined categories, so they can be enabled or disabled
+collectively. Moreover they are treated as being part of other warning groups
+such as '-Wdefault' (see 'warningGroupIncludesExtendedWarnings').
+
+'DynFlags' and 'DiagOpts' each contain a set of enabled and a set of fatal
+warning categories, just as they do for the finite enumeration of 'WarningFlag's
+built in to GHC.  These are represented as 'WarningCategorySet's to allow for
+the possibility of them being infinite.
+
+-}
+
+-- See Note [Warning categories]
+newtype WarningCategory = WarningCategory FastString
+  deriving (Data, Eq, Show)
+
+instance Outputable WarningCategory where
+  ppr (WarningCategory catName) = ftext catName
+
+mkWarningCategory :: FastString -> WarningCategory
+mkWarningCategory = WarningCategory
+
+-- | The @deprecations@ category is used for all DEPRECATED pragmas and for
+-- WARNING pragmas that do not specify a category.
+defaultWarningCategory :: WarningCategory
+defaultWarningCategory = mkWarningCategory (mkFastString "deprecations")
+
+-- | Is this warning category allowed to appear in user-defined WARNING pragmas?
+-- It must either be the known category @deprecations@, or be a custom category
+-- that begins with @x-@ and contains only valid characters (letters, numbers,
+-- apostrophes and dashes).
+validWarningCategory :: WarningCategory -> Bool
+validWarningCategory cat@(WarningCategory c) =
+    cat == defaultWarningCategory || ("x-" `isPrefixOf` s && all is_allowed s)
+  where
+    s = unpackFS c
+    is_allowed c = isAlphaNum c || c == '\'' || c == '-'
+
 -- | A String Literal in the source, including its original raw format for use by
 -- source to source manipulation tools.
 data StringLiteral = StringLiteral
@@ -345,19 +420,28 @@ instance Outputable StringLiteral where
 -- | Warning Text
 --
 -- reason/explanation from a WARNING or DEPRECATED pragma
-data WarningTxt = WarningTxt (Located SourceText)
+data WarningTxt = WarningTxt (Maybe (Located WarningCategory))
+                             (Located SourceText)
                              [Located StringLiteral]
-                | DeprecatedTxt (Located SourceText)
+                | DeprecatedTxt (Maybe (Located WarningCategory))
+                                (Located SourceText)
                                 [Located StringLiteral]
     deriving (Eq, Data)
 
+-- | To which warning category does this WARNING or DEPRECATED pragma belong?
+-- See Note [Warning categories].
+warningTxtCategory :: WarningTxt -> WarningCategory
+warningTxtCategory (WarningTxt (Just (L _ cat)) _ _) = cat
+warningTxtCategory (DeprecatedTxt (Just (L _ cat)) _ _) = cat
+warningTxtCategory _ = defaultWarningCategory
+
 instance Outputable WarningTxt where
-    ppr (WarningTxt    lsrc ws)
+    ppr (WarningTxt _ lsrc ws)
       = case unLoc lsrc of
           NoSourceText   -> pp_ws ws
           SourceText src -> text src <+> pp_ws ws <+> text "#-}"
 
-    ppr (DeprecatedTxt lsrc  ds)
+    ppr (DeprecatedTxt _ lsrc ds)
       = case unLoc lsrc of
           NoSourceText   -> pp_ws ds
           SourceText src -> text src <+> pp_ws ds <+> text "#-}"
@@ -371,9 +455,9 @@ pp_ws ws
 
 
 pprWarningTxtForMsg :: WarningTxt -> SDoc
-pprWarningTxtForMsg (WarningTxt    _ ws)
+pprWarningTxtForMsg (WarningTxt _ _ ws)
                      = doubleQuotes (vcat (map (ftext . sl_fs . unLoc) ws))
-pprWarningTxtForMsg (DeprecatedTxt _ ds)
+pprWarningTxtForMsg (DeprecatedTxt _ _ ds)
                      = text "Deprecated:" <+>
                        doubleQuotes (vcat (map (ftext . sl_fs . unLoc) ds))
 

@@ -712,14 +712,18 @@ prettyPrintGhcErrors dflags
                           liftIO $ throwIO e
 
 -- | Checks if given 'WarnMsg' is a fatal warning.
-isWarnMsgFatal :: DynFlags -> WarnMsg -> Maybe (Maybe WarningFlag)
+isWarnMsgFatal :: DynFlags -> WarnMsg -> Maybe WarnReason
 isWarnMsgFatal dflags ErrMsg{errMsgReason = Reason wflag}
   = if wopt_fatal wflag dflags
-      then Just (Just wflag)
+      then Just $ ErrReason $ Just wflag
+      else Nothing
+isWarnMsgFatal dflags ErrMsg{errMsgReason = CategoryReason cat}
+  = if wopt_fatal_custom cat dflags
+      then Just $ CategoryReason cat
       else Nothing
 isWarnMsgFatal dflags _
   = if gopt Opt_WarnIsError dflags
-      then Just Nothing
+      then Just $ ErrReason Nothing
       else Nothing
 
 traceCmd :: DynFlags -> String -> String -> IO a -> IO a
