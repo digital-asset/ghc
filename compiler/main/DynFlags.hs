@@ -27,6 +27,7 @@ module DynFlags (
         FatalMessager, LogAction, FlushOut(..), FlushErr(..),
         ProfAuto(..),
         warnReasonFromWarningTxt,
+        getWarnReasonCategory,
         glasgowExtsFlags,
         warningGroups, warningHierarchies,
         hasPprDebug, hasNoDebugOutput, hasNoStateHack, hasNoOptCoercion,
@@ -739,6 +740,10 @@ data WarnReason
 -- | Build WarnReason from WarningTxt
 warnReasonFromWarningTxt :: WarningTxt -> WarnReason
 warnReasonFromWarningTxt = CategoryReason . warningTxtCategory
+
+getWarnReasonCategory :: WarnReason -> WarningCategory
+getWarnReasonCategory (CategoryReason cat) = cat
+getWarnReasonCategory _ = defaultWarningCategory
 
 instance Uniquable WarningCategory where
   getUnique (WarningCategory catName) = getUnique catName

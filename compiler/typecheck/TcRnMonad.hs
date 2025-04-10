@@ -989,8 +989,7 @@ reportWarning reason err = do
     writeTcRef errs_var (warns `snocBag` warn, errs)
 
 shouldReportWarning :: WarnReason -> TcRn Bool
-shouldReportWarning (CategoryReason cat) = wopt_custom cat <$> getDynFlags
-shouldReportWarning _ = pure False
+shouldReportWarning warnReason = wopt_custom (getWarnReasonCategory warnReason) <$> getDynFlags
 
 try_m :: TcRn r -> TcRn (Either IOEnvFailure r)
 -- Does tryM, with a debug-trace on failure
