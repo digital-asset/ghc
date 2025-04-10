@@ -4855,6 +4855,7 @@ warningGroupIncludesExtendedWarnings "default"           = True
 warningGroupIncludesExtendedWarnings "extra"             = True
 warningGroupIncludesExtendedWarnings "all"               = True
 warningGroupIncludesExtendedWarnings "everything"        = True
+warningGroupIncludesExtendedWarnings _ = error "Tried to use non-existent group in warningGroupIncludesExtendedWarnings"
 
 -- | Warning group hierarchies, where there is an explicit inclusion
 -- relation.

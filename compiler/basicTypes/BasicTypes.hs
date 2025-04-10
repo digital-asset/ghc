@@ -337,7 +337,7 @@ Note [Warning categories]
 See GHC Proposal 541 for the design of the warning categories feature:
 https://github.com/ghc-proposals/ghc-proposals/blob/master/proposals/0541-warning-pragmas-with-categories.rst
 
-A WARNING pragma may be annotated with a category such as "x-partial" written
+A WARNING/DEPRECATED pragma may be annotated with a category such as "x-partial" written
 after the 'in' keyword, like this:
 
     {-# WARNING in "x-partial" head "This function is partial..." #-}
@@ -353,22 +353,13 @@ distinguished from an 'unrecognisedWarning' by the flag parser testing
 'validWarningCategory'.  The 'x-' prefix means we can still usually report an
 unrecognised warning where the user has made a mistake.
 
-A DEPRECATED pragma may not have a user-defined category, and is always treated
-as belonging to the special category 'deprecations'.  Similarly, a WARNING
-pragma without a category belongs to the 'deprecations' category.
-Thus the '-Wdeprecations' flag will enable all of the following:
-
     {-# WARNING in "deprecations" foo "This function is deprecated..." #-}
     {-# WARNING foo "This function is deprecated..." #-}
+    {-# DEPRECATED in "deprecations" foo "This function is deprecated..." #-}
     {-# DEPRECATED foo "This function is deprecated..." #-}
 
 The '-Wwarnings-deprecations' flag is supported for backwards compatibility
 purposes as being equivalent to '-Wdeprecations'.
-
-The '-Wextended-warnings' warning group collects together all warnings with
-user-defined categories, so they can be enabled or disabled
-collectively. Moreover they are treated as being part of other warning groups
-such as '-Wdefault' (see 'warningGroupIncludesExtendedWarnings').
 
 'DynFlags' and 'DiagOpts' each contain a set of enabled and a set of fatal
 warning categories, just as they do for the finite enumeration of 'WarningFlag's
