@@ -948,6 +948,10 @@ instance Binary FastString where
     case getUserData bh of
         UserData { ud_get_fs = get_fs } -> get_fs bh
 
+instance Binary WarningCategory where
+  put_ bh (WarningCategory fs) = put_ bh fs
+  get bh = WarningCategory <$> get bh
+
 -- Here to avoid loop
 instance Binary LeftOrRight where
    put_ bh CLeft  = putByte bh 0
@@ -1118,24 +1122,28 @@ instance Binary Fixity where
           return (Fixity src aa ab)
 
 instance Binary WarningTxt where
-    put_ bh (WarningTxt s w) = do
+    put_ bh (WarningTxt c s w) = do
             putByte bh 0
+            put_ bh c
             put_ bh s
             put_ bh w
-    put_ bh (DeprecatedTxt s d) = do
+    put_ bh (DeprecatedTxt c s d) = do
             putByte bh 1
+            put_ bh c
             put_ bh s
             put_ bh d
 
     get bh = do
             h <- getByte bh
             case h of
-              0 -> do s <- get bh
+              0 -> do c <- get bh
+                      s <- get bh
                       w <- get bh
-                      return (WarningTxt s w)
-              _ -> do s <- get bh
+                      return (WarningTxt c s w)
+              _ -> do c <- get bh
+                      s <- get bh
                       d <- get bh
-                      return (DeprecatedTxt s d)
+                      return (DeprecatedTxt c s d)
 
 instance Binary StringLiteral where
   put_ bh (StringLiteral st fs) = do

@@ -20,7 +20,7 @@ module TcRnMonad(
   getTopEnv, updTopEnv, getGblEnv, updGblEnv,
   setGblEnv, getLclEnv, updLclEnv, setLclEnv,
   getEnvs, setEnvs,
-  xoptM, doptM, goptM, woptM,
+  xoptM, doptM, goptM, woptM, updTopFlags,
   setXOptM, unsetXOptM, unsetGOptM, unsetWOptM,
   whenDOptM, whenGOptM, whenWOptM,
   whenXOptM, unlessXOptM,
@@ -478,21 +478,20 @@ goptM flag = do { dflags <- getDynFlags; return (gopt flag dflags) }
 woptM :: WarningFlag -> TcRnIf gbl lcl Bool
 woptM flag = do { dflags <- getDynFlags; return (wopt flag dflags) }
 
+updTopFlags :: (DynFlags -> DynFlags) -> TcRnIf gbl lcl a -> TcRnIf gbl lcl a
+updTopFlags f = updTopEnv (\top -> top { hsc_dflags = f $ hsc_dflags top })
+
 setXOptM :: LangExt.Extension -> TcRnIf gbl lcl a -> TcRnIf gbl lcl a
-setXOptM flag =
-  updTopEnv (\top -> top { hsc_dflags = xopt_set (hsc_dflags top) flag})
+setXOptM flag = updTopFlags (flip xopt_set flag)
 
 unsetXOptM :: LangExt.Extension -> TcRnIf gbl lcl a -> TcRnIf gbl lcl a
-unsetXOptM flag =
-  updTopEnv (\top -> top { hsc_dflags = xopt_unset (hsc_dflags top) flag})
+unsetXOptM flag = updTopFlags (flip xopt_unset flag)
 
 unsetGOptM :: GeneralFlag -> TcRnIf gbl lcl a -> TcRnIf gbl lcl a
-unsetGOptM flag =
-  updTopEnv (\top -> top { hsc_dflags = gopt_unset (hsc_dflags top) flag})
+unsetGOptM flag = updTopFlags (flip gopt_unset flag)
 
 unsetWOptM :: WarningFlag -> TcRnIf gbl lcl a -> TcRnIf gbl lcl a
-unsetWOptM flag =
-  updTopEnv (\top -> top { hsc_dflags = wopt_unset (hsc_dflags top) flag})
+unsetWOptM flag = updTopFlags (flip wopt_unset flag)
 
 -- | Do it flag is true
 whenDOptM :: DumpFlag -> TcRnIf gbl lcl () -> TcRnIf gbl lcl ()
@@ -977,16 +976,20 @@ reportError err
          writeTcRef errs_var (warns, errs `snocBag` err) }
 
 reportWarning :: WarnReason -> ErrMsg -> TcRn ()
-reportWarning reason err
-  = do { let warn = makeIntoWarning reason err
-                    -- 'err' was built by mkLongErrMsg or something like that,
-                    -- so it's of error severity.  For a warning we downgrade
-                    -- its severity to SevWarning
+reportWarning reason err = do 
+  shouldReport <- shouldReportWarning reason
+  when shouldReport $ do
+    -- 'err' was built by mkLongErrMsg or something like that,
+    -- so it's of error severity.  For a warning we downgrade
+    -- its severity to SevWarning
+    let warn = makeIntoWarning reason err
+    traceTc "Adding warning:" (pprLocErrMsg warn)
+    errs_var <- getErrsVar
+    (warns, errs) <- readTcRef errs_var
+    writeTcRef errs_var (warns `snocBag` warn, errs)
 
-       ; traceTc "Adding warning:" (pprLocErrMsg warn)
-       ; errs_var <- getErrsVar
-       ; (warns, errs) <- readTcRef errs_var
-       ; writeTcRef errs_var (warns `snocBag` warn, errs) }
+shouldReportWarning :: WarnReason -> TcRn Bool
+shouldReportWarning warnReason = wopt_custom (getWarnReasonCategory warnReason) <$> getDynFlags
 
 try_m :: TcRn r -> TcRn (Either IOEnvFailure r)
 -- Does tryM, with a debug-trace on failure

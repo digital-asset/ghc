@@ -335,9 +335,9 @@ printOrThrowWarnings dflags warns = do
             case isWarnMsgFatal dflags warn of
               Nothing ->
                 (make_err, warn)
-              Just err_reason ->
+              Just warn_reason ->
                 (True, warn{ errMsgSeverity = SevError
-                           , errMsgReason = ErrReason err_reason
+                           , errMsgReason = warn_reason
                            }))
           False warns
   if make_error

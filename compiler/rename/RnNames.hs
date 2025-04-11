@@ -369,9 +369,9 @@ rnImportDecl this_mod
         imports = calculateAvails dflags iface mod_safe' want_boot (ImportedByUser imv)
 
     -- Complain if we import a deprecated module
-    whenWOptM Opt_WarnWarningsDeprecations (
+    when (wopt_any_custom dflags) (
        case (mi_warns iface) of
-          WarnAll txt -> addWarn (Reason Opt_WarnWarningsDeprecations)
+          WarnAll txt -> addWarn (warnReasonFromWarningTxt txt)
                                 (moduleWarn imp_mod_name txt)
           _           -> return ()
      )
@@ -1739,10 +1739,10 @@ missingImportListItem ie
   = text "The import item" <+> quotes (ppr ie) <+> ptext (sLit "does not have an explicit import list")
 
 moduleWarn :: ModuleName -> WarningTxt -> SDoc
-moduleWarn mod (WarningTxt _ txt)
+moduleWarn mod (WarningTxt _ _ txt)
   = sep [ text "Module" <+> quotes (ppr mod) <> ptext (sLit ":"),
           nest 2 (vcat (map (ppr . sl_fs . unLoc) txt)) ]
-moduleWarn mod (DeprecatedTxt _ txt)
+moduleWarn mod (DeprecatedTxt _ _ txt)
   = sep [ text "Module" <+> quotes (ppr mod)
                                 <+> text "is deprecated:",
           nest 2 (vcat (map (ppr . sl_fs . unLoc) txt)) ]
