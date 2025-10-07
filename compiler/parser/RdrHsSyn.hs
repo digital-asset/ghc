@@ -2596,6 +2596,9 @@ mkFalse = mkQualVar $ mkDataOcc "False"
 mkTrue :: LHsExpr GhcPs
 mkTrue = mkQualVar $ mkDataOcc "True"
 
+mkText :: String -> LHsExpr GhcPs
+mkText str = nlHsLit $ mkHsString str
+
 -- Wrap a type in parentheses, preserving the location of the original type.
 mkParenTy :: LHsType GhcPs -> LHsType GhcPs
 mkParenTy ty = L (getLoc ty) (HsParTy noExt ty)
@@ -2774,6 +2777,10 @@ mkPrimitive :: String -> String -> LHsExpr GhcPs
 mkPrimitive primitive methodName =
   mkAppType (noLoc $ HsVar noExt $ noLoc $ mkRdrQual (mkModuleName "GHC.Types") $ mkVarOcc primitive) $
     noLoc $ HsTyLit noExt $ HsStrTy NoSourceText $ mkFastString methodName
+
+mkError :: String -> LHsExpr GhcPs
+mkError msg =
+  mkApp (noLoc $ HsVar noExt $ noLoc $ mkRdrQual (mkModuleName "GHC.Err") $ mkVarOcc "error") $ mkText msg
 
 ghcTypesOpaque :: LHsType GhcPs
 ghcTypesOpaque =
@@ -3815,7 +3822,9 @@ mkHasFromInterfaceInstance tplTy ifaceTy =
     (hasFromInterfaceClass `mkAppTy` tplTy `mkAppTy` ifaceTy)
     (listToBag
       [ mkPrimMethod "fromInterface" "EFromInterface"
-      , mkPrimMethod "unsafeFromInterface" "EUnsafeFromInterface"
+      , mkTemplateClassMethod "unsafeFromInterface" []
+          (mkError "unsafeFromInterface is not supported anymore, use fromInterface instead")
+          Nothing
       ])
 
 mkImplementsInstances :: LHsType GhcPs -> LHsType GhcPs -> [LHsDecl GhcPs]
