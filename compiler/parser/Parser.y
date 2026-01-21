@@ -526,6 +526,9 @@ are the most common patterns, rewritten as regular expressions for clarity:
  'for'          { L _ ITfor }
  'requires'     { L _ ITrequires }
  'viewtype'     { L _ ITviewtype }
+ 'record'       { L _ ITrecord }
+ 'variant'      { L _ ITvariant }
+ 'enum'         { L _ ITenum }
 
  "{-# INLINE"             { L _ (ITinline_prag _ _ _) } -- INLINE or INLINABLE
  "{-# SPECIALISE"         { L _ (ITspec_prag _) }
@@ -1395,6 +1398,14 @@ ty_decl :: { LTyClDecl GhcPs }
                                    -- constrs and deriving are both empty
                         ((fst $ unLoc $1):(fst $ unLoc $4)) }
 
+        | explicit_data_keyword tycl_hdr constrs maybe_derivings
+                {% amms (mkExplicitData (comb4 $1 $2 $3 $4) (fmap snd $1) $2
+                    Nothing (reverse (snd $ unLoc $3))
+                            (fmap reverse $4))
+                            -- We need the location on tycl_hdr in case
+                            -- constrs and deriving are both empty
+                ((fst $ unLoc $1):(fst $ unLoc $3)) }
+
           -- ordinary GADT declaration
         | data_or_newtype capi_ctype tycl_hdr opt_kind_sig
                  gadt_constrlist
@@ -1635,6 +1646,11 @@ at_decl_inst :: { LInstDecl GhcPs }
 data_or_newtype :: { Located (AddAnn, NewOrData) }
         : 'data'        { sL1 $1 (mj AnnData    $1,DataType) }
         | 'newtype'     { sL1 $1 (mj AnnNewtype $1,NewType) }
+
+explicit_data_keyword :: { Located (AddAnn, ExplicitDataKeyword) }
+        : 'record'  { sL1 $1 (mj AnnRecord  $1,EdkRecord) }
+        | 'variant' { sL1 $1 (mj AnnVariant $1,EdkVariant) }
+        | 'enum'    { sL1 $1 (mj AnnEnum    $1,EdkEnum) }
 
 -- Family result/return kind signatures
 

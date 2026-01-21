@@ -4599,6 +4599,7 @@ xFlagsDeps = [
   flagSpec "UnliftedFFITypes"                 LangExt.UnliftedFFITypes,
   flagSpec "ViewPatterns"                     LangExt.ViewPatterns,
   flagSpec "DamlSyntax"                       LangExt.DamlSyntax,
+  flagSpec "ExplicitDataTypes"                LangExt.ExplicitDataTypes,
   flagSpec "OverloadedRecordUpdate"           LangExt.OverloadedRecordUpdate
   ]
 

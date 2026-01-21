@@ -21,6 +21,9 @@ module HsDecls (
   HsDecl(..), LHsDecl, HsDataDefn(..), HsDeriving, LHsFunDep,
   HsDerivingClause(..), LHsDerivingClause, NewOrData(..), newOrDataToFlavour,
 
+  -- * Daml explicit data type declarations
+  ExplicitDataKeyword(..),
+
   -- ** Class or type declarations
   TyClDecl(..), LTyClDecl, DataDeclRn(..),
   TyClGroup(..), mkTyClGroup, emptyTyClGroup,
@@ -1264,6 +1267,12 @@ data NewOrData
 newOrDataToFlavour :: NewOrData -> TyConFlavour
 newOrDataToFlavour NewType  = NewtypeFlavour
 newOrDataToFlavour DataType = DataTypeFlavour
+
+data ExplicitDataKeyword
+  = EdkRecord   -- ^ @record Blah ...@
+  | EdkVariant  -- ^ @variant Blah ...@
+  | EdkEnum     -- ^ @enum Blah ...@
+  deriving( Eq, Data )
 
 -- | Located data Constructor Declaration
 type LConDecl pass = Located (ConDecl pass)

@@ -660,6 +660,9 @@ data Token
   | ITfor
   | ITrequires
   | ITviewtype
+  | ITrecord
+  | ITvariant
+  | ITenum
 
   -- Pragmas, see  note [Pragma source text] in BasicTypes
   | ITinline_prag       SourceText InlineSpec RuleMatchInfo
@@ -907,7 +910,10 @@ reservedWordsFM = listToUFM $
          ( "implements",     ITimplements,    xbit DamlSyntaxBit),
          ( "for",            ITfor,           xbit DamlSyntaxBit),
          ( "requires",       ITrequires,      xbit DamlSyntaxBit),
-         ( "viewtype",       ITviewtype,      xbit DamlSyntaxBit)
+         ( "viewtype",       ITviewtype,      xbit DamlSyntaxBit),
+         ( "record",         ITrecord,        xbit ExplicitDataTypesBit),
+         ( "variant",        ITvariant,       xbit ExplicitDataTypesBit),
+         ( "enum",           ITenum,          xbit ExplicitDataTypesBit)
      ]
 
 {-----------------------------------
@@ -2405,6 +2411,7 @@ data ExtBits
   | MultiWayIfBit
   | GadtSyntaxBit
   | DamlSyntaxBit
+  | ExplicitDataTypesBit
   | ScopedTypeVariablesBit
   | OverloadedRecordUpdateBit
 
@@ -2500,6 +2507,7 @@ mkParserFlags' warningFlags extensionFlags thisPackage
       .|. MultiWayIfBit               `xoptBit` LangExt.MultiWayIf
       .|. GadtSyntaxBit               `xoptBit` LangExt.GADTSyntax
       .|. DamlSyntaxBit               `xoptBit` LangExt.DamlSyntax
+      .|. ExplicitDataTypesBit        `xoptBit` LangExt.ExplicitDataTypes
       .|. ScopedTypeVariablesBit      `xoptBit` LangExt.ScopedTypeVariables
       .|. OverloadedRecordUpdateBit   `xoptBit` LangExt.OverloadedRecordUpdate
     optBits =

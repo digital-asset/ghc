@@ -216,6 +216,9 @@ data AnnKeywordId
     | AnnDarrow -- ^ '=>'
     | AnnDarrowU -- ^ '=>', unicode variant
     | AnnData
+    | AnnRecord
+    | AnnVariant
+    | AnnEnum
     | AnnDcolon -- ^ '::'
     | AnnDcolonU -- ^ '::', unicode variant
     | AnnDefault
