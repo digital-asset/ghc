@@ -462,6 +462,8 @@ basicKnownKeyNames
         , typeErrorVAppendDataConName
         , typeErrorShowTypeDataConName
 
+        -- DAML extensions
+        , damlSerializableClassName
     ]
 
 genericTyConNames :: [Name]
@@ -1662,6 +1664,13 @@ ipClassKey = mkPreludeClassUnique 48
 hasFieldClassNameKey :: Unique
 hasFieldClassNameKey = mkPreludeClassUnique 49
 
+-- DAML: Serializable class
+damlSerializableClassKey :: Unique
+damlSerializableClassKey = mkPreludeClassUnique 50
+damlSerializableClassName :: Name
+damlSerializableClassName =
+    clsQual gHC_RECORDS (fsLit "Serializable") damlSerializableClassKey
+
 
 ---------------- Template Haskell -------------------
 --      THNames.hs: USES ClassUniques 200-299
@@ -2482,7 +2491,8 @@ standardClassKeys = derivableClassKeys ++ numericClassKeys
 derivableClassKeys :: [Unique]
 derivableClassKeys
   = [ eqClassKey, ordClassKey, enumClassKey, ixClassKey,
-      boundedClassKey, showClassKey, readClassKey ]
+      boundedClassKey, showClassKey, readClassKey,
+      damlSerializableClassKey ]
 
 
 -- These are the "interactive classes" that are consulted when doing

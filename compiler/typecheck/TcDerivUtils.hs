@@ -446,7 +446,9 @@ hasStockDeriving clas
                , (traversableClassKey, simple gen_Traversable_binds)
                , (liftClassKey,        simple gen_Lift_binds)
                , (genClassKey,         generic (gen_Generic_binds Gen0))
-               , (gen1ClassKey,        generic (gen_Generic_binds Gen1)) ]
+               , (gen1ClassKey,        generic (gen_Generic_binds Gen1))
+               , (damlSerializableClassKey, simple (\_ _ -> (emptyBag, emptyBag)))
+               ]
 
     simple gen_fn loc tc _
       = let (binds, deriv_stuff) = gen_fn loc tc
