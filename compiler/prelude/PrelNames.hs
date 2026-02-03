@@ -2526,4 +2526,4 @@ damlSerializableClassName =
     clsQual dA_INTERNAL_LF (fsLit "Serializable") damlSerializableClassKey
 
 dA_INTERNAL_LF :: Module
-dA_INTERNAL_LF = mkBaseModule (fsLit "DA.Internal.LF")
+dA_INTERNAL_LF = mkPrimModule (fsLit "DA.Internal.LF")
