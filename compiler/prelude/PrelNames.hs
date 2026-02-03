@@ -1664,14 +1664,6 @@ ipClassKey = mkPreludeClassUnique 48
 hasFieldClassNameKey :: Unique
 hasFieldClassNameKey = mkPreludeClassUnique 49
 
--- DAML: Serializable class
-damlSerializableClassKey :: Unique
-damlSerializableClassKey = mkPreludeClassUnique 50
-damlSerializableClassName :: Name
-damlSerializableClassName =
-    clsQual gHC_RECORDS (fsLit "Serializable") damlSerializableClassKey
-
-
 ---------------- Template Haskell -------------------
 --      THNames.hs: USES ClassUniques 200-299
 -----------------------------------------------------
@@ -2522,3 +2514,15 @@ pretendNameIsInScope n
   = any (n `hasKey`)
     [ liftedTypeKindTyConKey, tYPETyConKey
     , runtimeRepTyConKey, liftedRepDataConKey ]
+
+
+-- DAML: Serializable class
+damlSerializableClassKey :: Unique
+damlSerializableClassKey = mkPreludeClassUnique 50
+
+damlSerializableClassName :: Name
+damlSerializableClassName =
+    clsQual dA_INTERNAL_LF (fsLit "Serializable") damlSerializableClassKey
+
+dA_INTERNAL_LF :: Module
+dA_INTERNAL_LF = mkBaseModule (fsLit "DA.Internal.LF")
