@@ -57,6 +57,8 @@ import Data.Maybe
 import qualified GHC.LanguageExtensions as LangExt
 import ListSetOps (assocMaybe)
 
+import TcGenDamlSerializable
+
 -- | To avoid having to manually plumb everything in 'DerivEnv' throughout
 -- various functions in @TcDeriv@ and @TcDerivInfer@, we use 'DerivM', which
 -- is a simple reader around 'TcRn'.
@@ -447,7 +449,7 @@ hasStockDeriving clas
                , (liftClassKey,        simple gen_Lift_binds)
                , (genClassKey,         generic (gen_Generic_binds Gen0))
                , (gen1ClassKey,        generic (gen_Generic_binds Gen1))
-               , (damlSerializableClassKey, simple (\_ _ -> (emptyBag, emptyBag)))
+               , (damlSerializableClassKey, simple gen_Serializable_binds)
                ]
 
     simple gen_fn loc tc _

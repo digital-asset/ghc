@@ -1393,6 +1393,12 @@ check_valid_inst_head :: DynFlags -> Bool -> Bool
 -- Wow!  There are a surprising number of ad-hoc special cases here.
 check_valid_inst_head dflags is_boot is_sig ctxt clas cls_args
 
+  -- DAML's Serializable instances cannot be handwritten.
+  | clas_nm == damlSerializableClassName
+  , not is_sig
+  , hand_written_bindings
+  = failWithTc rejected_class_msg
+
   -- If not in an hs-boot file, abstract classes cannot have instances
   | isAbstractClass clas
   , not is_boot

@@ -2,7 +2,8 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 
 module DA.Internal.Serializable(
-    Serializable
+    Serializable (..)
   ) where
 
-class Serializable a
+class Serializable a where
+    witness :: a -> ()
