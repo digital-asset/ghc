@@ -116,6 +116,9 @@ class HasKey t k | t -> k where
 class HasLookupByKey t k | t -> k where
   lookupByKey : k -> Update (Optional (ContractId t))
 
+class HasQueryNByKey t k | t -> k where
+  queryNByKey : Int -> k -> Update [ContractId t]
+
 class HasFetchByKey t k | t -> k where
   fetchByKey : k -> Update (ContractId t, t)
 
