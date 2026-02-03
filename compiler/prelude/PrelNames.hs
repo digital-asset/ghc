@@ -2522,8 +2522,7 @@ pretendNameIsInScope n
 -- DAML: Serializable class
 
 damlSerializableClassName :: Name
-damlSerializableClassName =
-    clsQual dA_INTERNAL_LF (fsLit "Serializable") damlSerializableClassKey
+damlSerializableClassName = clsQual dA_INTERNAL_SERIALIZABLE (fsLit "Serializable") damlSerializableClassKey
 
-dA_INTERNAL_LF :: Module
-dA_INTERNAL_LF = mkPrimModule (fsLit "DA.Internal.LF")
+dA_INTERNAL_SERIALIZABLE :: Module
+dA_INTERNAL_SERIALIZABLE = mkPrimModule (fsLit "DA.Internal.Serializable")

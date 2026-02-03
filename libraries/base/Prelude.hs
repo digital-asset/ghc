@@ -152,6 +152,8 @@ module Prelude (
     -- ** Exception handling in the I\/O monad
     IOError, ioError, userError,
 
+    Serializable,
+
   ) where
 
 import Control.Monad
@@ -172,3 +174,5 @@ import GHC.Num
 import GHC.Real
 import GHC.Float
 import GHC.Show
+
+import DA.Internal.Serializable
