@@ -1664,6 +1664,9 @@ ipClassKey = mkPreludeClassUnique 48
 hasFieldClassNameKey :: Unique
 hasFieldClassNameKey = mkPreludeClassUnique 49
 
+damlSerializableClassKey :: Unique
+damlSerializableClassKey = mkPreludeClassUnique 50
+
 ---------------- Template Haskell -------------------
 --      THNames.hs: USES ClassUniques 200-299
 -----------------------------------------------------
@@ -2517,8 +2520,6 @@ pretendNameIsInScope n
 
 
 -- DAML: Serializable class
-damlSerializableClassKey :: Unique
-damlSerializableClassKey = mkPreludeClassUnique 50
 
 damlSerializableClassName :: Name
 damlSerializableClassName =

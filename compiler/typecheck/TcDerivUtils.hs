@@ -599,6 +599,7 @@ stockSideConditions deriv_ctxt cls
   | cls_key == liftClassKey        = Just (checkFlag LangExt.DeriveLift `andCond`
                                            cond_vanilla `andCond`
                                            cond_args cls)
+  | cls_key == damlSerializableClassKey = Just cond_std
   | otherwise                      = Nothing
   where
     cls_key = getUnique cls
