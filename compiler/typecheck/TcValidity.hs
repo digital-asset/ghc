@@ -1403,7 +1403,8 @@ check_valid_inst_head dflags is_boot is_sig ctxt clas cls_args
   , (case ctxt of DerivClauseCtxt -> False; _ -> True)
   -- Rules for thee, not for me: we need some way to have prim type instances
   , thisPackage dflags /= primUnitId &&
-      thisPackage dflags /= fsToUnitId (fsLit "daml-stdlib")
+      thisPackage dflags /= fsToUnitId (fsLit "daml-stdlib") &&
+      thisPackage dflags /= fsToUnitId (fsLit "daml-stdlib-2.2")
   = failWithTc $
     text "Class" <+> quotes (ppr clas_nm) <+>
     text "requires deriving(" <> ppr clas_nm <> text ") syntax"
