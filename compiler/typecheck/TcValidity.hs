@@ -69,6 +69,8 @@ import Data.Foldable
 import Data.List        ( (\\), nub )
 import qualified Data.List.NonEmpty as NE
 
+import Module (primUnitId)
+
 {-
 ************************************************************************
 *                                                                      *
@@ -1397,6 +1399,7 @@ check_valid_inst_head dflags is_boot is_sig ctxt clas cls_args
   | clas_nm == damlSerializableClassName
   , not is_sig
   , hand_written_bindings
+  , thisPackage dflags /= primUnitId
   = failWithTc rejected_class_msg
 
   -- If not in an hs-boot file, abstract classes cannot have instances
