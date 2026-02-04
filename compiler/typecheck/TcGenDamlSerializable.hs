@@ -33,6 +33,11 @@ gen_Serializable_binds loc tycon = (unitBag witness_bind, emptyBag)
         (L loc damlSerializableWitness_RDR)
         (map witness_match (tyConDataCons tycon))
 
+    -- For every data constructor in the data type, this generates a case in the
+    -- shape of:
+    --
+    --     witness (DataCon field1 field2 field3) z =
+    --         witness field1 (witness field2 (witness field3 z))
     witness_match data_con = mkMatch
         (mkPrefixFunRhs (L loc damlSerializableWitness_RDR))
         [con_pat, nlVarPat z_rdr]

@@ -1398,9 +1398,13 @@ check_valid_inst_head dflags is_boot is_sig ctxt clas cls_args
   -- DAML's Serializable instances cannot be handwritten.
   | clas_nm == damlSerializableClassName
   , not is_sig
-  , hand_written_bindings
+  -- Only allow deriving(...) syntax, inlined here to minimize diff
+  , (case ctxt of DerivClauseCtxt -> False; _ -> True)
+  -- Rules for thee, not for me: we need some way to have prim type instances
   , thisPackage dflags /= primUnitId
-  = failWithTc rejected_class_msg
+  = failWithTc $
+    text "Class" <+> quotes (ppr clas_nm) <+>
+    text "requires deriving(" <> ppr clas_nm <> text ") syntax"
 
   -- If not in an hs-boot file, abstract classes cannot have instances
   | isAbstractClass clas
