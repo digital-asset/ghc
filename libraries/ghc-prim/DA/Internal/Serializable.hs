@@ -6,4 +6,4 @@ module DA.Internal.Serializable(
   ) where
 
 class Serializable a where
-    witness :: a -> b -> b
+    serializable :: a -> b -> b

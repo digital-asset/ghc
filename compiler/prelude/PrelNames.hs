@@ -2524,8 +2524,8 @@ pretendNameIsInScope n
 damlSerializableClassName :: Name
 damlSerializableClassName = clsQual dA_INTERNAL_SERIALIZABLE (fsLit "Serializable") damlSerializableClassKey
 
-damlSerializableWitness_RDR :: RdrName
-damlSerializableWitness_RDR = varQual_RDR dA_INTERNAL_SERIALIZABLE (fsLit "witness")
+damlSerializableMethod_RDR :: RdrName
+damlSerializableMethod_RDR = varQual_RDR dA_INTERNAL_SERIALIZABLE (fsLit "serializable")
 
 dA_INTERNAL_SERIALIZABLE :: Module
 dA_INTERNAL_SERIALIZABLE = mkPrimModule (fsLit "DA.Internal.Serializable")

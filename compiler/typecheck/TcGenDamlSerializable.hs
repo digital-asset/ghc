@@ -23,26 +23,26 @@ import TyCon
 gen_Serializable_binds :: SrcSpan -> TyCon
                        -> (LHsBinds GhcPs, BagDerivStuff)
 
-gen_Serializable_binds loc tycon = (unitBag witness_bind, emptyBag)
+gen_Serializable_binds loc tycon = (unitBag seri_bind, emptyBag)
   where
-    witness_arity = 2
+    seri_arity = 2
 
-    witness_bind = mkRdrFunBindEC
-        witness_arity
+    seri_bind = mkRdrFunBindEC
+        seri_arity
         id
-        (L loc damlSerializableWitness_RDR)
-        (map witness_match (tyConDataCons tycon))
+        (L loc damlSerializableMethod_RDR)
+        (map seri_match (tyConDataCons tycon))
 
     -- For every data constructor in the data type, this generates a case in the
     -- shape of:
     --
-    --     witness (DataCon field1 field2 field3) z =
-    --         witness field1 (witness field2 (witness field3 z))
-    witness_match data_con = mkMatch
-        (mkPrefixFunRhs (L loc damlSerializableWitness_RDR))
+    --     seri (DataCon field1 field2 field3) z =
+    --         seri field1 (seri field2 (seri field3 z))
+    seri_match data_con = mkMatch
+        (mkPrefixFunRhs (L loc damlSerializableMethod_RDR))
         [con_pat, nlVarPat z_rdr]
         (foldr
-            (nlHsApp . nlHsApp witness . nlHsVar)
+            (nlHsApp . nlHsApp seri . nlHsVar)
             (nlHsVar z_rdr)
             as_needed)
         (noLoc emptyLocalBinds)
@@ -51,7 +51,7 @@ gen_Serializable_binds loc tycon = (unitBag witness_bind, emptyBag)
          con_arity    = dataConSourceArity data_con
          as_needed    = take con_arity as_rdrs
          con_pat      = parenthesizePat appPrec $ nlConVarPat data_con_RDR as_needed
-         witness      = nlHsVar damlSerializableWitness_RDR
+         seri         = nlHsVar damlSerializableMethod_RDR
 
     as_rdrs :: [RdrName]
     as_rdrs = [ mkVarUnqual (mkFastString ("a"++show i)) | i <- [(1::Int) .. ] ]
