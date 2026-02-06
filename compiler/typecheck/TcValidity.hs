@@ -1459,7 +1459,6 @@ check_valid_inst_head dflags is_boot is_sig ctxt clas cls_args
 
   | otherwise
   = checkValidTypePats (classTyCon clas) cls_args
-
   where
     clas_nm = getName clas
     ty_args = filterOutInvisibleTypes (classTyCon clas) cls_args
