@@ -140,5 +140,6 @@ data Extension
    | QuantifiedConstraints
    | StarIsType
    | DamlSyntax
+   | DamlExplicitSerializable
    | OverloadedRecordUpdate
    deriving (Eq, Enum, Show, Generic, Bounded)
