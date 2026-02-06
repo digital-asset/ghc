@@ -21,6 +21,7 @@ module DA.Internal.Desugar
   , Bool(..)
   , Eq(..)
   , Show(..)
+  , Serializable(..)
   )
 where
 
@@ -293,3 +294,6 @@ instance NumericScale 36 where numericScale _ = 36; numericScalePrivate _ = ()
 instance NumericScale 37 where numericScale _ = 37; numericScalePrivate _ = ()
 
 data Numeric (n : Nat)
+
+class Serializable a where
+    serializable :: a -> b -> b

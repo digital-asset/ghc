@@ -2834,7 +2834,7 @@ mkDamlDataDecl loc dataDeclName (conName, conDetails, conDoc) =
       declName (ChoiceName x) = x
       lname@(L nloc _name) = declName dataDeclName
       mkTyCl = mkLHsSigType . rdrNameToType . L nloc . qualifyDesugar . mkClsOcc
-      derivingTys = L nloc $ map mkTyCl ["Eq", "Show"]
+      derivingTys = L nloc $ map mkTyCl ["Eq", "Show", "Serializable"]
       derivingClause = L nloc $ HsDerivingClause noExt Nothing derivingTys
       dataDefn :: HsDataDefn GhcPs
       dataDefn = HsDataDefn
@@ -2856,7 +2856,7 @@ mkDamlDataDecl loc dataDeclName (conName, conDetails, conDoc) =
         }
   in L loc $ TyClD noExt dataDecl
 
--- | Construct a @data GHC.Types.DamlTemplate => X a b c = X {...} deriving (Eq, Show)@
+-- | Construct a @data GHC.Types.DamlTemplate => X a b c = X {...} deriving (Eq, Show, Serializable)@
 mkTemplateDataDecl ::
      SrcSpan                 -- ^ the span to associate with
   -> Located RdrName         -- ^ template 'T'
@@ -2866,7 +2866,7 @@ mkTemplateDataDecl ::
   -> LHsDecl GhcPs           -- ^ the resulting @data@ declaration
 mkTemplateDataDecl loc lname con = mkDamlDataDecl loc (TemplateName lname) con
 
--- | Construct a @data X a b c = X {...} deriving (Eq, Show)@
+-- | Construct a @data X a b c = X {...} deriving (Eq, Show, Serializable)@
 mkChoiceDataDecl ::
      SrcSpan                 -- ^ the span to associate with
   -> Located RdrName         -- ^ choice 'S'
@@ -3498,7 +3498,7 @@ mkExceptionDecls name fields decls = do
       exceptionInstanceDecls = mkExceptionInstanceDecls ve
   return $ toOL (exceptionDataDecl : exceptionInstanceDecls)
 
--- Make the exception data decl, @data DamlException => E = E {...} deriving (Eq, Show)@
+-- Make the exception data decl, @data DamlException => E = E {...} deriving (Eq, Show, Serializable)@
 mkExceptionDataDecl
   :: SrcSpan -- ^ combined source location
   -> Located RdrName -- ^ exception name
@@ -3515,7 +3515,7 @@ mkExceptionDataDecl loc lname@(L nloc _name) (conName, conDetails, conDoc) =
         , con_doc = conDoc
         }
       mkTyCl = mkLHsSigType . rdrNameToType . L nloc . qualifyDesugar . mkClsOcc
-      derivingTys = L nloc $ map mkTyCl ["Eq", "Show"]
+      derivingTys = L nloc $ map mkTyCl ["Eq", "Show", "Serializable"]
       derivingClause = L nloc $ HsDerivingClause noExt Nothing derivingTys
       dataDefn = HsDataDefn
         { dd_ext     = noExt
