@@ -3577,6 +3577,7 @@ mkTemplateDecls templateName fields decls = do
   vt@ValidTemplate{..} <- validateTemplate templateName (extractTemplateBodyDecls decls)
   -- Calculate 'T' data constructor info from 'T' and the record type denoted by 'fields'.
   ci@(conName, con, _) <- splitCon [fields, rdrNameToType vtTemplateName]
+  damlExplicitSerializable <- getBit DamlExplicitSerializableBit
   -- Ensure the template parameters do not contain taken keywords
   -- Note that templates _without any choices_ can _technically_ still support being `self' and `arg'.
   -- This is not supported but would be a breaking change, so we warn instead of error.

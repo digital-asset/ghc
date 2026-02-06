@@ -1238,7 +1238,10 @@ data DynFlags = DynFlags {
   uniqueIncrement       :: Int,
 
   -- | Temporary: CFG Edge weights for fast iterations
-  cfgWeightInfo         :: CfgWeights
+  cfgWeightInfo         :: CfgWeights,
+
+  -- | TODO(jaspervdj)
+  damlExplicitSerializable :: Bool
 }
 
 -- | Edge weights to use when generating a CFG from CMM
@@ -2133,7 +2136,9 @@ defaultDynFlags mySettings (myLlvmTargets, myLlvmPasses) =
 
         reverseErrors = False,
         maxErrors     = Nothing,
-        cfgWeightInfo = defaultCfgWeights
+        cfgWeightInfo = defaultCfgWeights,
+
+        damlExplicitSerializable = False
       }
 
 defaultWays :: Settings -> [Way]

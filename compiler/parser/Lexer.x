@@ -2405,6 +2405,7 @@ data ExtBits
   | MultiWayIfBit
   | GadtSyntaxBit
   | DamlSyntaxBit
+  | DamlExplicitSerializableBit
   | ScopedTypeVariablesBit
   | OverloadedRecordUpdateBit
 
@@ -2448,10 +2449,13 @@ mkParserFlags'
   -- the internal position kept by the parser. Otherwise, those pragmas are
   -- lexed as 'ITline_prag' and 'ITcolumn_prag' tokens.
 
+  -> Bool -- ^ damlExplicitSerializable
+
   -> ParserFlags
 -- ^ Given exactly the information needed, set up the 'ParserFlags'
 mkParserFlags' warningFlags extensionFlags thisPackage
-  safeImports isHaddock rawTokStream usePosPrags =
+  safeImports isHaddock rawTokStream usePosPrags
+  damlExplicitSerializable =
     ParserFlags {
       pWarningFlags = warningFlags
     , pThisPackage = thisPackage
@@ -2506,6 +2510,7 @@ mkParserFlags' warningFlags extensionFlags thisPackage
           HaddockBit        `setBitIf` isHaddock
       .|. RawTokenStreamBit `setBitIf` rawTokStream
       .|. UsePosPragsBit    `setBitIf` usePosPrags
+      .|. DamlExplicitSerializableBit `setBitIf` damlExplicitSerializable
 
     xoptBit bit ext = bit `setBitIf` EnumSet.member ext extensionFlags
 
@@ -2524,6 +2529,7 @@ mkParserFlags =
     <*> gopt Opt_Haddock
     <*> gopt Opt_KeepRawTokenStream
     <*> const True
+    <*> DynFlags.damlExplicitSerializable
 
 -- | Creates a parse state from a 'DynFlags' value
 mkPState :: DynFlags -> StringBuffer -> RealSrcLoc -> PState
