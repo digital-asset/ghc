@@ -93,9 +93,9 @@
 	ignore = untracked
 [submodule "utils/haddock"]
 	path = utils/haddock
-	url = https://gitlab.haskell.org/jaspervdj/haddock.git
+	url = https://gitlab.haskell.org/ghc/haddock.git
 	ignore = untracked
-	branch = da-master-8.8.1
+	branch = ghc-head
 [submodule "nofib"]
 	path = nofib
 	url = https://gitlab.haskell.org/ghc/nofib.git
