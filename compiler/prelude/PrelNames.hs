@@ -462,6 +462,8 @@ basicKnownKeyNames
         , typeErrorVAppendDataConName
         , typeErrorShowTypeDataConName
 
+        -- DAML extensions
+        , damlSerializableClassName
     ]
 
 genericTyConNames :: [Name]
@@ -1662,6 +1664,8 @@ ipClassKey = mkPreludeClassUnique 48
 hasFieldClassNameKey :: Unique
 hasFieldClassNameKey = mkPreludeClassUnique 49
 
+damlSerializableClassKey :: Unique
+damlSerializableClassKey = mkPreludeClassUnique 50
 
 ---------------- Template Haskell -------------------
 --      THNames.hs: USES ClassUniques 200-299
@@ -2482,7 +2486,8 @@ standardClassKeys = derivableClassKeys ++ numericClassKeys
 derivableClassKeys :: [Unique]
 derivableClassKeys
   = [ eqClassKey, ordClassKey, enumClassKey, ixClassKey,
-      boundedClassKey, showClassKey, readClassKey ]
+      boundedClassKey, showClassKey, readClassKey,
+      damlSerializableClassKey ]
 
 
 -- These are the "interactive classes" that are consulted when doing
@@ -2512,3 +2517,15 @@ pretendNameIsInScope n
   = any (n `hasKey`)
     [ liftedTypeKindTyConKey, tYPETyConKey
     , runtimeRepTyConKey, liftedRepDataConKey ]
+
+
+-- DAML: Serializable class
+
+damlSerializableClassName :: Name
+damlSerializableClassName = clsQual dA_INTERNAL_SERIALIZABLE (fsLit "Serializable") damlSerializableClassKey
+
+damlSerializableMethod_RDR :: RdrName
+damlSerializableMethod_RDR = varQual_RDR dA_INTERNAL_SERIALIZABLE (fsLit "serializable")
+
+dA_INTERNAL_SERIALIZABLE :: Module
+dA_INTERNAL_SERIALIZABLE = mkPrimModule (fsLit "DA.Internal.Serializable")

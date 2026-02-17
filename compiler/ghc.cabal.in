@@ -496,6 +496,7 @@ Library
         TcGenDeriv
         TcGenFunctor
         TcGenGenerics
+        TcGenDamlSerializable
         TcHsSyn
         TcHsType
         TcInstDcls

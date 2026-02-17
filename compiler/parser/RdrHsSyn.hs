@@ -179,6 +179,13 @@ isDamlGenerated namedThing =
     , "_choice$_" `isPrefixOf` nameStr
     ]
 
+newtype DamlExplicitSerializable =
+  DamlExplicitSerializable { isDamlExplicitSerializable :: Bool }
+
+getDamlExplicitSerializable :: P DamlExplicitSerializable
+getDamlExplicitSerializable =
+  DamlExplicitSerializable <$> getBit DamlExplicitSerializableBit
+
 {- **********************************************************************
 
   Construction functions for Rdr stuff
@@ -2811,13 +2818,14 @@ mkPrimInterfaceMethod methodName primArg =
 data DataDeclName = TemplateName (Located RdrName) | ChoiceName (Located RdrName)
 
 mkDamlDataDecl ::
-     SrcSpan                 -- ^ the span to associate with
+     DamlExplicitSerializable
+  -> SrcSpan                 -- ^ the span to associate with
   -> DataDeclName            -- ^ template or choice name
   -> (Located RdrName
      , HsConDeclDetails GhcPs
      , Maybe LHsDocString)   -- ^ result of 'splitCon'
   -> LHsDecl GhcPs           -- ^ the resulting @data@ declaration
-mkDamlDataDecl loc dataDeclName (conName, conDetails, conDoc) =
+mkDamlDataDecl damlExplicitSerializable loc dataDeclName (conName, conDetails, conDoc) =
   -- NOTE (SM, SF): We assume that the program does not have any
   -- BangPatterns on the fields here. Otherwise, "re-jigging" with
   -- 'nudgeHsSrcBangs' would be required.
@@ -2834,7 +2842,8 @@ mkDamlDataDecl loc dataDeclName (conName, conDetails, conDoc) =
       declName (ChoiceName x) = x
       lname@(L nloc _name) = declName dataDeclName
       mkTyCl = mkLHsSigType . rdrNameToType . L nloc . qualifyDesugar . mkClsOcc
-      derivingTys = L nloc $ map mkTyCl ["Eq", "Show"]
+      derivingTys = L nloc $ map mkTyCl $ ["Eq", "Show"] ++
+        ["Serializable" | isDamlExplicitSerializable damlExplicitSerializable]
       derivingClause = L nloc $ HsDerivingClause noExt Nothing derivingTys
       dataDefn :: HsDataDefn GhcPs
       dataDefn = HsDataDefn
@@ -2856,25 +2865,27 @@ mkDamlDataDecl loc dataDeclName (conName, conDetails, conDoc) =
         }
   in L loc $ TyClD noExt dataDecl
 
--- | Construct a @data GHC.Types.DamlTemplate => X a b c = X {...} deriving (Eq, Show)@
+-- | Construct a @data GHC.Types.DamlTemplate => X a b c = X {...} deriving (Eq, Show, Serializable)@
 mkTemplateDataDecl ::
-     SrcSpan                 -- ^ the span to associate with
+     DamlExplicitSerializable
+  -> SrcSpan                 -- ^ the span to associate with
   -> Located RdrName         -- ^ template 'T'
   -> (Located RdrName
      , HsConDeclDetails GhcPs
      , Maybe LHsDocString)   -- ^ result of 'splitCon'
   -> LHsDecl GhcPs           -- ^ the resulting @data@ declaration
-mkTemplateDataDecl loc lname con = mkDamlDataDecl loc (TemplateName lname) con
+mkTemplateDataDecl damlExplicitSerializable loc lname con = mkDamlDataDecl damlExplicitSerializable loc (TemplateName lname) con
 
--- | Construct a @data X a b c = X {...} deriving (Eq, Show)@
+-- | Construct a @data X a b c = X {...} deriving (Eq, Show, Serializable)@
 mkChoiceDataDecl ::
-     SrcSpan                 -- ^ the span to associate with
+     DamlExplicitSerializable
+  -> SrcSpan                 -- ^ the span to associate with
   -> Located RdrName         -- ^ choice 'S'
   -> (Located RdrName
      , HsConDeclDetails GhcPs
      , Maybe LHsDocString)   -- ^ result of 'splitCon'
   -> LHsDecl GhcPs           -- ^ the resulting @data@ declaration
-mkChoiceDataDecl loc lname con = mkDamlDataDecl loc (ChoiceName lname) con
+mkChoiceDataDecl damlExplicitSerializable loc lname con = mkDamlDataDecl damlExplicitSerializable loc (ChoiceName lname) con
 
 mkLambda
   :: [Pat GhcPs]                 -- ^ method argument patterns
@@ -3172,12 +3183,13 @@ mkChoiceDataDecls
   -> P [LHsDecl GhcPs]   -- ^ resulting declarations
 mkChoiceDataDecls CombinedChoiceData { ccdChoiceData = ChoiceData{..}}
   = do
+      damlExplicitSerializable <- getDamlExplicitSerializable
       -- Calculate data constructor info from the choice name and record type.
       choiceConInfo@(_, choiceArgRec, _) <- splitCon [cdChoiceFields, rdrNameToType cdChoiceName]
       -- Choices cannot use this, self or arg for argument names, as controller and body will name clash
       validateDamlRecord ["this", "self", "arg"] [] choiceArgRec
       let dataLoc = combineLocs cdChoiceName cdChoiceFields
-          dataDecl = mkChoiceDataDecl dataLoc cdChoiceName choiceConInfo
+          dataDecl = mkChoiceDataDecl damlExplicitSerializable dataLoc cdChoiceName choiceConInfo
           -- Prepend the choice documentation, if any, as a 'DocNext'.
           mbDocDecl = fmap (fmap (DocD noExt . DocCommentNext)) cdChoiceDoc
       return $ maybeToList mbDocDecl ++ [dataDecl]
@@ -3495,17 +3507,19 @@ mkExceptionDecls name fields decls = do
   -- Exceptions will not otherwise error for "arg" and "self", so we warn instead
   validateDamlRecord ["this"] ["self", "arg"] exceptionArgsRec
   ve@ValidException{..} <- validateException name conName fields (extractExceptionBodyDecls decls)
-  let exceptionDataDecl = mkExceptionDataDecl (combineLocs name fields) name ci
+  damlExplicitSerializable <- getDamlExplicitSerializable
+  let exceptionDataDecl = mkExceptionDataDecl damlExplicitSerializable (combineLocs name fields) name ci
       exceptionInstanceDecls = mkExceptionInstanceDecls ve
   return $ toOL (exceptionDataDecl : exceptionInstanceDecls)
 
--- Make the exception data decl, @data DamlException => E = E {...} deriving (Eq, Show)@
+-- Make the exception data decl, @data DamlException => E = E {...} deriving (Eq, Show, Serializable)@
 mkExceptionDataDecl
-  :: SrcSpan -- ^ combined source location
+  :: DamlExplicitSerializable
+  -> SrcSpan -- ^ combined source location
   -> Located RdrName -- ^ exception name
   -> (Located RdrName, HsConDeclDetails GhcPs, Maybe LHsDocString) -- ^ result of 'splitCon'
   -> LHsDecl GhcPs -- ^ @data@ declaration
-mkExceptionDataDecl loc lname@(L nloc _name) (conName, conDetails, conDoc) =
+mkExceptionDataDecl damlExplicitSerializable loc lname@(L nloc _name) (conName, conDetails, conDoc) =
   let conDecl = L nloc $ ConDeclH98
         { con_ext = noExt
         , con_name = conName
@@ -3516,7 +3530,8 @@ mkExceptionDataDecl loc lname@(L nloc _name) (conName, conDetails, conDoc) =
         , con_doc = conDoc
         }
       mkTyCl = mkLHsSigType . rdrNameToType . L nloc . qualifyDesugar . mkClsOcc
-      derivingTys = L nloc $ map mkTyCl ["Eq", "Show"]
+      derivingTys = L nloc $ map mkTyCl $ ["Eq", "Show"] ++
+        ["Serializable" | isDamlExplicitSerializable damlExplicitSerializable]
       derivingClause = L nloc $ HsDerivingClause noExt Nothing derivingTys
       dataDefn = HsDataDefn
         { dd_ext     = noExt
@@ -3578,6 +3593,7 @@ mkTemplateDecls templateName fields decls = do
   vt@ValidTemplate{..} <- validateTemplate templateName (extractTemplateBodyDecls decls)
   -- Calculate 'T' data constructor info from 'T' and the record type denoted by 'fields'.
   ci@(conName, con, _) <- splitCon [fields, rdrNameToType vtTemplateName]
+  damlExplicitSerializable <- getDamlExplicitSerializable
   -- Ensure the template parameters do not contain taken keywords
   -- Note that templates _without any choices_ can _technically_ still support being `self' and `arg'.
   -- This is not supported but would be a breaking change, so we warn instead of error.
@@ -3589,7 +3605,7 @@ mkTemplateDecls templateName fields decls = do
   -- Create choice data types except for Archive, which has a single definition across templates
   choiceDataDecls <- concat <$> traverse mkChoiceDataDecls vtChoices
   let templateName = occNameString . rdrNameOcc <$> vtTemplateName
-      templateDataDecl = mkTemplateDataDecl (combineLocs vtTemplateName fields) vtTemplateName ci
+      templateDataDecl = mkTemplateDataDecl damlExplicitSerializable (combineLocs vtTemplateName fields) vtTemplateName ci
       choicesWithArchive = mkArchiveChoice : vtChoices
       templateInstances = mkTemplateInstances templateName conName vt
       choiceInstanceDecls = concatMap (mkChoiceInstanceDecl templateName) choicesWithArchive

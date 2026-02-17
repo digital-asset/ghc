@@ -69,6 +69,8 @@ import Data.Foldable
 import Data.List        ( (\\), nub )
 import qualified Data.List.NonEmpty as NE
 
+import Module (moduleName, mkModuleName)
+
 {-
 ************************************************************************
 *                                                                      *
@@ -1439,6 +1441,21 @@ check_valid_inst_head dflags is_boot is_sig ctxt clas cls_args
   | check_h98_arg_shape
   , Just msg <- mb_ty_args_msg
   = failWithTc (instTypeErr clas cls_args msg)
+
+
+  -- DAML's Serializable instances cannot be handwritten.
+  | clas_nm == damlSerializableClassName
+  , not is_sig
+  -- Only allow deriving(...) syntax, inlined here to minimize diff
+  , (case ctxt of DerivClauseCtxt -> False; _ -> True)
+  = do
+    gblEnv <- getGblEnv
+    -- Rules for thee, not for me: we need some way to have prim type instances
+    if moduleName (tcg_mod gblEnv) == mkModuleName "DA.Internal.Serializable.Instances"
+      then checkValidTypePats (classTyCon clas) cls_args  -- Default case, see below
+      else failWithTc $
+        text "Class" <+> quotes (ppr clas_nm) <+>
+        text "requires deriving(" <> ppr clas_nm <> text ") syntax"
 
   | otherwise
   = checkValidTypePats (classTyCon clas) cls_args

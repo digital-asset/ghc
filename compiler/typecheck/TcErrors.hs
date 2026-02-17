@@ -39,7 +39,7 @@ import HsBinds ( PatSynBind(..) )
 import Name
 import RdrName ( lookupGlobalRdrEnv, lookupGRE_Name, GlobalRdrEnv
                , mkRdrUnqual, isLocalGRE, greSrcSpan )
-import PrelNames ( typeableClassName )
+import PrelNames ( typeableClassName, damlSerializableClassName )
 import Id
 import Var
 import VarSet
@@ -2553,6 +2553,9 @@ mk_dict_err ctxt@(CEC {cec_encl = implics}) (ct, (matches, unifiers, unsafe_over
                    _                -> []
 
     drv_fix standalone_wildcard
+      | className clas == damlSerializableClassName
+      = text "Serializable instances can only be added using" <+>
+        quotes (text "deriving(Serializable)") <+> text "syntax"
       | standalone_wildcard
       = text "fill in the wildcard constraint yourself"
       | otherwise

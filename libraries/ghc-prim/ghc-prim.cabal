@@ -49,6 +49,7 @@ Library
         GHC.Tuple
         GHC.Tuple.Check
         GHC.Types
+        DA.Internal.Serializable
 
     virtual-modules:
         GHC.Prim

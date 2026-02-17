@@ -2405,6 +2405,7 @@ data ExtBits
   | MultiWayIfBit
   | GadtSyntaxBit
   | DamlSyntaxBit
+  | DamlExplicitSerializableBit
   | ScopedTypeVariablesBit
   | OverloadedRecordUpdateBit
 
@@ -2500,6 +2501,7 @@ mkParserFlags' warningFlags extensionFlags thisPackage
       .|. MultiWayIfBit               `xoptBit` LangExt.MultiWayIf
       .|. GadtSyntaxBit               `xoptBit` LangExt.GADTSyntax
       .|. DamlSyntaxBit               `xoptBit` LangExt.DamlSyntax
+      .|. DamlExplicitSerializableBit `xoptBit` LangExt.DamlExplicitSerializable
       .|. ScopedTypeVariablesBit      `xoptBit` LangExt.ScopedTypeVariables
       .|. OverloadedRecordUpdateBit   `xoptBit` LangExt.OverloadedRecordUpdate
     optBits =
