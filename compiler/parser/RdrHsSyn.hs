@@ -3168,8 +3168,6 @@ mkKeyInstanceDecl templateName conName ValidTemplate{..}
        , mkInstance "HasFetchByKey" $ mkPrimMethod "fetchByKey" "UFetchByKey"
        , mkInstance "HasLookupByKey" $ mkPrimMethod "lookupByKey" "ULookupByKey"
        , mkInstance "HasQueryNByKey" $ mkPrimMethod "queryNByKey" "UQueryNByKey"
-       , mkInstance "HasToAnyContractKey" $ mkPrimMethod "_toAnyContractKey" "EToAnyContractKey"
-       , mkInstance "HasFromAnyContractKey" $ mkPrimMethod "_fromAnyContractKey" "EFromAnyContractKey"
        ]
   | otherwise = []
   where

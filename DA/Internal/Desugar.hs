@@ -126,12 +126,6 @@ class HasFetchByKey t k | t -> k where
 class HasMaintainer t k | t -> k where
   _maintainer : proxy t -> k -> [Party]
 
-class HasToAnyContractKey t k | t -> k where
-  _toAnyContractKey : proxy t -> k -> Any
-
-class HasFromAnyContractKey t k | t -> k where
-  _fromAnyContractKey : proxy t -> Any -> Optional k
-
 class HasExerciseByKey t k c r | t -> k, t c -> r where
   _exerciseByKey : proxy t -> k -> c -> Update r
 
