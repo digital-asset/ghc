@@ -115,13 +115,14 @@ class HasKey t k | t -> k where
   key : t -> k
 
 class HasLookupByKey t k | t -> k where
-  lookupByKey : k -> Update (Optional (ContractId t))
+  _lookupByKey : k -> Update (Optional (ContractId t))
 
-class HasQueryNByKey t k | t -> k where
-  queryNByKey : Int -> k -> Update [(ContractId t, t)]
+-- HasLookupNByKey = the NUCK lookup, briefly known as QueryNByKey
+class HasLookupNByKey t k | t -> k where
+  _lookupNByKey : Int -> k -> Update [(ContractId t, t)]
 
 class HasFetchByKey t k | t -> k where
-  fetchByKey : k -> Update (ContractId t, t)
+  _fetchByKey : k -> Update (ContractId t, t)
 
 class HasMaintainer t k | t -> k where
   _maintainer : proxy t -> k -> [Party]

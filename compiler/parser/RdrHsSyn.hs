@@ -3165,9 +3165,9 @@ mkKeyInstanceDecl templateName conName ValidTemplate{..}
         maintainerInstance = mkInstance "HasMaintainer" $ mkMethod "_maintainer" [proxy, key] kdMaintainers
     in [ keyInstance
        , maintainerInstance
-       , mkInstance "HasFetchByKey" $ mkPrimMethod "fetchByKey" "UFetchByKey"
-       , mkInstance "HasLookupByKey" $ mkPrimMethod "lookupByKey" "ULookupByKey"
-       , mkInstance "HasQueryNByKey" $ mkPrimMethod "queryNByKey" "UQueryNByKey"
+       , mkInstance "HasFetchByKey" $ mkPrimMethod "_fetchByKey" "UFetchByKey"
+       , mkInstance "HasLookupByKey" $ mkPrimMethod "_lookupByKey" "ULookupByKey"
+       , mkInstance "HasLookupNByKey" $ mkPrimMethod "_lookupNByKey" "ULookupNByKey"
        ]
   | otherwise = []
   where
