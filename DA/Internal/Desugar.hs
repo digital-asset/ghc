@@ -119,7 +119,7 @@ class HasLookupByKey t k | t -> k where
 
 -- HasLookupNByKey = the NUCK lookup, briefly known as QueryNByKey
 class HasLookupNByKey t k | t -> k where
-  _lookupNByKey : Int -> k -> Update [(ContractId t, t)]
+  _lookupNByKey : Int -> k -> Update (Optional [(ContractId t, t)])
 
 class HasFetchByKey t k | t -> k where
   _fetchByKey : k -> Update (ContractId t, t)
