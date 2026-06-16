@@ -3166,7 +3166,6 @@ mkKeyInstanceDecl templateName conName ValidTemplate{..}
     in [ keyInstance
        , maintainerInstance
        , mkInstance "HasFetchByKey" $ mkPrimMethod "_fetchByKey" "UFetchByKey"
-       , mkInstance "HasLookupByKey" $ mkPrimMethod "_lookupByKey" "ULookupByKey"
        , mkInstance "HasLookupNByKey" $ mkPrimMethod "_lookupNByKey" "ULookupNByKey"
        ]
   | otherwise = []
