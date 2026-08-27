@@ -2309,8 +2309,8 @@ instance (p ~ GhcPass pass, OutputableBndr (IdP p))
               <+> ppr txt
       where
         ppr_category = case txt of
-                         WarningTxt (Just cat) _ _ -> text "[" <> ppr (unLoc cat) <> text "]"
-                         DeprecatedTxt (Just cat) _ _ -> text "[" <> ppr (unLoc cat) <> text "]"
+                         WarningTxt (Just cat) _ _ -> text "in" <+> doubleQuotes (ppr (unLoc cat))
+                         DeprecatedTxt (Just cat) _ _ -> text "in" <+> doubleQuotes (ppr (unLoc cat))
                          _ -> empty
     ppr (XWarnDecl x) = ppr x
 
