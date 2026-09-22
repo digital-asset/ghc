@@ -2979,6 +2979,7 @@ mkTemplateInstances templateName conName ValidTemplate{..} =
   , archiveInstance
   , mkInstance "HasCreate" $ mkPrimMethod "create" "UCreate"
   , mkInstance "HasFetch" $ mkPrimMethod "fetch" "UFetch"
+  , mkInstance "HasUnpack" $ mkPrimMethod "unpack" "UUnpackTemplate"
   , mkInstance "HasToAnyTemplate" $ mkPrimMethod "_toAnyTemplate" "EToAnyTemplate"
   , mkInstance "HasFromAnyTemplate" $ mkPrimMethod "_fromAnyTemplate" "EFromAnyTemplate"
   , mkInstance "HasTemplateTypeRep" $ mkPrimMethod "_templateTypeRep" "ETemplateTypeRep"
@@ -3954,7 +3955,10 @@ mkInterfaceDecl tycon (L requiresLoc requires) decls = do
         existentialExerciseInstances =
             [instDecl
               (classInstDecl (hasFetch ifaceTy)
-                 (unitBag (mkPrimMethod "fetch" "UFetchInterface")))]
+                 (unitBag (mkPrimMethod "fetch" "UFetchInterface")))
+            ,instDecl
+              (classInstDecl (hasUnpack ifaceTy)
+                 (unitBag (mkPrimMethod "unpack" "UUnpackInterface")))]
 
         requiresMarkers :: [LHsDecl GhcPs]
         requiresMarkers = concatMap requiresMarker viRequiredInterfaces
@@ -4046,6 +4050,7 @@ mkInterfaceDecl tycon (L requiresLoc requires) decls = do
       ++ viewTypeDecls
   where
     hasFetch t = mkQualClass "HasFetch" `mkAppTy` t
+    hasUnpack t = mkQualClass "HasUnpack" `mkAppTy` t
 
 ------------
 

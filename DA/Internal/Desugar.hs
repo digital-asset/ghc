@@ -90,6 +90,9 @@ class HasCreate t where
 class HasFetch t where
   fetch : ContractId t -> Update t
 
+class HasUnpack t where
+  unpack : ContractId t -> Update t
+
 class HasArchive t where
   archive : ContractId t -> Update ()
 
