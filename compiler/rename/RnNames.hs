@@ -9,6 +9,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeApplications #-}
 
 module RnNames (
         rnImports, getLocalNonValBinders, newRecordSelector,
@@ -58,10 +59,14 @@ import FastString
 import FastStringEnv
 import Id
 import Type
+import TyCoRep
+import TyCon
 import PatSyn
+import ConLike         ( ConLike (..) )
 import qualified GHC.LanguageExtensions as LangExt
 
 import Control.Monad
+import Data.Bifunctor   ( first )
 import Data.Either      ( partitionEithers, isRight, rights )
 import Data.Function    ( on )
 import Data.Map         ( Map )
@@ -863,7 +868,8 @@ filterImports iface decl_spec Nothing
 
 filterImports iface decl_spec (Just (want_hiding, L l import_items))
   = do  -- check for errors, convert RdrNames to Names
-        items1 <- mapM lookup_lie import_items
+        patternSynonymConstructors <- getPatternSynonymConstructors
+        items1 <- mapM (lookup_lie patternSynonymConstructors) import_items
 
         let items2 :: [(LIE GhcRn, AvailInfo)]
             items2 = concat items1
@@ -911,11 +917,11 @@ filterImports iface decl_spec (Just (want_hiding, L l import_items))
       where
         mb_success = lookupOccEnv imp_occ_env (rdrNameOcc rdr)
 
-    lookup_lie :: LIE GhcPs -> TcRn [(LIE GhcRn, AvailInfo)]
-    lookup_lie (L loc ieRdr)
+    lookup_lie :: Map Name [(Name, AvailInfo)] -> LIE GhcPs -> TcRn [(LIE GhcRn, AvailInfo)]
+    lookup_lie patternSynonymConstructors (L loc ieRdr)
         = do (stuff, warns) <- setSrcSpan loc $
                                liftM (fromMaybe ([],[])) $
-                               run_lookup (lookup_ie ieRdr)
+                               run_lookup (lookup_ie patternSynonymConstructors ieRdr)
              mapM_ emit_warning warns
              return [ (L loc ie, avail) | (ie,avail) <- stuff ]
         where
@@ -937,6 +943,19 @@ filterImports iface decl_spec (Just (want_hiding, L l import_items))
               IllegalImport -> illegalImportItemErr
               QualImportError rdr -> qualImportItemErr rdr
 
+    -- Map from a type name to any pattern synonyms that target that type, via their name and availinfo
+    -- Only includes patterns that are exported
+    getPatternSynonymConstructors :: RnM (Map Name [(Name, AvailInfo)])
+    getPatternSynonymConstructors = do
+      eps <- getEps
+      pure $ Map.fromListWith (++)
+        [ (getName targetTyCon, [(patSynName patSyn, avail)])
+        | AConLike (PatSynCon patSyn) <- nameEnvElts $ eps_PTE eps
+        , (_, _, _, _, _, TyConApp targetTyCon _) <- [patSynSig patSyn]
+        , isAlgTyCon targetTyCon
+        , Just (_, avail, _) <- [lookupOccEnv imp_occ_env (occName $ patSynName patSyn)]
+        ]
+
         -- For each import item, we convert its RdrNames to Names,
         -- and at the same time construct an AvailInfo corresponding
         -- to what is actually imported by this item.
@@ -947,9 +966,10 @@ filterImports iface decl_spec (Just (want_hiding, L l import_items))
         -- data constructors of an associated family, we need separate
         -- AvailInfos for the data constructors and the family (as they have
         -- different parents).  See Note [Dealing with imports]
-    lookup_ie :: IE GhcPs
+    lookup_ie :: Map Name [(Name, AvailInfo)]
+              -> IE GhcPs
               -> IELookupM ([(IE GhcRn, AvailInfo)], [IELookupWarning])
-    lookup_ie ie = handle_bad_import $ do
+    lookup_ie patternSynonymConstructors ie = handle_bad_import $ do
       case ie of
         IEVar _ (L l n) -> do
             (name, avail, _) <- lookup_name ie $ ieWrappedName n
@@ -976,10 +996,12 @@ filterImports iface decl_spec (Just (want_hiding, L l import_items))
                 sub_avails = case avail of
                                Avail {}              -> []
                                AvailTC name2 subs fs -> [(renamed_ie, AvailTC name2 (subs \\ [name]) fs)]
+                -- `replaceWrappedName tc` might be wrong
+                relevant_pat_syn_avails = maybe [] (map $ first $ IEThingAll noExt . L l . replaceWrappedName tc) $ Map.lookup name patternSynonymConstructors
             case mb_parent of
-              Nothing     -> return ([(renamed_ie, avail)], warns)
+              Nothing     -> return ((renamed_ie, avail) : relevant_pat_syn_avails, warns)
                              -- non-associated ty/cls
-              Just parent -> return ((renamed_ie, AvailTC parent [name] []) : sub_avails, warns)
+              Just parent -> return ((renamed_ie, AvailTC parent [name] []) : sub_avails ++ relevant_pat_syn_avails, warns)
                              -- associated type
 
         IEThingAbs _ (L l tc')
@@ -998,6 +1020,7 @@ filterImports iface decl_spec (Just (want_hiding, L l import_items))
                   return ([mkIEThingAbs tc' l nameAvail]
                          , [])
 
+        -- TODO[SW] This should allow the list of sub avails to come from avails
         IEThingWith xt ltc@(L l rdr_tc) wc rdr_ns rdr_fs ->
           ASSERT2(null rdr_fs, ppr rdr_fs) do
            (name, avail, mb_parent)
